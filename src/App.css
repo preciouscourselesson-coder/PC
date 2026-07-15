@@ -1,0 +1,123 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  background: #fefefe;
+  color: #1e1e2f;
+  line-height: 1.5;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+.btn-primary {
+  background-color: #2d6a4f;
+  color: white;
+  border: none;
+  padding: 12px 28px;
+  border-radius: 40px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 0.2s;
+  display: inline-block;
+  text-decoration: none;
+}
+
+.btn-primary:hover {
+  background-color: #1b4d3e;
+  transform: scale(1.02);
+}
+
+.btn-outline {
+  background: transparent;
+  border: 1.5px solid #2d6a4f;
+  color: #2d6a4f;
+  padding: 10px 24px;
+  border-radius: 40px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 0.2s;
+  text-decoration: none;
+  display: inline-block;
+}
+
+.btn-outline:hover {
+  background: #2d6a4f10;
+}
+
+section {
+  padding: 64px 0;
+}
+
+h2 {
+  font-size: 2rem;
+  margin-bottom: 40px;
+  text-align: center;
+  font-weight: 700;
+}
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 32px;
+  margin-top: 20px;
+}
+
+.feature-card,
+.program-card,
+.testimoni {
+  background: white;
+  border-radius: 28px;
+  padding: 28px;
+  transition: 0.2s;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+}
+
+.feature-card {
+  text-align: center;
+}
+
+.feature-card:hover,
+.program-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.08);
+}
+
+.program-card {
+  border: 1px solid #e9ecef;
+  display: flex;
+  flex-direction: column;
+}
+
+.program-card h3 {
+  margin-bottom: 12px;
+  font-size: 1.5rem;
+}
+
+.testimoni p {
+  font-style: italic;
+  margin: 16px 0;
+}
+
+footer {
+  background: #0f1720;
+  color: #94a3b8;
+  text-align: center;
+  padding: 32px;
+}
+
+@media (max-width: 768px) {
+  h2 {
+    font-size: 1.8rem;
+  }
+  section {
+    padding: 48px 0;
+  }
+}
