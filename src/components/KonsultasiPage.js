@@ -6,32 +6,24 @@ import bgPeople from '../Resource/bg_people.png';
 // ─── Konstanta & Data ────────────────────────────────────────────────────────
 
 const STEPS = [
-  { number: 1, label: 'Data Siswa' },
+  { number: 1, label: 'Data Diri' },
   { number: 2, label: 'Kebutuhan Belajar' },
   { number: 3, label: 'Jadwal & Preferensi' },
   { number: 4, label: 'Konfirmasi' },
 ];
 
-const JENJANG_OPTIONS = ['SD', 'SMP', 'SMA'];
-
-// Opsi kelas berdasarkan jenjang
-const getKelasByJenjang = (jenjang) => {
-  if (jenjang === 'SD') return ['Kelas 1', 'Kelas 2', 'Kelas 3', 'Kelas 4', 'Kelas 5', 'Kelas 6'];
-  if (jenjang === 'SMP') return ['Kelas 7', 'Kelas 8', 'Kelas 9'];
-  if (jenjang === 'SMA') return ['Kelas 10', 'Kelas 11', 'Kelas 12'];
-  return [];
-};
-
-const TUJUAN_OPTIONS = ['Naik nilai sekolah', 'Persiapan UTBK', 'Persiapan Olimpiade', 'Persiapan Ujian', 'Belajar dari nol', 'Konsultasi jurusan', 'Lainnya'];
-const MAPEL_OPTIONS  = ['Matematika', 'Fisika', 'Kimia', 'Biologi', 'Informatika', 'Bahasa Inggris', 'Lainnya'];
-const METODE_OPTIONS = [
+const STATUS_OPTIONS   = ['SMP', 'SMA', 'Alumni', 'Orang Tua'];
+const KELAS_OPTIONS    = ['Kelas 7', 'Kelas 8', 'Kelas 9', 'Kelas 10', 'Kelas 11', 'Kelas 12'];
+const TUJUAN_OPTIONS   = ['Naik nilai sekolah', 'Persiapan UTBK', 'Persiapan Olimpiade', 'Persiapan Ujian', 'Belajar dari nol', 'Konsultasi jurusan', 'Lainnya'];
+const MAPEL_OPTIONS    = ['Matematika', 'Fisika', 'Kimia', 'Biologi', 'Informatika', 'Bahasa Inggris', 'Lainnya'];
+const METODE_OPTIONS   = [
   { value: 'online',  label: 'Online', sub: 'Zoom/Google Meet' },
   { value: 'offline', label: 'Offline', sub: 'di lokasi cabang' },
   { value: 'hybrid',  label: 'Hybrid', sub: 'Online & Offline' },
 ];
-const HARI_OPTIONS   = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
-const JAM_OPTIONS    = ['08.00 – 10.00', '10.00 – 12.00', '13.00 – 15.00', '15.00 – 17.00', '17.00 – 19.00', '19.00 – 21.00'];
-const BUDGET_OPTIONS = ['< Rp 500.000', 'Rp 500.000 – Rp 1.000.000', 'Rp 1.000.000 – Rp 2.000.000', '> Rp 2.000.000', 'Belum tahu'];
+const HARI_OPTIONS     = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
+const JAM_OPTIONS      = ['08.00 – 10.00', '10.00 – 12.00', '13.00 – 15.00', '15.00 – 17.00', '17.00 – 19.00', '19.00 – 21.00'];
+const BUDGET_OPTIONS   = ['< Rp 500.000', 'Rp 500.000 – Rp 1.000.000', 'Rp 1.000.000 – Rp 2.000.000', '> Rp 2.000.000', 'Belum tahu'];
 
 // ─── Warna ───────────────────────────────────────────────────────────────────
 const C = {
@@ -180,24 +172,22 @@ const SectionTitle = ({ number, title, subtitle }) => (
   </div>
 );
 
-// ─── Step 1: Data Siswa ──────────────────────────────────────────────────────
+// ─── Step 1: Data Diri ───────────────────────────────────────────────────────
 
-const StepDataSiswa = ({ data, setData, onNext }) => {
+const StepDataDiri = ({ data, setData, onNext }) => {
   const update = (key) => (e) => setData({ ...data, [key]: e.target.value });
 
   const handleNext = () => {
-    if (!data.nama || !data.whatsapp || !data.jenjang) {
-      alert('Mohon lengkapi Nama, Nomor WhatsApp, dan Jenjang terlebih dahulu.');
+    if (!data.nama || !data.whatsapp || !data.status) {
+      alert('Mohon lengkapi Nama, Nomor WhatsApp, dan Status terlebih dahulu.');
       return;
     }
     onNext();
   };
 
-  const kelasOptions = getKelasByJenjang(data.jenjang);
-
   return (
     <div>
-      <SectionTitle number="1" title="Data Siswa" subtitle="Lengkapi data dirimu terlebih dahulu." />
+      <SectionTitle number="1" title="Data Diri" subtitle="Lengkapi data dirimu terlebih dahulu." />
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
         <div>
@@ -214,16 +204,16 @@ const StepDataSiswa = ({ data, setData, onNext }) => {
         </div>
 
         <div>
-          <Label required>Jenjang</Label>
+          <Label required>Status</Label>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            {JENJANG_OPTIONS.map(j => (
-              <ChipButton key={j} label={j} selected={data.jenjang === j}
-                onClick={() => setData({ ...data, jenjang: j, kelas: '' })} />
+            {STATUS_OPTIONS.map(s => (
+              <ChipButton key={s} label={s} selected={data.status === s}
+                onClick={() => setData({ ...data, status: s, kelas: '' })} />
             ))}
           </div>
         </div>
 
-        {data.jenjang && (
+        {(data.status === 'SMP' || data.status === 'SMA') && (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
             <div>
               <Label>Asal Sekolah</Label>
@@ -242,7 +232,10 @@ const StepDataSiswa = ({ data, setData, onNext }) => {
                 }}
               >
                 <option value="">Pilih kelas</option>
-                {kelasOptions.map(k => <option key={k} value={k}>{k}</option>)}
+                {KELAS_OPTIONS.filter(k =>
+                  data.status === 'SMP' ? k.includes('7') || k.includes('8') || k.includes('9')
+                  : k.includes('10') || k.includes('11') || k.includes('12')
+                ).map(k => <option key={k} value={k}>{k}</option>)}
               </select>
             </div>
           </div>
@@ -254,7 +247,7 @@ const StepDataSiswa = ({ data, setData, onNext }) => {
   );
 };
 
-// ─── Step 2: Kebutuhan Belajar ──────────────────────────────────────────────
+// ─── Step 2: Kebutuhan Belajar ───────────────────────────────────────────────
 
 const StepKebutuhan = ({ data, setData, onBack, onNext }) => {
   const toggleMulti = (key, val) => {
@@ -312,7 +305,7 @@ const StepKebutuhan = ({ data, setData, onBack, onNext }) => {
   );
 };
 
-// ─── Step 3: Jadwal & Preferensi ─────────────────────────────────────────────
+// ─── Step 3: Jadwal & Preferensi ────────────────────────────────────────────
 
 const StepJadwal = ({ data, setData, onBack, onNext }) => {
   const toggleMulti = (key, val) => {
@@ -432,11 +425,11 @@ const StepKonfirmasi = ({ dataDiri, kebutuhan, jadwal, onEdit, onSubmit }) => {
     setLoading(true);
     setError(null);
 
-    const payload = {
+    const { error: sbError } = await supabase.from('konsultasi').insert([{
       nama:      dataDiri.nama,
       whatsapp:  dataDiri.whatsapp,
       email:     dataDiri.email     || null,
-      jenjang:   dataDiri.jenjang   || null,
+      status:    dataDiri.status    || null,
       sekolah:   dataDiri.sekolah   || null,
       kelas:     dataDiri.kelas     || null,
       tujuan:    kebutuhan.tujuan   || [],
@@ -446,9 +439,7 @@ const StepKonfirmasi = ({ dataDiri, kebutuhan, jadwal, onEdit, onSubmit }) => {
       hari:      jadwal.hari        || [],
       jam:       jadwal.jam         || [],
       budget:    jadwal.budget      || null,
-    };
-
-    const { error: sbError } = await supabase.from('konsultasi').insert([payload]);
+    }]);
 
     setLoading(false);
 
@@ -487,8 +478,8 @@ const StepKonfirmasi = ({ dataDiri, kebutuhan, jadwal, onEdit, onSubmit }) => {
       <SectionTitle number="4" title="Konfirmasi" subtitle="Yuk, cek kembali informasi yang sudah kamu isi." />
 
       <div style={{ background: C.cream, borderRadius: '16px', padding: '0 1rem', marginBottom: '1.5rem' }}>
-        <ConfirmRow icon="👤" label="Data Siswa"
-          value={`${dataDiri.nama} • ${dataDiri.whatsapp} • ${dataDiri.jenjang || '-'}${dataDiri.sekolah ? `, ${dataDiri.sekolah}` : ''}${dataDiri.kelas ? ` (${dataDiri.kelas})` : ''}`}
+        <ConfirmRow icon="👤" label="Data Diri"
+          value={`${dataDiri.nama} • ${dataDiri.whatsapp}${dataDiri.sekolah ? ` • ${dataDiri.sekolah}` : ''}${dataDiri.kelas ? ` ${dataDiri.kelas}` : ''}`}
           onEdit={() => onEdit(1)} />
         <ConfirmRow icon="🎯" label="Tujuan Belajar"
           value={(kebutuhan.tujuan || []).join(', ')}
@@ -506,6 +497,7 @@ const StepKonfirmasi = ({ dataDiri, kebutuhan, jadwal, onEdit, onSubmit }) => {
         )}
       </div>
 
+      {/* Persetujuan */}
       <label style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', cursor: 'pointer', marginBottom: '1.5rem' }}>
         <input type="checkbox" checked={setuju} onChange={e => setSetuju(e.target.checked)}
           style={{ marginTop: '3px', accentColor: C.gold, width: '16px', height: '16px', flexShrink: 0 }} />
@@ -565,6 +557,8 @@ const LeftSidebar = () => (
     top: '80px',
     alignSelf: 'start'
   }}>
+
+    {/* Baris 1: Badge + Judul */}
     <div>
       <span style={{
         background: 'rgba(255,255,255,0.2)', color: 'white',
@@ -581,6 +575,7 @@ const LeftSidebar = () => (
       </p>
     </div>
 
+    {/* Baris 2: Foto */}
     <div style={{
       borderRadius: '20px', overflow: 'hidden',
       minHeight: '240px', background:'#2d6a4f'
@@ -590,6 +585,7 @@ const LeftSidebar = () => (
         alt="Belajar bersama Precious Course"
         style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
         onError={e => {
+          // fallback kalau gambar tidak ditemukan
           e.target.style.display = 'none';
           e.target.parentElement.style.background = 'rgba(255,255,255,0.1)';
           e.target.parentElement.style.minHeight = '160px';
@@ -598,6 +594,7 @@ const LeftSidebar = () => (
       />
     </div>
 
+    {/* Baris 3: Alasan konsultasi */}
     <div>
       <h3 style={{ color: 'white', fontSize: '1rem', fontWeight: 'bold', margin: '0 0 1rem' }}>
         Mengapa konsultasi bersama kami?
@@ -627,13 +624,15 @@ const LeftSidebar = () => (
 
 const KonsultasiPage = () => {
   const [step, setStep]           = useState(1);
-  const [dataDiri, setDataDiri]   = useState({ nama: '', whatsapp: '', email: '', jenjang: '', sekolah: '', kelas: '' });
+  const [dataDiri, setDataDiri]   = useState({ nama: '', whatsapp: '', email: '', status: '', sekolah: '', kelas: '' });
   const [kebutuhan, setKebutuhan] = useState({ tujuan: [], mapel: [], kesulitan: '' });
   const [jadwal, setJadwal]       = useState({ metode: '', hari: [], jam: [], budget: '' });
   const navigate                  = useNavigate();
 
   return (
     <div style={{ minHeight: '100vh', background: C.cream, fontFamily: 'inherit' }}>
+
+      {/* Header */}
       <div style={{
         background: C.white,
         boxShadow: '0 2px 12px rgba(23,20,17,0.08)',
@@ -656,6 +655,7 @@ const KonsultasiPage = () => {
         </div>
       </div>
 
+      {/* Layout Dua Kolom */}
       <div style={{
         maxWidth: '1100px', margin: '0 auto', padding: '2.5rem 5%',
         display: 'grid',
@@ -663,9 +663,13 @@ const KonsultasiPage = () => {
         gap: '2rem',
         alignItems: 'start'
       }}>
+
+        {/* Kolom Kiri: Sidebar */}
         <LeftSidebar />
 
+        {/* Kolom Kanan: Form */}
         <div>
+          {/* Judul */}
           <div style={{ marginBottom: '1.5rem' }}>
             <h1 style={{ fontSize: '1.6rem', color: C.dark, margin: '0 0 6px', fontWeight: 'bold' }}>
               ✨ Form Konsultasi <span style={{ color: C.gold }}>Gratis</span>
@@ -675,15 +679,17 @@ const KonsultasiPage = () => {
             </p>
           </div>
 
+          {/* Step Indicator */}
           <StepIndicator current={step} />
 
+          {/* Card Form */}
           <div style={{
             background: C.white, borderRadius: '24px',
             boxShadow: '0 10px 30px rgba(0,0,0,0.08)',
             padding: '2rem'
           }}>
             {step === 1 && (
-              <StepDataSiswa data={dataDiri} setData={setDataDiri} onNext={() => setStep(2)} />
+              <StepDataDiri data={dataDiri} setData={setDataDiri} onNext={() => setStep(2)} />
             )}
             {step === 2 && (
               <StepKebutuhan data={kebutuhan} setData={setKebutuhan} onBack={() => setStep(1)} onNext={() => setStep(3)} />
@@ -702,6 +708,7 @@ const KonsultasiPage = () => {
             )}
           </div>
 
+          {/* Progress teks */}
           {step < 4 && (
             <p style={{ textAlign: 'center', color: C.gray, fontSize: '0.82rem', marginTop: '1rem' }}>
               Langkah {step} dari 4 • Estimasi waktu pengisian: 2–3 menit

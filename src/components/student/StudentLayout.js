@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { supabase } from '../../supabaseClient';
 import logo from '../../Resource/PC_Horisontal.png';
@@ -77,6 +77,7 @@ const Topbar = ({ user }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const [dropOpen, setDropOpen] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState(null);
 
   // Ambil nama dari full_name (disimpan saat register)
   const nama    = user?.full_name || user?.nama || 'Siswa';
@@ -94,6 +95,46 @@ const Topbar = ({ user }) => {
     '/siswa/bantuan':    'Bantuan',
   };
   const pageTitle = pageTitles[location.pathname] || 'Dashboard';
+
+  // Ambil foto profil dari storage
+  const loadAvatar = useCallback(async () => {
+    const { data: userData } = await supabase.auth.getUser();
+    const uid = userData?.user?.id;
+    if (!uid) return;
+
+    try {
+      const path = `${uid}/avatar.jpg`;
+      const { data: publicUrlData } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(path);
+
+      const { data: fileData, error: fileError } = await supabase.storage
+        .from('avatars')
+        .list(`${uid}/`);
+
+      if (!fileError && fileData && fileData.length > 0) {
+        setAvatarUrl(`${publicUrlData.publicUrl}?t=${Date.now()}`);
+      } else {
+        setAvatarUrl(null);
+      }
+    } catch (err) {
+      setAvatarUrl(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadAvatar();
+
+    // Listen event dari StudentProfile saat foto/nama diperbarui
+    const handleAvatarUpdate = () => {
+      loadAvatar();
+    };
+    window.addEventListener('avatar-updated', handleAvatarUpdate);
+
+    return () => {
+      window.removeEventListener('avatar-updated', handleAvatarUpdate);
+    };
+  }, [loadAvatar]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -136,9 +177,13 @@ const Topbar = ({ user }) => {
               width: '36px', height: '36px', borderRadius: '50%',
               background: C.gold, color: C.white,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontWeight: 'bold', fontSize: '1rem'
+              fontWeight: 'bold', fontSize: '1rem', overflow: 'hidden', flexShrink: 0
             }}>
-              {initial}
+              {avatarUrl ? (
+                <img src={avatarUrl} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ) : (
+                initial
+              )}
             </div>
             <div style={{ textAlign: 'left' }}>
               <div style={{ fontWeight: 'bold', color: C.dark, fontSize: '0.9rem' }}>{nama}</div>

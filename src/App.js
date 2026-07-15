@@ -21,8 +21,6 @@ import StudentProfile from './components/student/StudentProfile';
 import StudentMateri from './components/student/StudentMateri';
 import StudentHomework from './components/student/StudentHomework';
 import StudentAbsent from './components/student/StudentAbsent';
-import StudentScore from './components/student/StudentScore';
-import StudentHelp from './components/student/StudentHelp';
 import StudentUpdates from './components/student/StudentUpdates';
 import StudentMessages from './components/student/StudentMessages';
 import StudentArsip from './components/student/StudentArsip';
@@ -82,9 +80,7 @@ function App() {
           <Route index element={<StudentHome />} />
           <Route path="materi" element={<StudentMateri />} />
           <Route path="tugas" element={<StudentHomework />} />
-          <Route path="absensi" element={<StudentAbsent />} />
-          <Route path="nilai" element={<StudentScore />} />
-          <Route path="bantuan" element={<StudentHelp />} />
+          <Route path="absensi" element={<StudentAbsent />} />        
           <Route path="profil" element={<StudentProfile />} />
           <Route path="updates" element={<StudentUpdates />} />
           <Route path="pesan" element={<StudentMessages />} />

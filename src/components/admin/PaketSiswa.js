@@ -176,48 +176,54 @@ const PaketSiswa = () => {
       return;
     }
 
-    let query = supabase.from('paket_siswa').select(`
-      *,
-      siswa:profiles!paket_siswa_siswa_id_fkey (id, full_name, kelas, gender, created_at),
-      pricelist:pricelist!paket_siswa_pricelist_id_fkey (
-        id, program, jumlah_pertemuan, durasi, pengajar,
-        harga_privat, harga_2siswa, harga_3siswa, harga_4siswa
-      )
-    `);
+    try {
+      let query = supabase.from('paket_siswa').select(`
+        *,
+        siswa:profiles!paket_siswa_siswa_id_fkey (id, full_name, kelas, gender, created_at),
+        pricelist:pricelist!paket_siswa_pricelist_id_fkey (
+          id, program, jumlah_pertemuan, durasi, pengajar,
+          harga_privat, harga_2siswa, harga_3siswa, harga_4siswa
+        )
+      `);
 
-    if (userRole === 'teacher' && guruId) {
-      query = query.eq('guru_id', guruId);
+      if (userRole === 'teacher' && guruId) {
+        query = query.eq('guru_id', guruId);
+      }
+
+      const { data, error: queryError } = await query.order('created_at', { ascending: false });
+
+      if (queryError) throw queryError;
+
+      const processed = (data || []).map((item, index) => {
+        const siswa = item.siswa;
+        const pricelist = item.pricelist || {};
+        const siswaId = generateSiswaId(siswa?.created_at, index);
+        return {
+          ...item,
+          siswa_nama: siswa?.full_name || 'Tidak Diketahui',
+          siswa_id_display: siswaId,
+          kelas_siswa: siswa?.kelas || '-',
+          paket: pricelist.program || 'Paket Reguler',
+          mapel: 'Matematika', // FIXME: ambil dari data asli
+          program: 'Regular', // FIXME: ambil dari data asli
+          jenis: 'Privat', // FIXME: ambil dari data asli
+          harga: pricelist.harga_privat || 0,
+          pricelist: pricelist,
+          total_pertemuan: item.total_pertemuan,
+          sisa_pertemuan: item.sisa_pertemuan,
+          tanggal_mulai: item.tanggal_mulai,
+          tanggal_berakhir: item.tanggal_berakhir,
+          status: item.status,
+        };
+      });
+
+      setPaketList(processed);
+    } catch (err) {
+      console.error('Error loading paket siswa:', err);
+      setError('Gagal memuat data paket siswa: ' + err.message);
+    } finally {
+      setLoading(false);
     }
-
-    const { data, error: queryError } = await query.order('created_at', { ascending: false });
-
-    if (queryError) throw queryError;
-
-    const processed = data.map((item, index) => {
-      const siswa = item.siswa;
-      const pricelist = item.pricelist || {};
-      const siswaId = generateSiswaId(siswa?.created_at, index);
-      return {
-        ...item,
-        siswa_nama: siswa?.full_name || 'Tidak Diketahui',
-        siswa_id_display: siswaId,
-        kelas_siswa: siswa?.kelas || '-',
-        paket: pricelist.program || 'Paket Reguler',
-        mapel: 'Matematika', // FIXME: ambil dari data asli
-        program: 'Regular', // FIXME: ambil dari data asli
-        jenis: 'Privat', // FIXME: ambil dari data asli
-        harga: pricelist.harga_privat || 0,
-        pricelist: pricelist,
-        total_pertemuan: item.total_pertemuan,
-        sisa_pertemuan: item.sisa_pertemuan,
-        tanggal_mulai: item.tanggal_mulai,
-        tanggal_berakhir: item.tanggal_berakhir,
-        status: item.status,
-      };
-    });
-
-    setPaketList(processed);
-    setLoading(false);
   }, [userRole, guruId]);
 
   useEffect(() => {

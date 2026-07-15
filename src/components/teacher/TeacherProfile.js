@@ -125,8 +125,9 @@ const TeacherProfile = () => {
         .list(`${uid}/`);
       
       if (!fileError && fileData && fileData.length > 0) {
-        setAvatarUrl(publicUrlData.publicUrl);
-        return publicUrlData.publicUrl;
+        const bustedUrl = `${publicUrlData.publicUrl}?t=${Date.now()}`;
+        setAvatarUrl(bustedUrl);
+        return bustedUrl;
       } else {
         setAvatarUrl(null);
         return null;
@@ -298,7 +299,7 @@ const TeacherProfile = () => {
         .from('avatars')
         .getPublicUrl(path);
       
-      setAvatarUrl(publicUrlData.publicUrl);
+      setAvatarUrl(`${publicUrlData.publicUrl}?t=${Date.now()}`);
       setMessage({ type: 'success', text: 'Foto profil berhasil diunggah.' });
 
       refreshAvatarInHeader();

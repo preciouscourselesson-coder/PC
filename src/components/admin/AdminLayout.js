@@ -132,17 +132,23 @@ const AdminLayout = () => {
         // Cek apakah file ada
         const { data: fileData, error: fileError } = await supabase.storage.from('avatars').list(`${uid}/`);
         if (!fileError && fileData && fileData.length > 0) {
-          setAvatarUrl(publicUrlData.publicUrl);
+          // Cache-bust supaya foto baru langsung tampil, bukan versi lama dari cache browser
+          setAvatarUrl(`${publicUrlData.publicUrl}?t=${Date.now()}`);
         } else {
           setAvatarUrl(null);
         }
       }
     };
     getUser();
+    // Refresh nama & foto profil di header saat AdminProfile menyimpan perubahan
+    window.addEventListener('avatar-updated', getUser);
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!session) navigate('/login');
     });
-    return () => listener.subscription.unsubscribe();
+    return () => {
+      window.removeEventListener('avatar-updated', getUser);
+      listener.subscription.unsubscribe();
+    };
   }, [navigate]);
 
   return (

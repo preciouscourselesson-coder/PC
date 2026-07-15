@@ -125,8 +125,9 @@ const AdminProfile = () => {
         .list(`${uid}/`);
       
       if (!fileError && fileData && fileData.length > 0) {
-        setAvatarUrl(publicUrlData.publicUrl);
-        return publicUrlData.publicUrl;
+        const bustedUrl = `${publicUrlData.publicUrl}?t=${Date.now()}`;
+        setAvatarUrl(bustedUrl);
+        return bustedUrl;
       } else {
         setAvatarUrl(null);
         return null;
@@ -300,7 +301,7 @@ const AdminProfile = () => {
         .from('avatars')
         .getPublicUrl(path);
       
-      setAvatarUrl(publicUrlData.publicUrl);
+      setAvatarUrl(`${publicUrlData.publicUrl}?t=${Date.now()}`);
       setMessage({ type: 'success', text: 'Foto profil berhasil diunggah.' });
 
       // Trigger refresh di header

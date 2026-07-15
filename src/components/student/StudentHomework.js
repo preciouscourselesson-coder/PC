@@ -23,11 +23,6 @@ const formatDate = (date) => {
   return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
 };
 
-const formatDateLong = (date) => {
-  const d = new Date(date);
-  return d.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
-};
-
 const formatDeadline = (iso) => {
   if (!iso) return '-';
   const d = new Date(iso);
@@ -102,7 +97,7 @@ const TaskCard = ({ task, onUpload, onView }) => {
               {isOverdue ? 'Terlambat' : isSubmitted ? 'Sudah Dikumpulkan' : isToday ? 'Deadline Hari Ini' : 'Deadline'}
             </span>
             <span style={{ color: C.gray, fontSize: '0.8rem' }}>
-              {formatDateLong(task.deadline)}
+              {formatDeadline(task.deadline)}
             </span>
             {task.file_url && (
               <a
@@ -538,7 +533,6 @@ const StudentHomework = () => {
       }
 
       // Upload file ke storage
-      const fileExt = uploadFile.name.split('.').pop();
       const fileName = `${studentId}/${Date.now()}_${uploadFile.name}`;
       const { error: uploadError } = await supabase.storage
         .from('tugas-siswa')

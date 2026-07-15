@@ -85,7 +85,7 @@ const Topbar = ({ user }) => {
         .list(`${uid}/`);
       
       if (!fileError && fileData && fileData.length > 0) {
-        setAvatarUrl(publicUrlData.publicUrl);
+        setAvatarUrl(`${publicUrlData.publicUrl}?t=${Date.now()}`);
       } else {
         setAvatarUrl(null);
       }
