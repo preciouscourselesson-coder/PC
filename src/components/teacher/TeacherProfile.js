@@ -17,6 +17,21 @@ const C = {
   border: '#e0ddd6',
 };
 
+const MOBILE_BREAKPOINT = 768;
+
+// Hook kecil untuk deteksi ukuran layar (mobile vs desktop)
+const useIsMobile = () => {
+  const [isMobile, setIsMobile] = useState(
+    typeof window !== 'undefined' ? window.innerWidth <= MOBILE_BREAKPOINT : false
+  );
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth <= MOBILE_BREAKPOINT);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  return isMobile;
+};
+
 const cardStyle = {
   background: C.white,
   border: `1px solid ${C.border}`,
@@ -24,6 +39,7 @@ const cardStyle = {
   padding: '1.5rem',
   maxWidth: '600px',
   margin: '0 auto',
+  boxSizing: 'border-box',
 };
 
 const inputStyle = {
@@ -32,7 +48,7 @@ const inputStyle = {
   borderRadius: '10px',
   border: `1px solid ${C.border}`,
   fontFamily: 'inherit',
-  fontSize: '0.9rem',
+  fontSize: '16px',
   boxSizing: 'border-box',
   background: C.white,
   color: C.dark,
@@ -101,6 +117,7 @@ const refreshAvatarInHeader = () => {
 };
 
 const TeacherProfile = () => {
+  const isMobile = useIsMobile();
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState(null);
   const [editName, setEditName] = useState(false);
@@ -373,9 +390,9 @@ const TeacherProfile = () => {
   const initials = getInitials(profile.full_name);
 
   return (
-    <div style={{ maxWidth: '600px', margin: '0 auto' }}>
+    <div style={{ maxWidth: '600px', margin: '0 auto', padding: isMobile ? '0 0.25rem' : 0, boxSizing: 'border-box' }}>
       <div style={{ marginBottom: '1.5rem' }}>
-        <h1 style={{ fontSize: '1.6rem', fontWeight: 700, color: C.dark, margin: 0 }}>Profil Guru</h1>
+        <h1 style={{ fontSize: isMobile ? '1.35rem' : '1.6rem', fontWeight: 700, color: C.dark, margin: 0 }}>Profil Guru</h1>
         <p style={{ fontSize: '0.85rem', color: C.grayLight, margin: '4px 0 0' }}>Kelola informasi akun Anda</p>
       </div>
 
@@ -394,17 +411,17 @@ const TeacherProfile = () => {
         </div>
       )}
 
-      <div style={cardStyle}>
+      <div style={{ ...cardStyle, padding: isMobile ? '1.1rem' : '1.5rem' }}>
         {/* Foto Profil */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '1.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '14px' : '20px', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
           <div style={{ position: 'relative' }}>
             {avatarUrl ? (
               <img
                 src={avatarUrl}
                 alt="Avatar"
                 style={{
-                  width: '80px',
-                  height: '80px',
+                  width: isMobile ? '68px' : '80px',
+                  height: isMobile ? '68px' : '80px',
                   borderRadius: '50%',
                   objectFit: 'cover',
                   border: `2px solid ${C.gold}`,
@@ -413,8 +430,8 @@ const TeacherProfile = () => {
             ) : (
               <div
                 style={{
-                  width: '80px',
-                  height: '80px',
+                  width: isMobile ? '68px' : '80px',
+                  height: isMobile ? '68px' : '80px',
                   borderRadius: '50%',
                   background: avatarStyle.bg,
                   color: avatarStyle.color,
@@ -422,7 +439,7 @@ const TeacherProfile = () => {
                   alignItems: 'center',
                   justifyContent: 'center',
                   fontWeight: 700,
-                  fontSize: '2rem',
+                  fontSize: isMobile ? '1.6rem' : '2rem',
                   flexShrink: 0,
                   border: `2px solid ${C.gold}`,
                 }}
@@ -439,16 +456,16 @@ const TeacherProfile = () => {
               id="avatar-upload"
             />
           </div>
-          <div>
+          <div style={{ flex: isMobile ? '1 1 180px' : 'initial', minWidth: 0 }}>
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-              <label htmlFor="avatar-upload" style={{ ...buttonSimpan, fontSize: '0.8rem', padding: '6px 14px', cursor: uploading ? 'default' : 'pointer', opacity: uploading ? 0.6 : 1 }}>
+              <label htmlFor="avatar-upload" style={{ ...buttonSimpan, fontSize: '0.8rem', padding: '8px 14px', cursor: uploading ? 'default' : 'pointer', opacity: uploading ? 0.6 : 1 }}>
                 {uploading ? 'Mengunggah...' : 'Upload Foto'}
               </label>
               {avatarUrl && (
                 <button
                   onClick={handleRemoveAvatar}
                   disabled={uploading}
-                  style={{ ...buttonBatal, color: C.red, fontSize: '0.8rem', padding: '6px 14px' }}
+                  style={{ ...buttonBatal, color: C.red, fontSize: '0.8rem', padding: '8px 14px' }}
                 >
                   Hapus
                 </button>
@@ -470,7 +487,7 @@ const TeacherProfile = () => {
               </div>
             </div>
             {!editName && (
-              <button onClick={() => setEditName(true)} style={{ ...buttonBatal, fontSize: '0.8rem', color: C.gold }}>
+              <button onClick={() => setEditName(true)} style={{ ...buttonBatal, fontSize: '0.8rem', color: C.gold, padding: '6px 10px' }}>
                 ✎ Edit
               </button>
             )}
@@ -496,8 +513,8 @@ const TeacherProfile = () => {
                 <option value="P">Perempuan</option>
               </select>
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.5rem' }}>
-                <button onClick={cancelEditName} style={buttonBatal}>Batal</button>
-                <button onClick={handleSaveName} disabled={saving} style={{ ...buttonSimpan, padding: '6px 16px', fontSize: '0.85rem', opacity: saving ? 0.6 : 1 }}>
+                <button onClick={cancelEditName} style={{ ...buttonBatal, padding: '8px 14px' }}>Batal</button>
+                <button onClick={handleSaveName} disabled={saving} style={{ ...buttonSimpan, padding: '8px 16px', fontSize: '0.85rem', opacity: saving ? 0.6 : 1 }}>
                   {saving ? 'Menyimpan...' : 'Simpan'}
                 </button>
               </div>
@@ -530,7 +547,7 @@ const TeacherProfile = () => {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ fontSize: '0.9rem', fontWeight: 600, color: C.dark }}>Ubah Password</div>
             {!editPassword && (
-              <button onClick={() => setEditPassword(true)} style={{ ...buttonBatal, fontSize: '0.8rem', color: C.gold }}>
+              <button onClick={() => setEditPassword(true)} style={{ ...buttonBatal, fontSize: '0.8rem', color: C.gold, padding: '6px 10px' }}>
                 ✎ Ubah
               </button>
             )}
@@ -571,8 +588,8 @@ const TeacherProfile = () => {
                 />
               </div>
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.5rem' }}>
-                <button onClick={cancelEditPassword} style={buttonBatal}>Batal</button>
-                <button onClick={handleSavePassword} disabled={saving} style={{ ...buttonSimpan, padding: '6px 16px', fontSize: '0.85rem', opacity: saving ? 0.6 : 1 }}>
+                <button onClick={cancelEditPassword} style={{ ...buttonBatal, padding: '8px 14px' }}>Batal</button>
+                <button onClick={handleSavePassword} disabled={saving} style={{ ...buttonSimpan, padding: '8px 16px', fontSize: '0.85rem', opacity: saving ? 0.6 : 1 }}>
                   {saving ? 'Menyimpan...' : 'Simpan Password'}
                 </button>
               </div>

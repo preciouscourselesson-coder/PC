@@ -15,6 +15,21 @@ const C = {
   goldBg: 'rgba(180,150,75,0.10)',
 };
 
+const MOBILE_BREAKPOINT = 768;
+
+// Hook kecil untuk deteksi ukuran layar (mobile vs desktop)
+const useIsMobile = () => {
+  const [isMobile, setIsMobile] = useState(
+    typeof window !== 'undefined' ? window.innerWidth <= MOBILE_BREAKPOINT : false
+  );
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth <= MOBILE_BREAKPOINT);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  return isMobile;
+};
+
 const navItems = [
   { label: 'Home',            path: '/guru',                icon: '🏠' },
   { label: 'Updates',         path: '/guru/updates',        icon: '🔔' },
@@ -25,29 +40,109 @@ const navItems = [
   { label: 'Daftar Siswa',    path: '/guru/daftar-siswa',   icon: '👨‍🎓' },
 ];
 
-const Sidebar = ({ user }) => {
+const Sidebar = ({ user, isMobile, open, onClose }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const handleLogout = async () => { await supabase.auth.signOut(); navigate('/login'); };
+
+  const handleNavigate = (path) => {
+    navigate(path);
+    if (isMobile) onClose();
+  };
+
+  // Style dasar sidebar
+  const baseStyle = {
+    width: '220px',
+    minHeight: '100vh',
+    height: '100vh',
+    flexShrink: 0,
+    background: C.white,
+    borderRight: `1.5px solid ${C.border}`,
+    display: 'flex',
+    flexDirection: 'column',
+    boxSizing: 'border-box',
+    padding: '1.5rem 0',
+  };
+
+  const mobileStyle = isMobile
+    ? {
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        zIndex: 200,
+        boxShadow: '4px 0 24px rgba(0,0,0,0.15)',
+        transform: open ? 'translateX(0)' : 'translateX(-100%)',
+        transition: 'transform 0.25s ease',
+      }
+    : {
+        position: 'sticky',
+        top: 0,
+      };
+
   return (
-    <div style={{ width: '200px', minHeight: '100vh', flexShrink: 0, background: C.white, borderRight: `1.5px solid ${C.border}`, display: 'flex', flexDirection: 'column', position: 'sticky', top: 0, height: '100vh', boxSizing: 'border-box', padding: '1.5rem 0' }}>
-      <div style={{ padding: '0 1.2rem', marginBottom: '2rem' }}><img src={logo} alt="Precious Course" style={{ height: '48px' }} /></div>
-      <nav style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px', padding: '0 0.8rem', overflowY: 'auto' }}>
-        {navItems.map(item => {
-          const active = location.pathname === item.path || (item.path === '/guru' && location.pathname === '/guru');
-          return (
-            <button key={item.path} onClick={() => navigate(item.path)} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', borderRadius: '12px', border: 'none', background: active ? C.goldBg : 'transparent', color: active ? C.gold : C.gray, fontWeight: active ? 'bold' : 'normal', fontSize: '0.95rem', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', width: '100%', transition: 'all 0.15s' }} onMouseEnter={e => { if (!active) e.currentTarget.style.background = C.cream; }} onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent'; }}><span style={{ fontSize: '1.1rem' }}>{item.icon}</span>{item.label}</button>
-          );
-        })}
-      </nav>
-      <div style={{ padding: '0 0.8rem', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-        <button onClick={handleLogout} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', borderRadius: '12px', border: 'none', background: 'transparent', color: '#e74c3c', fontSize: '0.95rem', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', width: '100%' }} onMouseEnter={e => e.currentTarget.style.background = '#fff0f0'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}><span style={{ fontSize: '1.1rem' }}>🚪</span> Keluar</button>
+    <>
+      {/* Overlay gelap di belakang sidebar saat mobile & terbuka */}
+      {isMobile && open && (
+        <div
+          onClick={onClose}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.35)',
+            zIndex: 150,
+          }}
+        />
+      )}
+      <div style={{ ...baseStyle, ...mobileStyle }}>
+        <div style={{ padding: '0 1.2rem', marginBottom: '2rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <img src={logo} alt="Precious Course" style={{ height: '44px' }} />
+          {isMobile && (
+            <button
+              onClick={onClose}
+              aria-label="Tutup menu"
+              style={{ border: 'none', background: 'none', fontSize: '1.3rem', cursor: 'pointer', color: C.gray, lineHeight: 1 }}
+            >
+              ✕
+            </button>
+          )}
+        </div>
+        <nav style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px', padding: '0 0.8rem', overflowY: 'auto' }}>
+          {navItems.map(item => {
+            const active = location.pathname === item.path || (item.path === '/guru' && location.pathname === '/guru');
+            return (
+              <button
+                key={item.path}
+                onClick={() => handleNavigate(item.path)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 14px', borderRadius: '12px',
+                  border: 'none', background: active ? C.goldBg : 'transparent', color: active ? C.gold : C.gray,
+                  fontWeight: active ? 'bold' : 'normal', fontSize: '0.95rem', cursor: 'pointer', fontFamily: 'inherit',
+                  textAlign: 'left', width: '100%', transition: 'all 0.15s',
+                }}
+                onMouseEnter={e => { if (!active) e.currentTarget.style.background = C.cream; }}
+                onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent'; }}
+              >
+                <span style={{ fontSize: '1.1rem' }}>{item.icon}</span>{item.label}
+              </button>
+            );
+          })}
+        </nav>
+        <div style={{ padding: '0 0.8rem', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          <button
+            onClick={handleLogout}
+            style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 14px', borderRadius: '12px', border: 'none', background: 'transparent', color: '#e74c3c', fontSize: '0.95rem', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', width: '100%' }}
+            onMouseEnter={e => e.currentTarget.style.background = '#fff0f0'}
+            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+          >
+            <span style={{ fontSize: '1.1rem' }}>🚪</span> Keluar
+          </button>
+        </div>
       </div>
-    </div>
+    </>
   );
 };
 
-const Topbar = ({ user }) => {
+const Topbar = ({ user, isMobile, onMenuClick }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const [dropOpen, setDropOpen] = useState(false);
@@ -79,11 +174,11 @@ const Topbar = ({ user }) => {
       const { data: publicUrlData } = supabase.storage
         .from('avatars')
         .getPublicUrl(path);
-      
+
       const { data: fileData, error: fileError } = await supabase.storage
         .from('avatars')
         .list(`${uid}/`);
-      
+
       if (!fileError && fileData && fileData.length > 0) {
         setAvatarUrl(`${publicUrlData.publicUrl}?t=${Date.now()}`);
       } else {
@@ -111,11 +206,40 @@ const Topbar = ({ user }) => {
   const handleLogout = async () => { await supabase.auth.signOut(); navigate('/login'); };
 
   return (
-    <div style={{ height: '64px', background: C.white, borderBottom: `1.5px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 2rem', position: 'sticky', top: 0, zIndex: 50, flexShrink: 0 }}>
-      <span style={{ fontWeight: 'bold', color: C.dark, fontSize: '1.05rem' }}>{pageTitle}</span>
-      
+    <div style={{
+      height: '60px',
+      background: C.white,
+      borderBottom: `1.5px solid ${C.border}`,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      padding: isMobile ? '0 1rem' : '0 2rem',
+      position: 'sticky',
+      top: 0,
+      zIndex: 50,
+      flexShrink: 0,
+      gap: '0.75rem',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0 }}>
+        {isMobile && (
+          <button
+            onClick={onMenuClick}
+            aria-label="Buka menu"
+            style={{ border: 'none', background: 'none', fontSize: '1.4rem', cursor: 'pointer', color: C.dark, lineHeight: 1, padding: '4px' }}
+          >
+            ☰
+          </button>
+        )}
+        <span style={{
+          fontWeight: 'bold', color: C.dark, fontSize: isMobile ? '0.95rem' : '1.05rem',
+          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+        }}>
+          {pageTitle}
+        </span>
+      </div>
+
       {/* Bagian kanan: Pesan + User info */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '0.5rem' : '1.5rem', flexShrink: 0 }}>
         {/* Tombol Pesan */}
         <button
           onClick={() => navigate('/guru/pesan')}
@@ -123,13 +247,14 @@ const Topbar = ({ user }) => {
             display: 'flex', alignItems: 'center', gap: '6px',
             background: 'none', border: 'none', cursor: 'pointer',
             fontFamily: 'inherit', fontSize: '0.9rem', color: C.gray,
-            padding: '6px 12px', borderRadius: '8px',
+            padding: isMobile ? '6px 8px' : '6px 12px', borderRadius: '8px',
             transition: 'all 0.15s',
           }}
           onMouseEnter={e => e.currentTarget.style.background = C.cream}
           onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
         >
-          <span style={{ fontSize: '1.1rem' }}>💬</span> Pesan
+          <span style={{ fontSize: '1.1rem' }}>💬</span>
+          {!isMobile && 'Pesan'}
         </button>
 
         {/* User info (avatar + nama + dropdown) */}
@@ -142,7 +267,12 @@ const Topbar = ({ user }) => {
                 initial
               )}
             </div>
-            <div style={{ textAlign: 'left' }}><div style={{ fontWeight: 'bold', color: C.dark, fontSize: '0.9rem' }}>{nama}</div><div style={{ color: C.gray, fontSize: '0.75rem' }}>Guru</div></div>
+            {!isMobile && (
+              <div style={{ textAlign: 'left' }}>
+                <div style={{ fontWeight: 'bold', color: C.dark, fontSize: '0.9rem' }}>{nama}</div>
+                <div style={{ color: C.gray, fontSize: '0.75rem' }}>Guru</div>
+              </div>
+            )}
             <span style={{ color: C.gray, fontSize: '0.8rem' }}>▾</span>
           </button>
           {dropOpen && (
@@ -160,6 +290,9 @@ const Topbar = ({ user }) => {
 const TeacherLayout = () => {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
+  const isMobile = useIsMobile();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
   useEffect(() => {
     const getUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -172,12 +305,25 @@ const TeacherLayout = () => {
     });
     return () => listener.subscription.unsubscribe();
   }, [navigate]);
+
+  // Tutup sidebar otomatis kalau layar berubah jadi desktop
+  useEffect(() => {
+    if (!isMobile) setSidebarOpen(false);
+  }, [isMobile]);
+
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: C.cream, fontFamily: 'inherit' }}>
-      <Sidebar user={user} />
+      <Sidebar
+        user={user}
+        isMobile={isMobile}
+        open={isMobile ? sidebarOpen : true}
+        onClose={() => setSidebarOpen(false)}
+      />
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-        <Topbar user={user} />
-        <main style={{ flex: 1, padding: '2rem', overflowY: 'auto' }}><Outlet /></main>
+        <Topbar user={user} isMobile={isMobile} onMenuClick={() => setSidebarOpen(true)} />
+        <main style={{ flex: 1, padding: isMobile ? '1rem' : '2rem', overflowY: 'auto', boxSizing: 'border-box' }}>
+          <Outlet />
+        </main>
       </div>
     </div>
   );

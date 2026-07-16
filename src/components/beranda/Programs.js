@@ -39,7 +39,7 @@ const programsData = [
 const Programs = () => {
   return (
     <section id="programs" style={{ background: '#ffffff', padding: '48px 5%', width: '100%', boxSizing: 'border-box' }}>
-      <div style={{
+      <div className="programs-grid" style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(4, 1fr)',
         gap: '1.5rem',
@@ -50,14 +50,14 @@ const Programs = () => {
           <h2 style={{ color: '#b4964b', fontSize: '1rem', letterSpacing: '2px', marginBottom: '8px', fontWeight: 'bold' }}>
             PROGRAM KAMI
           </h2>
-          <h3 style={{ color: '#171411', fontSize: '1.6rem', fontWeight: 'bold', margin: 0 }}>
+          <h3 style={{ color: '#171411', fontSize: 'clamp(1.3rem, 4vw, 1.6rem)', fontWeight: 'bold', margin: 0 }}>
             Program Bimbingan Belajar untuk Kamu
           </h3>
         </div>
 
         {/* Baris 2: Kartu program */}
         {programsData.map((program, idx) => (
-          <div key={idx} style={{
+          <div key={idx} className="programs-card" style={{
             gridRow: '2',
             gridColumn: idx + 1,
             background: 'white',
@@ -100,6 +100,26 @@ const Programs = () => {
           </div>
         ))}
       </div>
+
+      <style>{`
+        @media (max-width: 900px) {
+          .programs-grid {
+            grid-template-columns: repeat(2, 1fr) !important;
+          }
+          .programs-grid > div:first-child {
+            grid-column: 1 / -1 !important;
+          }
+          .programs-card {
+            grid-column: auto !important;
+            grid-row: auto !important;
+          }
+        }
+        @media (max-width: 560px) {
+          .programs-grid {
+            grid-template-columns: 1fr !important;
+          }
+        }
+      `}</style>
     </section>
   );
 };

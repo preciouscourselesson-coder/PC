@@ -100,7 +100,18 @@ const refreshAvatarInHeader = () => {
   window.dispatchEvent(new CustomEvent('avatar-updated'));
 };
 
+const useIsMobile = (bp = 768) => {
+  const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' ? window.innerWidth < bp : false);
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < bp);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [bp]);
+  return isMobile;
+};
+
 const StudentProfile = () => {
+  const isMobile = useIsMobile();
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState(null);
   const [editName, setEditName] = useState(false);
@@ -512,7 +523,7 @@ const StudentProfile = () => {
         </div>
 
         {/* Role & Join Date */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
           <div>
             <div style={{ fontSize: '0.75rem', color: C.grayLight }}>Role</div>
             <div style={{ fontSize: '0.95rem', color: C.dark, fontWeight: 500, textTransform: 'capitalize' }}>{profile.role}</div>

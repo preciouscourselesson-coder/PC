@@ -15,6 +15,21 @@ const C = {
   lightRed: '#fff0f0',
 };
 
+const MOBILE_BREAKPOINT = 768;
+
+// Hook kecil untuk deteksi ukuran layar (mobile vs desktop)
+const useIsMobile = () => {
+  const [isMobile, setIsMobile] = useState(
+    typeof window !== 'undefined' ? window.innerWidth <= MOBILE_BREAKPOINT : false
+  );
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth <= MOBILE_BREAKPOINT);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  return isMobile;
+};
+
 // ─── Komponen Kecil ──────────────────────────────────────────────────────────
 const StatusBadge = ({ status }) => {
   const colors = {
@@ -79,9 +94,45 @@ const TabButton = ({ label, active, onClick }) => (
   </button>
 );
 
+// Kartu pesan untuk tampilan mobile (menggantikan baris tabel)
+const MessageCard = ({ item, onOpen }) => {
+  const isFromAdmin = item.is_from_admin;
+  const sender = isFromAdmin ? 'Admin' : 'Saya';
+  return (
+    <div
+      onClick={onOpen}
+      style={{
+        background: C.white, border: `1.5px solid ${C.border}`, borderRadius: '14px',
+        padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', cursor: 'pointer',
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
+        <span style={{ fontWeight: 'bold', color: isFromAdmin ? C.gold : C.gray, fontSize: '0.85rem' }}>{sender}</span>
+        <StatusBadge status={item.status || 'unread'} />
+      </div>
+      <div style={{ color: C.dark, fontWeight: '600', fontSize: '0.95rem', wordBreak: 'break-word' }}>{item.subject}</div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
+        <span style={{ color: C.gray, fontSize: '0.8rem' }}>
+          {item.created_at ? new Date(item.created_at).toLocaleDateString('id-ID') : '-'}
+        </span>
+        <button
+          onClick={onOpen}
+          style={{
+            background: C.gold, border: 'none', color: 'white', padding: '7px 16px',
+            borderRadius: '40px', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.8rem', fontFamily: 'inherit',
+          }}
+        >
+          Detail
+        </button>
+      </div>
+    </div>
+  );
+};
+
 // ─── Komponen Utama ──────────────────────────────────────────────────────────
 const TeacherMessages = () => {
   // ─── State ──────────────────────────────────────────────────────────────
+  const isMobile = useIsMobile();
   const [activeTab, setActiveTab] = useState('inbox');
   const [loading, setLoading] = useState(true);
 
@@ -274,18 +325,18 @@ const TeacherMessages = () => {
 
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
-    <div style={{ minHeight: '100vh', background: C.cream, padding: '1.5rem 5%' }}>
-      <h1 style={{ fontSize: '1.8rem', color: C.dark, marginBottom: '1rem' }}>💬 Pesan & Komunikasi</h1>
+    <div style={{ minHeight: '100vh', background: C.cream, padding: isMobile ? '1rem' : '1.5rem 5%', boxSizing: 'border-box' }}>
+      <h1 style={{ fontSize: isMobile ? '1.4rem' : '1.8rem', color: C.dark, marginBottom: '1rem' }}>💬 Pesan & Komunikasi</h1>
 
-      <div style={{ borderBottom: `1px solid ${C.border}`, marginBottom: '1.5rem' }}>
-        <TabButton label="📨 Pesan Masuk" active={activeTab === 'inbox'} onClick={() => setActiveTab('inbox')} />
-        <TabButton label="✏️ Kirim Pesan" active={activeTab === 'new'} onClick={() => setActiveTab('new')} />
+      <div style={{ borderBottom: `1px solid ${C.border}`, marginBottom: '1.5rem', display: 'flex' }}>
+        <TabButton label={isMobile ? '📨 Masuk' : '📨 Pesan Masuk'} active={activeTab === 'inbox'} onClick={() => setActiveTab('inbox')} />
+        <TabButton label={isMobile ? '✏️ Kirim' : '✏️ Kirim Pesan'} active={activeTab === 'new'} onClick={() => setActiveTab('new')} />
       </div>
 
       {/* ─── Tab: Pesan Masuk ───────────────────────────────────────────── */}
       {activeTab === 'inbox' && (
         <>
-          <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+          <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
             <input
               type="text"
               placeholder="Cari berdasarkan subjek atau pengirim..."
@@ -296,11 +347,12 @@ const TeacherMessages = () => {
                 padding: '10px 14px',
                 borderRadius: '10px',
                 border: `1.5px solid ${C.border}`,
-                fontSize: '0.92rem',
+                fontSize: '16px',
                 outline: 'none',
                 fontFamily: 'inherit',
-                minWidth: '200px',
+                minWidth: isMobile ? '100%' : '200px',
                 background: C.white,
+                boxSizing: 'border-box',
               }}
             />
             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
@@ -316,6 +368,12 @@ const TeacherMessages = () => {
             <div style={{ textAlign: 'center', padding: '3rem', color: C.gray, background: C.white, borderRadius: '24px' }}>
               <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📭</div>
               <p>Tidak ada pesan.</p>
+            </div>
+          ) : isMobile ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              {filteredMessages.map(item => (
+                <MessageCard key={item.id} item={item} onOpen={() => openDetail(item)} />
+              ))}
             </div>
           ) : (
             <div style={{ background: C.white, borderRadius: '24px', overflow: 'hidden', boxShadow: '0 4px 16px rgba(0,0,0,0.06)' }}>
@@ -378,8 +436,8 @@ const TeacherMessages = () => {
 
       {/* ─── Tab: Kirim Pesan ───────────────────────────────────────────── */}
       {activeTab === 'new' && (
-        <div style={{ background: C.white, borderRadius: '24px', padding: '2rem', boxShadow: '0 4px 16px rgba(0,0,0,0.06)' }}>
-          <h2 style={{ marginTop: 0, color: C.dark }}>Kirim Pesan ke Admin</h2>
+        <div style={{ background: C.white, borderRadius: '24px', padding: isMobile ? '1.2rem' : '2rem', boxShadow: '0 4px 16px rgba(0,0,0,0.06)', boxSizing: 'border-box' }}>
+          <h2 style={{ marginTop: 0, color: C.dark, fontSize: isMobile ? '1.15rem' : '1.4rem' }}>Kirim Pesan ke Admin</h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <div>
               <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '6px', color: C.dark }}>Subjek</label>
@@ -393,10 +451,11 @@ const TeacherMessages = () => {
                   padding: '10px 14px',
                   borderRadius: '10px',
                   border: `1.5px solid ${C.border}`,
-                  fontSize: '0.92rem',
+                  fontSize: '16px',
                   fontFamily: 'inherit',
                   background: C.white,
                   outline: 'none',
+                  boxSizing: 'border-box',
                 }}
               />
             </div>
@@ -412,11 +471,12 @@ const TeacherMessages = () => {
                   padding: '10px 14px',
                   borderRadius: '10px',
                   border: `1.5px solid ${C.border}`,
-                  fontSize: '0.92rem',
+                  fontSize: '16px',
                   fontFamily: 'inherit',
                   background: C.white,
                   outline: 'none',
                   resize: 'vertical',
+                  boxSizing: 'border-box',
                 }}
               />
             </div>
@@ -435,6 +495,7 @@ const TeacherMessages = () => {
                   fontFamily: 'inherit',
                   fontSize: '0.95rem',
                   opacity: sending ? 0.6 : 1,
+                  width: isMobile ? '100%' : 'auto',
                 }}
               >
                 {sending ? '⏳ Mengirim...' : 'Kirim Pesan'}
@@ -456,23 +517,24 @@ const TeacherMessages = () => {
             background: 'rgba(0,0,0,0.5)',
             zIndex: 1000,
             display: 'flex',
-            alignItems: 'center',
+            alignItems: isMobile ? 'flex-end' : 'center',
             justifyContent: 'center',
-            padding: '1rem',
+            padding: isMobile ? 0 : '1rem',
           }}
           onClick={closeDetail}
         >
           <div
             style={{
               background: C.white,
-              borderRadius: '24px',
-              maxWidth: '700px',
+              borderRadius: isMobile ? '20px 20px 0 0' : '24px',
+              maxWidth: isMobile ? '100%' : '700px',
               width: '100%',
               maxHeight: '90vh',
               overflowY: 'auto',
-              padding: '2rem',
+              padding: isMobile ? '1.3rem' : '2rem',
               boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
               position: 'relative',
+              boxSizing: 'border-box',
             }}
             onClick={e => e.stopPropagation()}
           >
@@ -492,11 +554,11 @@ const TeacherMessages = () => {
               ✕
             </button>
 
-            <h2 style={{ marginTop: 0, color: C.dark, borderBottom: `2px solid ${C.gold}`, paddingBottom: '0.5rem' }}>
+            <h2 style={{ marginTop: 0, color: C.dark, borderBottom: `2px solid ${C.gold}`, paddingBottom: '0.5rem', fontSize: isMobile ? '1.2rem' : '1.5rem', paddingRight: '1.5rem' }}>
               Detail Pesan
             </h2>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1rem' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1rem', fontSize: isMobile ? '0.9rem' : '1rem' }}>
               <div><strong>Subjek:</strong> {selectedMessage.subject}</div>
               <div><strong>Pengirim:</strong> {selectedMessage.is_from_admin ? 'Admin' : 'Saya'}</div>
               <div><strong>Status:</strong> <StatusBadge status={selectedMessage.status || 'unread'} /></div>
@@ -554,6 +616,7 @@ const TeacherMessages = () => {
                     fontWeight: 'bold',
                     cursor: updating ? 'not-allowed' : 'pointer',
                     fontFamily: 'inherit',
+                    width: isMobile ? '100%' : 'auto',
                   }}
                 >
                   ✓ Tandai Dibaca
@@ -574,11 +637,12 @@ const TeacherMessages = () => {
                     padding: '10px 14px',
                     borderRadius: '10px',
                     border: `1.5px solid ${C.border}`,
-                    fontSize: '0.92rem',
+                    fontSize: '16px',
                     fontFamily: 'inherit',
                     background: C.white,
                     outline: 'none',
                     resize: 'vertical',
+                    boxSizing: 'border-box',
                   }}
                 />
                 <button
@@ -594,6 +658,7 @@ const TeacherMessages = () => {
                     fontWeight: 'bold',
                     cursor: updating ? 'not-allowed' : 'pointer',
                     fontFamily: 'inherit',
+                    width: isMobile ? '100%' : 'auto',
                   }}
                 >
                   {updating ? '⏳ Mengirim...' : 'Kirim Balasan'}

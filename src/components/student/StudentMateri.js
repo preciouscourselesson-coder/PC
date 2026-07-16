@@ -127,7 +127,7 @@ const requestStatusBadge = (status) => {
 const Card = ({ children, style = {} }) => (
   <div style={{
     background: C.card, borderRadius: '18px',
-    border: `1px solid ${C.border}`, padding: '1.4rem',
+    border: `1px solid ${C.border}`, padding: '1.1rem',
     ...style
   }}>
     {children}
@@ -177,7 +177,18 @@ const Avatar = ({ nama, size = 38 }) => {
 };
 
 // ─── Halaman Utama ────────────────────────────────────────────────────────────
+const useIsMobile = (bp = 768) => {
+  const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' ? window.innerWidth < bp : false);
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < bp);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [bp]);
+  return isMobile;
+};
+
 const StudentMateri = () => {
+  const isMobile = useIsMobile();
   // ── State: identitas & data mentah ──────────────────────────────────────────
   const [userId, setUserId]           = useState(null);
   const [profile, setProfile]         = useState(null);
@@ -470,7 +481,7 @@ const StudentMateri = () => {
       </div>
 
       {activeTab === 'materi' ? (
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1.4rem', alignItems: 'start' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '2fr 1fr', gap: '1.4rem', alignItems: 'start' }}>
           {/* ── Kolom kiri: daftar pertemuan ── */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <Card style={{ padding: '1.1rem 1.3rem' }}>
@@ -634,7 +645,7 @@ const StudentMateri = () => {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <Card>
               <div style={{ fontWeight: 700, color: C.text, marginBottom: '12px', fontSize: '0.92rem' }}>Ringkasan Materi</div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '10px' }}>
                 <div style={{ background: C.goldBg, borderRadius: '12px', padding: '12px' }}>
                   <div style={{ fontSize: '1.4rem', fontWeight: 800, color: C.gold }}>{materiFileAll.length}</div>
                   <div style={{ fontSize: '0.74rem', color: C.textDim }}>Materi dari Guru</div>
@@ -691,7 +702,7 @@ const StudentMateri = () => {
           </div>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1.4rem', alignItems: 'start' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '2fr 1fr', gap: '1.4rem', alignItems: 'start' }}>
           {/* ── Kolom kiri: daftar request + jawaban guru ── */}
           <Card>
             <div style={{ fontWeight: 700, color: C.text, fontSize: '0.95rem', marginBottom: '4px' }}>Materi Request Saya</div>

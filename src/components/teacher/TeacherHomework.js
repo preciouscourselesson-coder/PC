@@ -77,12 +77,27 @@ const mapTaskRow = (t) => ({
   })),
 });
 
+const MOBILE_BREAKPOINT = 768;
+
+// Hook kecil untuk deteksi ukuran layar (mobile vs desktop)
+const useIsMobile = () => {
+  const [isMobile, setIsMobile] = useState(
+    typeof window !== 'undefined' ? window.innerWidth <= MOBILE_BREAKPOINT : false
+  );
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth <= MOBILE_BREAKPOINT);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  return isMobile;
+};
+
 const inputStyle = {
   width: '100%',
   padding: '10px 12px',
   borderRadius: '10px',
   border: `1.5px solid ${C.border}`,
-  fontSize: '0.88rem',
+  fontSize: '16px',
   outline: 'none',
   fontFamily: 'inherit',
   color: C.dark,
@@ -99,6 +114,7 @@ const labelStyle = {
 };
 
 const TeacherHomework = () => {
+  const isMobile = useIsMobile();
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
@@ -418,12 +434,19 @@ const TeacherHomework = () => {
       ) : (
         <>
           {/* Main layout */}
-          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1.1fr', gap: '1.5rem', alignItems: 'start' }}>
+          <div style={{ display: isMobile ? 'flex' : 'grid', flexDirection: isMobile ? 'column' : undefined, gridTemplateColumns: isMobile ? undefined : '2fr 1.1fr', gap: isMobile ? '1rem' : '1.5rem', alignItems: 'start' }}>
             {/* KIRI */}
             <div>
               {/* Filter & search */}
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center', marginBottom: '1rem' }}>
-                <select value={filterMapel} onChange={(e) => setFilterMapel(e.target.value)} style={{ ...inputStyle, width: 'auto', padding: '8px 10px' }}>
+                <input
+                  type="text"
+                  placeholder="Cari judul tugas..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  style={{ ...inputStyle, flex: isMobile ? '1 1 100%' : 1, minWidth: '160px', padding: '8px 12px', order: isMobile ? -1 : 0 }}
+                />
+                <select value={filterMapel} onChange={(e) => setFilterMapel(e.target.value)} style={{ ...inputStyle, width: 'auto', flex: isMobile ? '1 1 47%' : 'initial', padding: '8px 10px' }}>
                   <option>Semua Mata Pelajaran</option>
                   {MAPEL_LIST.map((m) => (
                     <option key={m}>{m}</option>
@@ -435,7 +458,7 @@ const TeacherHomework = () => {
                     setFilterJenjang(e.target.value);
                     setFilterKelas('Semua Kelas');
                   }}
-                  style={{ ...inputStyle, width: 'auto', padding: '8px 10px' }}
+                  style={{ ...inputStyle, width: 'auto', flex: isMobile ? '1 1 47%' : 'initial', padding: '8px 10px' }}
                 >
                   <option>Semua Jenjang</option>
                   {JENJANG_LIST.map((j) => (
@@ -446,14 +469,14 @@ const TeacherHomework = () => {
                   value={filterKelas}
                   onChange={(e) => setFilterKelas(e.target.value)}
                   disabled={filterJenjang === 'Semua Jenjang'}
-                  style={{ ...inputStyle, width: 'auto', padding: '8px 10px' }}
+                  style={{ ...inputStyle, width: 'auto', flex: isMobile ? '1 1 47%' : 'initial', padding: '8px 10px' }}
                 >
                   <option>Semua Kelas</option>
                   {(KELAS_BY_JENJANG[filterJenjang] || []).map((k) => (
                     <option key={k}>{k}</option>
                   ))}
                 </select>
-                <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', width: isMobile ? '100%' : 'auto', overflowX: isMobile ? 'auto' : 'visible' }}>
                   {statusOptions.map((status) => (
                     <button
                       key={status}
@@ -468,19 +491,14 @@ const TeacherHomework = () => {
                         cursor: 'pointer',
                         fontSize: '0.82rem',
                         fontFamily: 'inherit',
+                        whiteSpace: 'nowrap',
+                        flexShrink: 0,
                       }}
                     >
                       {status}
                     </button>
                   ))}
                 </div>
-                <input
-                  type="text"
-                  placeholder="Cari judul tugas..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  style={{ ...inputStyle, flex: 1, minWidth: '160px', padding: '8px 12px' }}
-                />
               </div>
 
               {/* Daftar Tugas Saya */}
@@ -496,47 +514,70 @@ const TeacherHomework = () => {
                       <div
                         key={task.id}
                         style={{
-                          padding: '1rem 0.25rem',
+                          padding: isMobile ? '0.9rem 0.6rem' : '1rem 0.25rem',
                           borderBottom: `1px solid ${C.border}`,
-                          display: 'grid',
-                          gridTemplateColumns: '2.3fr 1fr auto',
-                          gap: '0.75rem',
-                          alignItems: 'center',
+                          display: isMobile ? 'flex' : 'grid',
+                          flexDirection: isMobile ? 'column' : undefined,
+                          gridTemplateColumns: isMobile ? undefined : '2.3fr 1fr auto',
+                          gap: isMobile ? '0.5rem' : '0.75rem',
+                          alignItems: isMobile ? 'stretch' : 'center',
                           background: isSelected ? C.goldLight : 'transparent',
                           borderRadius: '10px',
                         }}
                       >
                         <div>
-                          <div style={{ fontWeight: '600', color: C.dark }}>{task.judul}</div>
+                          <div style={{ fontWeight: '600', color: C.dark, wordBreak: 'break-word' }}>{task.judul}</div>
                           <div style={{ fontSize: '0.83rem', color: C.gray }}>{task.mapel} • {task.bab} • {task.materi}</div>
                           <div style={{ fontSize: '0.8rem', color: C.grayLight }}>
                             {task.jenjang && task.jenjang !== '-' ? `${task.jenjang} • ` : ''}{task.kelas}
                             {task.deadline ? ` • Deadline: ${task.deadline}` : ''}
                           </div>
                         </div>
-                        <div>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: isMobile ? 'space-between' : 'flex-start', gap: '0.5rem' }}>
                           <span style={{ background: st.bg, color: st.color, padding: '2px 10px', borderRadius: '12px', fontSize: '0.8rem', fontWeight: '600' }}>
                             {task.status}
                           </span>
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                          <button
-                            onClick={() => setSelectedTaskId(task.id)}
-                            title="Lihat pengumpulan"
-                            style={{ background: 'none', border: `1px solid ${C.border}`, borderRadius: '8px', color: C.gold, fontWeight: '600', cursor: 'pointer', padding: '6px 10px', fontSize: '0.8rem' }}
-                          >
-                            Lihat
-                          </button>
-                          {task.status === 'Draft' && (
-                            <button
-                              onClick={() => openPublish(task)}
-                              title="Publikasikan ke siswa"
-                              style={{ background: C.gold, border: 'none', borderRadius: '8px', color: C.white, cursor: 'pointer', padding: '6px 10px', fontSize: '1rem', lineHeight: 1 }}
-                            >
-                              📢
-                            </button>
+                          {isMobile && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                              <button
+                                onClick={() => setSelectedTaskId(task.id)}
+                                title="Lihat pengumpulan"
+                                style={{ background: 'none', border: `1px solid ${C.border}`, borderRadius: '8px', color: C.gold, fontWeight: '600', cursor: 'pointer', padding: '6px 10px', fontSize: '0.8rem' }}
+                              >
+                                Lihat
+                              </button>
+                              {task.status === 'Draft' && (
+                                <button
+                                  onClick={() => openPublish(task)}
+                                  title="Publikasikan ke siswa"
+                                  style={{ background: C.gold, border: 'none', borderRadius: '8px', color: C.white, cursor: 'pointer', padding: '6px 10px', fontSize: '1rem', lineHeight: 1 }}
+                                >
+                                  📢
+                                </button>
+                              )}
+                            </div>
                           )}
                         </div>
+                        {!isMobile && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                            <button
+                              onClick={() => setSelectedTaskId(task.id)}
+                              title="Lihat pengumpulan"
+                              style={{ background: 'none', border: `1px solid ${C.border}`, borderRadius: '8px', color: C.gold, fontWeight: '600', cursor: 'pointer', padding: '6px 10px', fontSize: '0.8rem' }}
+                            >
+                              Lihat
+                            </button>
+                            {task.status === 'Draft' && (
+                              <button
+                                onClick={() => openPublish(task)}
+                                title="Publikasikan ke siswa"
+                                style={{ background: C.gold, border: 'none', borderRadius: '8px', color: C.white, cursor: 'pointer', padding: '6px 10px', fontSize: '1rem', lineHeight: 1 }}
+                              >
+                                📢
+                              </button>
+                            )}
+                          </div>
+                        )}
                       </div>
                     );
                   })
@@ -607,6 +648,54 @@ const TeacherHomework = () => {
                       <div style={{ textAlign: 'center', padding: '1.5rem', color: C.gray, fontSize: '0.9rem' }}>
                         Tidak ada siswa pada kategori ini.
                       </div>
+                    ) : isMobile ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                        {activeSubs.map((sub) => (
+                          <div key={sub.id} style={{ border: `1.5px solid ${C.border}`, borderRadius: '12px', padding: '0.8rem', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                            <div style={{ fontWeight: '600', color: C.dark, fontSize: '0.9rem' }}>{sub.siswa}</div>
+                            <div style={{ fontSize: '0.82rem', color: C.gray }}>{selectedTask.deskripsi || '-'}</div>
+                            <div style={{ fontSize: '0.82rem', color: sub.file ? C.gold : C.grayLight }}>
+                              {sub.file ? (
+                                sub.fileUrl ? (
+                                  <a href={sub.fileUrl} target="_blank" rel="noreferrer" style={{ color: C.gold, textDecoration: 'none' }}>
+                                    📄 {sub.file}
+                                  </a>
+                                ) : (
+                                  `📄 ${sub.file}`
+                                )
+                              ) : (
+                                '— belum ada file —'
+                              )}
+                            </div>
+                            <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', paddingTop: '0.3rem', borderTop: `1px solid ${C.border}` }}>
+                              {sub.status === 'Sudah' ? (
+                                GRADE_OPTIONS.map((g) => (
+                                  <button
+                                    key={g}
+                                    onClick={() => gradeSubmission(selectedTask.id, sub.id, g)}
+                                    title={`Beri nilai ${g}`}
+                                    style={{
+                                      width: '34px',
+                                      height: '34px',
+                                      borderRadius: '8px',
+                                      border: sub.nilai === g ? `2px solid ${gradeColor(g)}` : `1.5px solid ${C.border}`,
+                                      background: sub.nilai === g ? gradeColor(g) : C.white,
+                                      color: sub.nilai === g ? C.white : C.gray,
+                                      fontWeight: '700',
+                                      fontSize: '0.85rem',
+                                      cursor: 'pointer',
+                                    }}
+                                  >
+                                    {g}
+                                  </button>
+                                ))
+                              ) : (
+                                <span style={{ fontSize: '0.8rem', color: C.grayLight }}>Menunggu pengumpulan</span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     ) : (
                       <div>
                         <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 2fr 1.3fr 1.6fr', gap: '0.5rem', padding: '0.4rem 0.25rem', fontSize: '0.78rem', fontWeight: '700', color: C.grayLight, textTransform: 'uppercase', borderBottom: `1px solid ${C.border}` }}>
@@ -668,7 +757,7 @@ const TeacherHomework = () => {
             </div>
 
             {/* KANAN: Buat Tugas Baru */}
-            <div style={{ background: C.white, borderRadius: '16px', border: `1.5px solid ${C.border}`, padding: '1.5rem', position: 'sticky', top: '1rem' }}>
+            <div style={{ background: C.white, borderRadius: '16px', border: `1.5px solid ${C.border}`, padding: isMobile ? '1.1rem' : '1.5rem', position: isMobile ? 'static' : 'sticky', top: '1rem', width: isMobile ? '100%' : 'auto', boxSizing: 'border-box' }}>
               <h4 style={{ margin: '0 0 1rem 0', color: C.dark }}>Buat Tugas Baru</h4>
               <form onSubmit={handleSaveDraft}>
                 <div style={{ marginBottom: '0.9rem' }}>
@@ -810,12 +899,19 @@ const TeacherHomework = () => {
                 inset: 0,
                 background: 'rgba(23,20,17,0.45)',
                 display: 'flex',
-                alignItems: 'center',
+                alignItems: isMobile ? 'flex-end' : 'center',
                 justifyContent: 'center',
                 zIndex: 50,
               }}
             >
-              <div onClick={(e) => e.stopPropagation()} style={{ background: C.white, borderRadius: '16px', padding: '1.5rem', width: '380px', maxWidth: '90vw' }}>
+              <div
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  background: C.white, borderRadius: isMobile ? '16px 16px 0 0' : '16px',
+                  padding: isMobile ? '1.2rem' : '1.5rem', width: isMobile ? '100%' : '380px',
+                  maxWidth: isMobile ? '100%' : '90vw', maxHeight: '88vh', overflowY: 'auto', boxSizing: 'border-box',
+                }}
+              >
                 <h4 style={{ margin: '0 0 0.25rem 0', color: C.dark }}>Publikasikan Tugas</h4>
                 <div style={{ fontSize: '0.85rem', color: C.gray, marginBottom: '1rem' }}>
                   {tasks.find((t) => t.id === publishTaskId)?.judul}
@@ -838,7 +934,7 @@ const TeacherHomework = () => {
                               display: 'flex',
                               alignItems: 'center',
                               gap: '0.5rem',
-                              padding: '6px 8px',
+                              padding: '9px 8px',
                               borderRadius: '8px',
                               cursor: 'pointer',
                               background: checked ? C.goldLight : 'transparent',
@@ -855,7 +951,7 @@ const TeacherHomework = () => {
                   )}
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '0.75rem', marginBottom: '1.25rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : '1.4fr 1fr', gap: '0.75rem', marginBottom: '1.25rem' }}>
                   <div>
                     <label style={labelStyle}>Tanggal Deadline</label>
                     <input type="date" value={deadlineDate} onChange={(e) => setDeadlineDate(e.target.value)} style={inputStyle} />
@@ -903,12 +999,19 @@ const TeacherHomework = () => {
                 inset: 0,
                 background: 'rgba(23,20,17,0.45)',
                 display: 'flex',
-                alignItems: 'center',
+                alignItems: isMobile ? 'flex-end' : 'center',
                 justifyContent: 'center',
                 zIndex: 50,
               }}
             >
-              <div onClick={(e) => e.stopPropagation()} style={{ background: C.white, borderRadius: '16px', padding: '1.5rem', width: '380px', maxWidth: '90vw' }}>
+              <div
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  background: C.white, borderRadius: isMobile ? '16px 16px 0 0' : '16px',
+                  padding: isMobile ? '1.2rem' : '1.5rem', width: isMobile ? '100%' : '380px',
+                  maxWidth: isMobile ? '100%' : '90vw', maxHeight: '88vh', overflowY: 'auto', boxSizing: 'border-box',
+                }}
+              >
                 <h4 style={{ margin: '0 0 0.25rem 0', color: C.dark }}>Tambah Siswa ke Tugas</h4>
                 <div style={{ fontSize: '0.85rem', color: C.gray, marginBottom: '1rem' }}>
                   {tasks.find((t) => t.id === addSiswaTaskId)?.judul}
@@ -934,7 +1037,7 @@ const TeacherHomework = () => {
                               display: 'flex',
                               alignItems: 'center',
                               gap: '0.5rem',
-                              padding: '6px 8px',
+                              padding: '9px 8px',
                               borderRadius: '8px',
                               cursor: alreadyAssigned ? 'default' : 'pointer',
                               background: checked ? C.goldLight : 'transparent',

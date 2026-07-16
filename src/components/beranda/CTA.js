@@ -5,10 +5,10 @@ const CTA = () => {
   return (
     <section id="cta" style={{ textAlign: 'center', background: '#2d6a4f', color: 'white', padding: '48px 5%', width: '100%', boxSizing: 'border-box' }}>
       <div>
-        <h2 style={{ color: 'white', fontSize: '1.6rem', marginBottom: '12px' }}>
+        <h2 style={{ color: 'white', fontSize: 'clamp(1.25rem, 4vw, 1.6rem)', marginBottom: '12px' }}>
           Mulai Langkah pertamamu bersama Precious Course hari ini.
         </h2>
-        <p style={{ marginBottom: '24px', fontSize: '1rem', color: 'rgba(255,255,255,0.85)' }}>
+        <p style={{ marginBottom: '24px', fontSize: 'clamp(0.9rem, 2vw, 1rem)', color: 'rgba(255,255,255,0.85)' }}>
           Konsultasi gratis untuk mengetahui program yang paling sesuai untukmu.
         </p>
         <Link to="/konsultasi"

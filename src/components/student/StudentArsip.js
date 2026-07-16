@@ -53,7 +53,18 @@ const formatTanggalDisplay = (isoDatetime) => {
 
 const sanitizeFileName = (name = '') => name.replace(/[^a-zA-Z0-9._-]/g, '_');
 
+const useIsMobile = (bp = 768) => {
+  const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' ? window.innerWidth < bp : false);
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < bp);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [bp]);
+  return isMobile;
+};
+
 const StudentArsip = () => {
+  const isMobile = useIsMobile();
   const [studentProfile, setStudentProfile] = useState(null);
   const [loadingProfile, setLoadingProfile] = useState(true);
 
@@ -262,7 +273,7 @@ const StudentArsip = () => {
     background: C.white,
     borderRadius: '16px',
     border: `1.5px solid ${C.border}`,
-    padding: '1.75rem',
+    padding: isMobile ? '1rem' : '1.75rem',
     marginBottom: '1.5rem',
   };
 

@@ -17,7 +17,7 @@ const fiturData = [
 ];
 
 const LeftPanel = () => (
-  <div style={{
+  <div className="left-panel" style={{
     display: 'flex',
     flexDirection: 'column',
     gap: '1.5rem',             // jarak antar elemen (logo, tagline, fitur, footer)
@@ -28,13 +28,13 @@ const LeftPanel = () => (
   }}>
     {/* Logo */}
     <div>
-      <img src={logo} alt="Precious Course" style={{ height: '84px' }} />
+      <img src={logo} alt="Precious Course" className="left-panel-logo" style={{ height: '84px' }} />
     </div>
 
     {/* Tagline + Fitur */}
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       <div>
-        <h1 style={{ fontSize: '2.2rem', color: C.dark, fontWeight: 'bold', lineHeight: 1.25, margin: '0 0 12px' }}>
+        <h1 style={{ fontSize: 'clamp(1.6rem, 4vw, 2.2rem)', color: C.dark, fontWeight: 'bold', lineHeight: 1.25, margin: '0 0 12px' }}>
           Belajar terarah,<br />
           <span style={{ color: C.gold }}>Wawasan</span> bertambah.
         </h1>
@@ -43,7 +43,7 @@ const LeftPanel = () => (
         </p>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
+      <div className="left-panel-fitur" style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
         {fiturData.map((f, i) => (
           <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '14px' }}>
             <div style={{
@@ -71,12 +71,31 @@ const LeftPanel = () => (
     </div>
 
     {/* Footer - tetap di bawah dengan margin-top auto */}
-    <div style={{ marginTop: 'auto' }}>
+    <div className="left-panel-footer" style={{ marginTop: 'auto' }}>
       <p style={{ color: C.gray, fontSize: '0.8rem', margin: 0, lineHeight: 1.7 }}>
         © 2026 Precious Course<br />
         Bimbingan Belajar & Mentoring
       </p>
     </div>
+
+    <style>{`
+      @media (max-width: 860px) {
+        .left-panel {
+          min-height: auto !important;
+          padding: 1.75rem 6vw !important;
+          gap: 1rem !important;
+        }
+        .left-panel-logo {
+          height: 52px !important;
+        }
+      }
+      @media (max-width: 640px) {
+        .left-panel-fitur,
+        .left-panel-footer {
+          display: none !important;
+        }
+      }
+    `}</style>
   </div>
 );
 

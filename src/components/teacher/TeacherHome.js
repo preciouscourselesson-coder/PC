@@ -17,6 +17,21 @@ const C = {
 
 const HARI_LIST = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
 
+const MOBILE_BREAKPOINT = 768;
+
+// Hook kecil untuk deteksi ukuran layar (mobile vs desktop)
+const useIsMobile = () => {
+  const [isMobile, setIsMobile] = useState(
+    typeof window !== 'undefined' ? window.innerWidth <= MOBILE_BREAKPOINT : false
+  );
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth <= MOBILE_BREAKPOINT);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  return isMobile;
+};
+
 const formatJam = (t) => (t ? t.slice(0, 5) : '');
 
 const StatusPill = ({ status }) => {
@@ -51,6 +66,7 @@ const getAggregateStatus = (rows) => {
 };
 
 const TeacherHome = () => {
+  const isMobile = useIsMobile();
   const [loading, setLoading] = useState(true);
   const [guru, setGuru] = useState(null);
   const [jadwalList, setJadwalList] = useState([]);
@@ -696,15 +712,15 @@ const TeacherHome = () => {
   };
 
   // ========== RENDER ==========
-  const cardStyle = { background: C.white, borderRadius: '16px', border: `1.5px solid ${C.border}`, padding: '1.5rem' };
+  const cardStyle = { background: C.white, borderRadius: '16px', border: `1.5px solid ${C.border}`, padding: isMobile ? '1rem' : '1.5rem' };
   const linkBtn = { background: 'none', border: 'none', color: C.gold, fontWeight: '600', cursor: 'pointer' };
   const modalOverlayStyle = {
     position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
-    display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 60,
+    display: 'flex', alignItems: isMobile ? 'flex-end' : 'center', justifyContent: 'center', zIndex: 60,
   };
   const modalContentStyle = {
-    background: C.white, borderRadius: '16px', padding: '1.5rem',
-    width: '500px', maxWidth: '90vw',
+    background: C.white, borderRadius: isMobile ? '16px 16px 0 0' : '16px', padding: '1.5rem',
+    width: isMobile ? '100%' : '500px', maxWidth: isMobile ? '100%' : '90vw',
     display: 'flex', flexDirection: 'column', gap: '0.5rem',
   };
   const buttonBatal = {
@@ -738,14 +754,14 @@ const TeacherHome = () => {
   return (
     <div style={{ maxWidth: '1200px', margin: '0 auto', fontFamily: 'inherit' }}>
       {/* Sapaan */}
-      <div style={{ marginBottom: '1.5rem' }}>
-        <h1 style={{ fontSize: '1.8rem', fontWeight: '700', color: C.dark, margin: '0' }}>
+      <div style={{ marginBottom: isMobile ? '1rem' : '1.5rem' }}>
+        <h1 style={{ fontSize: isMobile ? '1.3rem' : '1.8rem', fontWeight: '700', color: C.dark, margin: '0' }}>
           {greeting}{title ? `, ${title}` : ''} {guru?.nama || 'Guru'}!
         </h1>
-        <p style={{ fontSize: '1rem', color: C.gray, margin: '0.25rem 0 0 0' }}>
+        <p style={{ fontSize: isMobile ? '0.88rem' : '1rem', color: C.gray, margin: '0.25rem 0 0 0' }}>
           Selamat datang kembali! Setiap ilmu yang Anda bagikan hari ini adalah benih kebaikan untuk masa depan.
         </p>
-        <p style={{ fontSize: '0.9rem', color: C.gray, marginTop: '0.3rem' }}>
+        <p style={{ fontSize: '0.85rem', color: C.gray, marginTop: '0.3rem' }}>
           <strong>Hari Ini</strong> - {dateStr}
         </p>
       </div>
@@ -757,9 +773,15 @@ const TeacherHome = () => {
       )}
 
       {/* Grid: kiri (Jadwal) 2 baris, kanan atas (Penilaian), kanan bawah (Pengajuan) */}
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1.5rem', marginBottom: '1.5rem', alignItems: 'start' }}>
-        {/* Kiri: Jadwal Mengajar Minggu Ini - row 1 / 3 */}
-        <div style={{ ...cardStyle, gridRow: '1 / 3' }}>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: isMobile ? '1fr' : '2fr 1fr',
+        gap: isMobile ? '1rem' : '1.5rem',
+        marginBottom: isMobile ? '1rem' : '1.5rem',
+        alignItems: 'start',
+      }}>
+        {/* Kiri: Jadwal Mengajar Minggu Ini - row 1 / 3 (desktop only) */}
+        <div style={{ ...cardStyle, gridRow: isMobile ? 'auto' : '1 / 3' }}>
           <h3 style={{ margin: '0 0 1rem 0', color: C.dark }}>Jadwal Mengajar Minggu Ini</h3>
           {loading ? (
             <p style={{ color: C.gray, fontSize: '0.9rem' }}>Memuat jadwal...</p>
@@ -845,7 +867,7 @@ const TeacherHome = () => {
           ) : (
             ujianTerdekatList.map((item, idx) => (
               <div key={item.id} style={{ padding: '0.75rem 0', borderBottom: idx < ujianTerdekatList.length - 1 ? `1px solid ${C.border}` : 'none' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'flex-start', gap: isMobile ? '0.25rem' : 0 }}>
                   <div>
                     <div style={{ fontWeight: '600', color: C.dark }}>{item.materi}</div>
                     <div style={{ fontSize: '0.85rem', color: C.gray }}>
@@ -956,16 +978,16 @@ const TeacherHome = () => {
       </div>
 
       {/* Pengingat Perubahan Jadwal dari Admin (statis) */}
-      <div style={{ background: C.goldBg, borderRadius: '12px', padding: '1rem 1.5rem', border: `1px solid ${C.gold}`, marginBottom: '1.5rem' }}>
-        <p style={{ margin: 0, color: C.dark, fontSize: '0.95rem' }}>
+      <div style={{ background: C.goldBg, borderRadius: '12px', padding: isMobile ? '0.85rem 1rem' : '1rem 1.5rem', border: `1px solid ${C.gold}`, marginBottom: isMobile ? '1rem' : '1.5rem' }}>
+        <p style={{ margin: 0, color: C.dark, fontSize: isMobile ? '0.85rem' : '0.95rem' }}>
           ⚠️ <strong>Pengingat Perubahan Jadwal dari Admin:</strong> Tidak ada perubahan jadwal yang diinputkan oleh admin saat ini.
         </p>
       </div>
 
       {/* Materi Request - full width */}
       <div style={cardStyle}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-          <h3 style={{ margin: 0, color: C.dark }}>
+        <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'center', gap: isMobile ? '0.5rem' : 0, marginBottom: '1rem' }}>
+          <h3 style={{ margin: 0, color: C.dark, fontSize: isMobile ? '1rem' : '1.17rem' }}>
             Materi Request ({materiRequestList.filter(m => m.status !== 'selesai' && m.status !== 'ditolak').length})
           </h3>
           <button style={linkBtn} onClick={() => setShowMateriForm(true)}>+ Tambah Materi</button>
@@ -977,7 +999,7 @@ const TeacherHome = () => {
         ) : (
           materiRequestList.map((item, idx) => (
             <div key={item.id} style={{ padding: '0.75rem 0', borderBottom: idx < materiRequestList.length - 1 ? `1px solid ${C.border}` : 'none' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: isMobile ? '0.6rem' : 0 }}>
                 <div>
                   <div style={{ fontWeight: '600', color: C.dark }}>{item.judul_materi}</div>
                   <div style={{ fontSize: '0.85rem', color: C.gray }}>{item.siswa_nama || 'Siswa'}{item.kelas ? ` - ${item.kelas}` : ''}</div>
@@ -986,7 +1008,7 @@ const TeacherHome = () => {
                   )}
                   <div style={{ fontSize: '0.75rem', color: C.gray }}>{waktuLalu(item.created_at)}</div>
                 </div>
-                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
                   {item.status === 'selesai' ? (
                     <span style={{ fontSize: '0.72rem', fontWeight: 600, padding: '2px 8px', borderRadius: '999px', background: C.greenBg, color: C.green, whiteSpace: 'nowrap' }}>Selesai</span>
                   ) : item.status === 'ditolak' ? (

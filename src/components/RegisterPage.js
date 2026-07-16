@@ -83,11 +83,11 @@ const RegisterPage = () => {
 
   if (success) {
     return (
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', minHeight: '100vh' }}>
+      <div className="register-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', minHeight: '100vh' }}>
         <LeftPanel />
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          padding: '3rem', background: C.white, boxSizing: 'border-box'
+          padding: 'clamp(1.5rem, 6vw, 3rem)', background: C.white, boxSizing: 'border-box'
         }}>
           <div style={{ width: '100%', maxWidth: '400px', textAlign: 'center' }}>
             <div style={{ fontSize: '4rem', marginBottom: '1rem' }}>🎉</div>
@@ -113,17 +113,25 @@ const RegisterPage = () => {
             </button>
           </div>
         </div>
+        <style>{`
+          @media (max-width: 860px) {
+            .register-grid {
+              grid-template-columns: 1fr !important;
+              min-height: auto !important;
+            }
+          }
+        `}</style>
       </div>
     );
   }
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', minHeight: '100vh' }}>
+    <div className="register-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', minHeight: '100vh' }}>
       <LeftPanel />
 
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        padding: '3rem', background: C.white, boxSizing: 'border-box'
+        padding: 'clamp(1.5rem, 6vw, 3rem)', background: C.white, boxSizing: 'border-box'
       }}>
         <div style={{ width: '100%', maxWidth: '400px' }}>
           <h2 style={{ fontSize: '2rem', fontWeight: 'bold', color: C.dark, margin: '0 0 8px' }}>Daftar</h2>
@@ -281,6 +289,14 @@ const RegisterPage = () => {
           </div>
         </div>
       </div>
+      <style>{`
+        @media (max-width: 860px) {
+          .register-grid {
+            grid-template-columns: 1fr !important;
+            min-height: auto !important;
+          }
+        }
+      `}</style>
     </div>
   );
 };

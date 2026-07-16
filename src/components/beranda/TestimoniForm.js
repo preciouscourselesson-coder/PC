@@ -117,8 +117,8 @@ const TestimoniForm = () => {
 
   if (submitted) {
     return (
-      <div style={{ minHeight: '100vh', background: C.cream, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
-        <div style={{ textAlign: 'center', background: C.white, borderRadius: '24px', padding: '3rem 2rem', maxWidth: '400px', boxShadow: '0 10px 30px rgba(0,0,0,0.08)' }}>
+      <div style={{ minHeight: '100vh', background: C.cream, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem 5%', boxSizing: 'border-box' }}>
+        <div style={{ textAlign: 'center', background: C.white, borderRadius: '24px', padding: '2.5rem 1.75rem', maxWidth: '400px', width: '100%', boxSizing: 'border-box', boxShadow: '0 10px 30px rgba(0,0,0,0.08)' }}>
           <div style={{ fontSize: '3.5rem', marginBottom: '1rem' }}>🎉</div>
           <h2 style={{ color: C.dark, marginBottom: '8px' }}>Terima Kasih!</h2>
           <p style={{ color: C.gray, lineHeight: 1.6, marginBottom: '1.5rem' }}>
@@ -155,10 +155,10 @@ const TestimoniForm = () => {
       </div>
 
       {/* Form */}
-      <div style={{ maxWidth: '560px', margin: '0 auto', padding: '2.5rem 5%' }}>
+      <div style={{ maxWidth: '560px', margin: '0 auto', padding: '2rem 5% 3rem', boxSizing: 'border-box' }}>
 
         <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-          <h1 style={{ fontSize: '1.8rem', color: C.dark, margin: '0 0 8px', fontWeight: 'bold' }}>
+          <h1 style={{ fontSize: 'clamp(1.4rem, 5vw, 1.8rem)', color: C.dark, margin: '0 0 8px', fontWeight: 'bold' }}>
             Bagikan <span style={{ color: C.gold }}>Pengalamanmu</span>
           </h1>
           <p style={{ color: C.gray, margin: 0, fontSize: '0.92rem' }}>
@@ -168,14 +168,14 @@ const TestimoniForm = () => {
 
         <div style={{
           background: C.white, borderRadius: '24px',
-          boxShadow: '0 10px 30px rgba(0,0,0,0.08)', padding: '2rem'
+          boxShadow: '0 10px 30px rgba(0,0,0,0.08)', padding: 'clamp(1.25rem, 5vw, 2rem)', boxSizing: 'border-box'
         }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
 
             {/* Foto */}
             <div>
               <Label>Foto Profil (opsional)</Label>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
                 <div style={{
                   width: '56px', height: '56px', borderRadius: '50%', flexShrink: 0,
                   background: preview ? 'transparent' : C.cream,

@@ -25,7 +25,7 @@ const TestimonialCard = ({ t }) => {
   const displayed = expanded || !isLong ? t.isi : t.isi.slice(0, 150) + '...';
 
   return (
-    <div style={{
+    <div className="testimonial-card" style={{
       background: C.white,
       padding: '1.5rem',
       borderRadius: '24px',
@@ -118,7 +118,7 @@ const Testimonials = () => {
         <h2 style={{ color: C.gold, fontSize: '1rem', letterSpacing: '2px', marginBottom: '8px', fontWeight: 'bold' }}>
           TESTIMONI
         </h2>
-        <h3 style={{ color: C.dark, fontSize: '1.6rem', fontWeight: 'bold', margin: '0 0 8px' }}>
+        <h3 style={{ color: C.dark, fontSize: 'clamp(1.3rem, 4vw, 1.6rem)', fontWeight: 'bold', margin: '0 0 8px' }}>
           💬 Apa Kata Mereka?
         </h3>
         <a href="/testimoni" style={{
@@ -135,8 +135,8 @@ const Testimonials = () => {
         <div style={{ textAlign: 'center', color: C.gray, padding: '2rem' }}>Belum ada testimoni.</div>
       ) : (
         <div style={{ position: 'relative' }}>
-          {/* Tombol scroll kiri */}
-          <button onClick={() => scroll(-1)} style={{
+          {/* Tombol scroll kiri (disembunyikan di mobile, geser pakai swipe) */}
+          <button className="testimonials-arrow testimonials-arrow-left" onClick={() => scroll(-1)} style={{
             position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)',
             zIndex: 10, background: C.white, border: `1.5px solid ${C.border}`,
             borderRadius: '50%', width: '40px', height: '40px', cursor: 'pointer',
@@ -145,16 +145,15 @@ const Testimonials = () => {
           }}>‹</button>
 
           {/* Scroll container */}
-          <div ref={scrollRef} style={{
+          <div ref={scrollRef} className="testimonials-scroll" style={{
             display: 'flex', gap: '1.2rem', overflowX: 'auto', padding: '1rem 5%',
             scrollbarWidth: 'none', msOverflowStyle: 'none'
           }}>
-            <style>{`.testimonials-scroll::-webkit-scrollbar { display: none; }`}</style>
             {testimoniList.map(t => <TestimonialCard key={t.id} t={t} />)}
           </div>
 
-          {/* Tombol scroll kanan */}
-          <button onClick={() => scroll(1)} style={{
+          {/* Tombol scroll kanan (disembunyikan di mobile, geser pakai swipe) */}
+          <button className="testimonials-arrow testimonials-arrow-right" onClick={() => scroll(1)} style={{
             position: 'absolute', right: '1rem', top: '50%', transform: 'translateY(-50%)',
             zIndex: 10, background: C.white, border: `1.5px solid ${C.border}`,
             borderRadius: '50%', width: '40px', height: '40px', cursor: 'pointer',
@@ -163,6 +162,29 @@ const Testimonials = () => {
           }}>›</button>
         </div>
       )}
+
+      <style>{`
+        .testimonials-scroll::-webkit-scrollbar { display: none; }
+        .testimonials-scroll {
+          scroll-snap-type: x proximity;
+        }
+        .testimonial-card {
+          scroll-snap-align: start;
+        }
+        @media (max-width: 600px) {
+          .testimonial-card {
+            min-width: 82vw !important;
+            max-width: 82vw !important;
+          }
+          .testimonials-arrow {
+            display: none !important;
+          }
+          .testimonials-scroll {
+            padding-left: 5% !important;
+            padding-right: 5% !important;
+          }
+        }
+      `}</style>
     </section>
   );
 };

@@ -22,25 +22,25 @@ const HeroFeatures = () => {
 
   return (
     <section id="HeroFeatures" style={{ background: '#f7f6f0', padding: '48px 5%', width: '100%', boxSizing: 'border-box' }}>
-      <div style={{
+      <div className="hero-grid" style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(4, 1fr) 40%',
         gap: '1.5rem',
         alignItems: 'stretch'
       }}>
         {/* Baris 1: Hero teks */}
-        <div style={{ gridColumn: '1 / span 4', gridRow: '1' }}>
-          <h1 style={{ fontSize: '2.2rem', marginBottom: '12px', lineHeight: 1.2, color: '#171411' }}>
+        <div className="hero-text" style={{ gridColumn: '1 / span 4', gridRow: '1' }}>
+          <h1 style={{ fontSize: 'clamp(1.7rem, 4.5vw, 2.2rem)', marginBottom: '12px', lineHeight: 1.2, color: '#171411' }}>
             Pendampingan Akademik untuk
           </h1>
-          <h1 style={{ fontSize: '2.2rem', marginBottom: '16px', lineHeight: 1.2, color: '#171411' }}>
+          <h1 style={{ fontSize: 'clamp(1.7rem, 4.5vw, 2.2rem)', marginBottom: '16px', lineHeight: 1.2, color: '#171411' }}>
             <span style={{ color: '#b4964b' }}>Target Kampus Impianmu</span>
           </h1>
-          <p style={{ fontSize: '1rem', marginBottom: '24px', color: '#444242' }}>
+          <p style={{ fontSize: 'clamp(0.92rem, 2vw, 1rem)', marginBottom: '24px', color: '#444242' }}>
             Pembelajaran terstruktur, materi berkualitas, dan pendampingan personal untuk membantu kamu belajar lebih efektif dan percaya diri.
           </p>
-          <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-            <button 
+          <div className="hero-buttons" style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+            <button
               onClick={() => navigate('/konsultasi')}
               style={{ background: '#b4964b', color: 'white', border: 'none', padding: '10px 24px', borderRadius: '40px', fontWeight: 'bold', fontSize: '1rem', cursor: 'pointer' }}
               onMouseEnter={(e) => e.currentTarget.style.background = '#bf9735'}
@@ -48,7 +48,7 @@ const HeroFeatures = () => {
             >
               Mulai Konsultasi Gratis →
             </button>
-            <button 
+            <button
               onClick={() => scrollToSection('programs')}
               style={{ background: 'transparent', border: '1.5px solid #b4964b', color: '#b4964b', fontWeight: 'bold', fontSize: '1rem', cursor: 'pointer', padding: '10px 24px', borderRadius: '40px' }}
               onMouseEnter={(e) => { e.currentTarget.style.background = '#b4964b'; e.currentTarget.style.color = 'white'; }}
@@ -60,17 +60,17 @@ const HeroFeatures = () => {
         </div>
 
         {/* Kolom gambar (span 2 baris) */}
-        <div style={{ gridRow: 'span 2', gridColumn: '5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <img 
-            src={heroImage} 
-            alt="Belajar bersama Precious Course" 
-            style={{ maxWidth: '100%', height: 'auto', borderRadius: '32px' }} 
+        <div className="hero-image" style={{ gridRow: 'span 2', gridColumn: '5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <img
+            src={heroImage}
+            alt="Belajar bersama Precious Course"
+            style={{ maxWidth: '100%', height: 'auto', borderRadius: '32px' }}
           />
         </div>
 
         {/* Baris 2: Kartu fitur */}
         {featuresData.map((f, idx) => (
-          <div key={idx} style={{
+          <div key={idx} className="hero-feature-card" style={{
             gridRow: '2',
             gridColumn: idx + 1,
             background: 'white',
@@ -97,6 +97,44 @@ const HeroFeatures = () => {
           </div>
         ))}
       </div>
+
+      <style>{`
+        @media (max-width: 900px) {
+          .hero-grid {
+            grid-template-columns: 1fr !important;
+          }
+          .hero-text {
+            grid-column: 1 !important;
+            grid-row: auto !important;
+            order: 1;
+          }
+          .hero-image {
+            grid-column: 1 !important;
+            grid-row: auto !important;
+            order: 2;
+            margin-bottom: 0.5rem;
+          }
+          .hero-feature-card {
+            grid-column: 1 !important;
+            grid-row: auto !important;
+            order: 3;
+          }
+          .hero-buttons button {
+            flex: 1 1 100%;
+          }
+        }
+        @media (min-width: 601px) and (max-width: 900px) {
+          .hero-feature-card {
+            grid-column: span 1 !important;
+          }
+          .hero-grid {
+            grid-template-columns: repeat(2, 1fr) !important;
+          }
+          .hero-text, .hero-image {
+            grid-column: 1 / -1 !important;
+          }
+        }
+      `}</style>
     </section>
   );
 };

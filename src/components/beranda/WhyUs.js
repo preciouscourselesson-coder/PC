@@ -36,7 +36,7 @@ const whyUsData = [
 const WhyUs = () => {
   return (
     <section id="whyus" style={{ background: '#f7f6f0', padding: '48px 5%', width: '100%', boxSizing: 'border-box' }}>
-      <div style={{
+      <div className="whyus-grid" style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(3, 1fr)',
         gap: '1.5rem',
@@ -47,7 +47,7 @@ const WhyUs = () => {
           <h2 style={{ color: '#b4964b', fontSize: '1rem', letterSpacing: '2px', marginBottom: '8px', fontWeight: 'bold' }}>
             KENAPA KAMI
           </h2>
-          <h3 style={{ color: '#171411', fontSize: '1.6rem', fontWeight: 'bold', margin: 0 }}>
+          <h3 style={{ color: '#171411', fontSize: 'clamp(1.3rem, 4vw, 1.6rem)', fontWeight: 'bold', margin: 0 }}>
             Alasan Memilih Precious Course
           </h3>
         </div>
@@ -78,6 +78,22 @@ const WhyUs = () => {
           </div>
         ))}
       </div>
+
+      <style>{`
+        @media (max-width: 900px) {
+          .whyus-grid {
+            grid-template-columns: repeat(2, 1fr) !important;
+          }
+          .whyus-grid > div:first-child {
+            grid-column: 1 / -1 !important;
+          }
+        }
+        @media (max-width: 560px) {
+          .whyus-grid {
+            grid-template-columns: 1fr !important;
+          }
+        }
+      `}</style>
     </section>
   );
 };

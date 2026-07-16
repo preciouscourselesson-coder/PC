@@ -81,7 +81,18 @@ const TabButton = ({ label, active, onClick }) => (
 );
 
 // ─── Komponen Utama ──────────────────────────────────────────────────────────
+const useIsMobile = (bp = 768) => {
+  const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' ? window.innerWidth < bp : false);
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < bp);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [bp]);
+  return isMobile;
+};
+
 const StudentMessages = () => {
+  const isMobile = useIsMobile();
   const location = useLocation(); // tambahkan
 
   // ─── State ──────────────────────────────────────────────────────────────
@@ -335,8 +346,8 @@ const StudentMessages = () => {
 
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
-    <div style={{ minHeight: '100vh', background: C.cream, padding: '1.5rem 5%' }}>
-      <h1 style={{ fontSize: '1.8rem', color: C.dark, marginBottom: '1rem' }}>💬 Pesan & Komunikasi</h1>
+    <div style={{ minHeight: '100vh', background: C.cream, padding: isMobile ? '1rem' : '1.5rem 5%' }}>
+      <h1 style={{ fontSize: isMobile ? '1.3rem' : '1.8rem', color: C.dark, marginBottom: '1rem' }}>💬 Pesan & Komunikasi</h1>
 
       <div style={{ borderBottom: `1px solid ${C.border}`, marginBottom: '1.5rem' }}>
         <TabButton label="📨 Pesan Masuk" active={activeTab === 'inbox'} onClick={() => setActiveTab('inbox')} />
@@ -439,7 +450,7 @@ const StudentMessages = () => {
 
       {/* ─── Tab: Kirim Pesan ───────────────────────────────────────────── */}
       {activeTab === 'new' && (
-        <div style={{ background: C.white, borderRadius: '24px', padding: '2rem', boxShadow: '0 4px 16px rgba(0,0,0,0.06)' }}>
+        <div style={{ background: C.white, borderRadius: '24px', padding: isMobile ? '1.25rem' : '2rem', boxShadow: '0 4px 16px rgba(0,0,0,0.06)' }}>
           <h2 style={{ marginTop: 0, color: C.dark }}>Kirim Pesan</h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <div>
@@ -580,7 +591,7 @@ const StudentMessages = () => {
               width: '100%',
               maxHeight: '90vh',
               overflowY: 'auto',
-              padding: '2rem',
+              padding: isMobile ? '1.25rem' : '2rem',
               boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
               position: 'relative',
             }}

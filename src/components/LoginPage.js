@@ -21,18 +21,18 @@ const fiturData = [
 
 // ─── Kolom Kiri ──────────────────────────────────────────────────────────────
 const LeftPanel = () => (
-  <div style={{
+  <div className="left-panel" style={{
     display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
     padding: '3rem', minHeight: '100%', background: C.cream, boxSizing: 'border-box'
   }}>
     {/* Logo */}
     <div>
-      <img src={logo} alt="Precious Course" style={{ height: '84px' }} />
+      <img src={logo} alt="Precious Course" className="left-panel-logo" style={{ height: '84px' }} />
     </div>
 
     {/* Tagline + Fitur */}
     <div>
-      <h1 style={{ fontSize: '2.2rem', color: C.dark, fontWeight: 'bold', lineHeight: 1.25, margin: '0 0 12px' }}>
+      <h1 style={{ fontSize: 'clamp(1.6rem, 4vw, 2.2rem)', color: C.dark, fontWeight: 'bold', lineHeight: 1.25, margin: '0 0 12px' }}>
         Belajar terarah,<br />
         <span style={{ color: C.gold }}>Wawasan</span> bertambah.
       </h1>
@@ -40,7 +40,7 @@ const LeftPanel = () => (
         Precious Course hadir untuk membimbing perjalanan belajarmu mencapai tujuan terbaik.
       </p>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
+      <div className="left-panel-fitur" style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
         {fiturData.map((f, i) => (
           <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '14px' }}>
             <div style={{
@@ -61,12 +61,30 @@ const LeftPanel = () => (
     </div>
 
     {/* Footer */}
-    <div>
+    <div className="left-panel-footer">
       <p style={{ color: C.gray, fontSize: '0.8rem', margin: 0, lineHeight: 1.7 }}>
         © 2026 Precious Course<br />
         Bimbingan Belajar & Mentoring
       </p>
     </div>
+
+    <style>{`
+      @media (max-width: 860px) {
+        .left-panel {
+          min-height: auto !important;
+          padding: 1.75rem 6vw !important;
+        }
+        .left-panel-logo {
+          height: 52px !important;
+        }
+      }
+      @media (max-width: 640px) {
+        .left-panel-fitur,
+        .left-panel-footer {
+          display: none !important;
+        }
+      }
+    `}</style>
   </div>
 );
 
@@ -152,7 +170,7 @@ const LoginPage = () => {
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
 
       {/* Top Bar */}
-      <div style={{
+      <div className="login-topbar" style={{
         position: 'relative', zIndex: 10, flexShrink: 0,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: '1.5rem 3rem', boxSizing: 'border-box',
@@ -163,13 +181,14 @@ const LoginPage = () => {
           color: C.gold, fontWeight: 'bold', fontSize: '1rem', cursor: 'pointer', fontFamily: 'inherit',
           padding: 0
         }}>
-          <span style={{ fontSize: '1.1rem' }}>←</span> Kembali ke Beranda
+          <span style={{ fontSize: '1.1rem' }}>←</span> <span className="login-topbar-label">Kembali ke Beranda</span>
         </button>
 
         <button onClick={() => navigate('/konsultasi')} style={{
           background: C.white, border: `1.5px solid ${C.gold}`, color: C.gold, fontWeight: 'bold',
           fontSize: '0.85rem', letterSpacing: '0.03em', padding: '10px 24px', borderRadius: '999px',
-          cursor: 'pointer', fontFamily: 'inherit', transition: 'background 0.2s, color 0.2s'
+          cursor: 'pointer', fontFamily: 'inherit', transition: 'background 0.2s, color 0.2s',
+          whiteSpace: 'nowrap'
         }}
         onMouseEnter={e => { e.currentTarget.style.background = C.gold; e.currentTarget.style.color = C.white; }}
         onMouseLeave={e => { e.currentTarget.style.background = C.white; e.currentTarget.style.color = C.gold; }}
@@ -178,7 +197,7 @@ const LoginPage = () => {
         </button>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', flex: 1 }}>
+      <div className="login-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', flex: 1 }}>
 
         {/* Kolom Kiri */}
         <LeftPanel />
@@ -186,7 +205,7 @@ const LoginPage = () => {
         {/* Kolom Kanan */}
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          padding: '3rem', background: C.white, boxSizing: 'border-box'
+          padding: 'clamp(1.5rem, 6vw, 3rem)', background: C.white, boxSizing: 'border-box'
         }}>
           <div style={{ width: '100%', maxWidth: '400px' }}>
 
@@ -296,7 +315,23 @@ const LoginPage = () => {
           </div>
         </div>
       </div>
-    </div>
+      </div>
+
+      <style>{`
+        @media (max-width: 860px) {
+          .login-grid {
+            grid-template-columns: 1fr !important;
+          }
+        }
+        @media (max-width: 640px) {
+          .login-topbar {
+            padding: 1rem 5% !important;
+          }
+          .login-topbar-label {
+            display: none;
+          }
+        }
+      `}</style>
     </div>
   );
 };

@@ -23,8 +23,33 @@ const navItems = [
   { label: 'Arsip Soal',   path: '/siswa/arsip', icon: '📂' },
 ];
 
-// ─── Sidebar ─────────────────────────────────────────────────────────────────
-const Sidebar = ({ user }) => {
+// ─── Hook: deteksi layar mobile ───────────────────────────────────────────────
+const MOBILE_BREAKPOINT = 768;
+const useIsMobile = () => {
+  const [isMobile, setIsMobile] = useState(
+    typeof window !== 'undefined' ? window.innerWidth < MOBILE_BREAKPOINT : false
+  );
+
+  useEffect(() => {
+    let raf;
+    const handleResize = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        setIsMobile(window.innerWidth < MOBILE_BREAKPOINT);
+      });
+    };
+    window.addEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      cancelAnimationFrame(raf);
+    };
+  }, []);
+
+  return isMobile;
+};
+
+// ─── Sidebar (desktop/tablet) ─────────────────────────────────────────────────
+const Sidebar = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -72,8 +97,43 @@ const Sidebar = ({ user }) => {
   );
 };
 
+// ─── Bottom Nav (mobile) ───────────────────────────────────────────────────────
+const BottomNav = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  return (
+    <nav style={{
+      position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 60,
+      background: C.white, borderTop: `1.5px solid ${C.border}`,
+      display: 'flex', alignItems: 'stretch', justifyContent: 'space-between',
+      overflowX: 'auto', WebkitOverflowScrolling: 'touch',
+      paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+      boxShadow: '0 -4px 16px rgba(0,0,0,0.06)'
+    }}>
+      {navItems.map(item => {
+        const active = location.pathname === item.path;
+        return (
+          <button key={item.path} onClick={() => navigate(item.path)} style={{
+            flex: '1 0 auto', minWidth: '58px',
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            gap: '2px', padding: '8px 4px 6px', border: 'none',
+            background: 'none', color: active ? C.gold : C.gray,
+            fontFamily: 'inherit', cursor: 'pointer'
+          }}>
+            <span style={{ fontSize: '1.25rem', lineHeight: 1 }}>{item.icon}</span>
+            <span style={{ fontSize: '0.62rem', fontWeight: active ? 'bold' : 'normal', whiteSpace: 'nowrap' }}>
+              {item.label}
+            </span>
+          </button>
+        );
+      })}
+    </nav>
+  );
+};
+
 // ─── Topbar ───────────────────────────────────────────────────────────────────
-const Topbar = ({ user }) => {
+const Topbar = ({ user, isMobile }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const [dropOpen, setDropOpen] = useState(false);
@@ -143,38 +203,44 @@ const Topbar = ({ user }) => {
 
   return (
     <div style={{
-      height: '64px', background: C.white, borderBottom: `1.5px solid ${C.border}`,
+      height: isMobile ? '56px' : '64px', background: C.white, borderBottom: `1.5px solid ${C.border}`,
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      padding: '0 2rem', position: 'sticky', top: 0, zIndex: 50, flexShrink: 0
+      padding: isMobile ? '0 1rem' : '0 2rem', position: 'sticky', top: 0, zIndex: 50, flexShrink: 0
     }}>
-      <span style={{ fontWeight: 'bold', color: C.dark, fontSize: '1.05rem' }}>{pageTitle}</span>
+      {isMobile ? (
+        <img src={logo} alt="Precious Course" style={{ height: '30px' }} />
+      ) : (
+        <span style={{ fontWeight: 'bold', color: C.dark, fontSize: '1.05rem' }}>{pageTitle}</span>
+      )}
 
       {/* Bagian tengah/kanan: Message + User info */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '0.5rem' : '1.5rem' }}>
         {/* Tombol Message */}
         <button
           onClick={() => navigate('/siswa/pesan')}
+          aria-label="Pesan"
           style={{
             display: 'flex', alignItems: 'center', gap: '6px',
             background: 'none', border: 'none', cursor: 'pointer',
             fontFamily: 'inherit', fontSize: '0.9rem', color: C.gray,
-            padding: '6px 12px', borderRadius: '8px',
+            padding: isMobile ? '6px 8px' : '6px 12px', borderRadius: '8px',
             transition: 'all 0.15s',
           }}
           onMouseEnter={e => e.currentTarget.style.background = C.cream}
           onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
         >
-          <span style={{ fontSize: '1.1rem' }}>💬</span> Pesan
+          <span style={{ fontSize: '1.1rem' }}>💬</span>
+          {!isMobile && ' Pesan'}
         </button>
 
         {/* User info (avatar + nama + dropdown) */}
         <div style={{ position: 'relative' }}>
           <button onClick={() => setDropOpen(!dropOpen)} style={{
-            display: 'flex', alignItems: 'center', gap: '10px',
+            display: 'flex', alignItems: 'center', gap: isMobile ? '4px' : '10px',
             background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit'
           }}>
             <div style={{
-              width: '36px', height: '36px', borderRadius: '50%',
+              width: isMobile ? '32px' : '36px', height: isMobile ? '32px' : '36px', borderRadius: '50%',
               background: C.gold, color: C.white,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               fontWeight: 'bold', fontSize: '1rem', overflow: 'hidden', flexShrink: 0
@@ -185,10 +251,12 @@ const Topbar = ({ user }) => {
                 initial
               )}
             </div>
-            <div style={{ textAlign: 'left' }}>
-              <div style={{ fontWeight: 'bold', color: C.dark, fontSize: '0.9rem' }}>{nama}</div>
-              <div style={{ color: C.gray, fontSize: '0.75rem' }}>Siswa</div>
-            </div>
+            {!isMobile && (
+              <div style={{ textAlign: 'left' }}>
+                <div style={{ fontWeight: 'bold', color: C.dark, fontSize: '0.9rem' }}>{nama}</div>
+                <div style={{ color: C.gray, fontSize: '0.75rem' }}>Siswa</div>
+              </div>
+            )}
             <span style={{ color: C.gray, fontSize: '0.8rem' }}>▾</span>
           </button>
 
@@ -227,6 +295,7 @@ const Topbar = ({ user }) => {
 const StudentLayout = () => {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     const getUser = async () => {
@@ -243,17 +312,29 @@ const StudentLayout = () => {
   }, [navigate]);
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: C.cream, fontFamily: 'inherit' }}>
-      {/* Sidebar */}
-      <Sidebar user={user} />
+    <div style={{
+      display: 'flex', minHeight: '100vh', background: C.cream, fontFamily: 'inherit',
+      flexDirection: isMobile ? 'column' : 'row'
+    }}>
+      {/* Sidebar hanya tampil di desktop/tablet */}
+      {!isMobile && <Sidebar />}
 
       {/* Konten */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-        <Topbar user={user} />
-        <main style={{ flex: 1, padding: '2rem', overflowY: 'auto' }}>
+        <Topbar user={user} isMobile={isMobile} />
+        <main style={{
+          flex: 1,
+          padding: isMobile ? '1rem' : '2rem',
+          paddingBottom: isMobile ? 'calc(64px + env(safe-area-inset-bottom, 0px) + 1rem)' : '2rem',
+          overflowY: 'auto',
+          boxSizing: 'border-box'
+        }}>
           <Outlet />
         </main>
       </div>
+
+      {/* Bottom nav hanya tampil di mobile */}
+      {isMobile && <BottomNav />}
     </div>
   );
 };

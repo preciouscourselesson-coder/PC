@@ -16,11 +16,27 @@ const C = {
   border: '#e0ddd6',
 };
 
+const MOBILE_BREAKPOINT = 768;
+
+// Hook kecil untuk deteksi ukuran layar (mobile vs desktop)
+const useIsMobile = () => {
+  const [isMobile, setIsMobile] = useState(
+    typeof window !== 'undefined' ? window.innerWidth <= MOBILE_BREAKPOINT : false
+  );
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth <= MOBILE_BREAKPOINT);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  return isMobile;
+};
+
 const cardStyle = {
   background: C.white,
   border: `1px solid ${C.border}`,
   borderRadius: '16px',
   padding: '1.5rem',
+  boxSizing: 'border-box',
 };
 
 const inputStyle = {
@@ -29,7 +45,7 @@ const inputStyle = {
   borderRadius: '10px',
   border: `1px solid ${C.border}`,
   fontFamily: 'inherit',
-  fontSize: '0.9rem',
+  fontSize: '16px',
   boxSizing: 'border-box',
 };
 
@@ -188,8 +204,8 @@ const ToolbarButton = ({ onCommand, title, active, children }) => (
     title={title}
     onMouseDown={(e) => { e.preventDefault(); onCommand(); }}
     style={{
-      minWidth: '30px',
-      height: '30px',
+      minWidth: '34px',
+      height: '34px',
       padding: '0 6px',
       display: 'flex',
       alignItems: 'center',
@@ -211,6 +227,7 @@ const ToolbarDivider = () => <div style={{ width: '1px', alignSelf: 'stretch', b
 
 // ─── KOMPONEN UTAMA ──────────────────────────────────────────────────────────
 const TeacherUpdates = () => {
+  const isMobile = useIsMobile();
   const [loading, setLoading] = useState(true);
   const [profileId, setProfileId] = useState(null);
   const [guru, setGuru] = useState(null);
@@ -543,7 +560,7 @@ const TeacherUpdates = () => {
   return (
     <div style={{ maxWidth: '760px', margin: '0 auto', fontFamily: 'inherit' }}>
       <div style={{ marginBottom: '1.5rem' }}>
-        <h1 style={{ fontSize: '1.6rem', fontWeight: 700, color: C.dark, margin: 0 }}>Updates</h1>
+        <h1 style={{ fontSize: isMobile ? '1.35rem' : '1.6rem', fontWeight: 700, color: C.dark, margin: 0 }}>Updates</h1>
       </div>
 
       {errorMsg && (
@@ -553,9 +570,9 @@ const TeacherUpdates = () => {
       )}
 
       {/* Composer Update (sama seperti sebelumnya) */}
-      <div style={{ ...cardStyle, marginBottom: '1.5rem', padding: composerOpen ? '1.1rem' : '0.6rem 1.1rem' }}>
-        <div style={{ display: 'flex', gap: '12px', alignItems: composerOpen ? 'flex-start' : 'center' }}>
-          <Avatar name={guru?.nama} />
+      <div style={{ ...cardStyle, marginBottom: '1.5rem', padding: isMobile ? (composerOpen ? '0.9rem' : '0.5rem 0.8rem') : (composerOpen ? '1.1rem' : '0.6rem 1.1rem') }}>
+        <div style={{ display: 'flex', gap: isMobile ? '8px' : '12px', alignItems: composerOpen ? 'flex-start' : 'center' }}>
+          <Avatar name={guru?.nama} size={isMobile ? 32 : 40} />
           <div style={{ flex: 1, minWidth: 0 }}>
             {!composerOpen ? (
               <button
@@ -601,7 +618,7 @@ const TeacherUpdates = () => {
                     contentEditable
                     suppressContentEditableWarning
                     onInput={handleEditorInput}
-                    style={{ minHeight: '90px', fontSize: '0.92rem', color: C.dark, lineHeight: 1.55, outline: 'none' }}
+                    style={{ minHeight: '90px', fontSize: '16px', color: C.dark, lineHeight: 1.55, outline: 'none' }}
                   />
                 </div>
 
@@ -618,9 +635,9 @@ const TeacherUpdates = () => {
                   </div>
                 )}
 
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.4rem', marginTop: '1rem' }}>
-                  <button onClick={handleBatal} style={buttonBatal}>Batal</button>
-                  <button onClick={submitUpdate} disabled={submitting} style={{ ...buttonKirim, opacity: submitting ? 0.6 : 1 }}>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.4rem', marginTop: '1rem', flexWrap: 'wrap' }}>
+                  <button onClick={handleBatal} style={{ ...buttonBatal, flex: isMobile ? '1 1 auto' : 'initial' }}>Batal</button>
+                  <button onClick={submitUpdate} disabled={submitting} style={{ ...buttonKirim, opacity: submitting ? 0.6 : 1, flex: isMobile ? '1 1 auto' : 'initial' }}>
                     {submitting ? (uploadingImage ? 'Mengunggah gambar...' : 'Mempublikasikan...') : 'Publikasikan'}
                   </button>
                 </div>
@@ -631,7 +648,7 @@ const TeacherUpdates = () => {
       </div>
 
       {/* Feed Updates + Komentar */}
-      <div style={cardStyle}>
+      <div style={{ ...cardStyle, padding: isMobile ? '1rem' : '1.5rem' }}>
         <h3 style={{ margin: '0 0 0.5rem 0', color: C.dark }}>Recent Activity</h3>
         {loading ? (
           <p style={{ color: C.gray, fontSize: '0.9rem' }}>Memuat...</p>
@@ -648,10 +665,10 @@ const TeacherUpdates = () => {
             const replies = komentarList.filter(c => c.parent_comment_id !== null);
 
             return (
-              <div key={u.id} style={{ padding: '1.1rem 0', borderBottom: idx < updates.length - 1 ? `1px solid ${C.border}` : 'none' }}>
+              <div key={u.id} style={{ padding: isMobile ? '0.9rem 0' : '1.1rem 0', borderBottom: idx < updates.length - 1 ? `1px solid ${C.border}` : 'none' }}>
                 {/* ── Update Card ── */}
-                <div style={{ display: 'flex', gap: '12px' }}>
-                  <Avatar name={u.nama_pembuat} />
+                <div style={{ display: 'flex', gap: isMobile ? '8px' : '12px' }}>
+                  <Avatar name={u.nama_pembuat} size={isMobile ? 32 : 40} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                       <span style={{ fontWeight: 700, color: C.dark, fontSize: '0.92rem' }}>{u.nama_pembuat}</span>
@@ -715,7 +732,7 @@ const TeacherUpdates = () => {
                 </div>
 
                 {/* ─── BAGIAN KOMENTAR / BALASAN ─── */}
-                <div style={{ marginTop: '1.2rem', paddingLeft: '52px' }}>
+                <div style={{ marginTop: '1.2rem', paddingLeft: isMobile ? '36px' : '52px' }}>
                   {rootComments.length === 0 && replies.length === 0 && (
                     <p style={{ fontSize: '0.85rem', color: C.grayLight, margin: 0 }}>Belum ada komentar.</p>
                   )}
@@ -730,7 +747,7 @@ const TeacherUpdates = () => {
                       <div key={root.id} style={{ marginBottom: '1rem' }}>
                         {/* Komentar induk */}
                         <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-                          <Avatar name={root.profiles?.full_name || 'Siswa'} size={28} />
+                          <Avatar name={root.profiles?.full_name || 'Siswa'} size={isMobile ? 24 : 28} />
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', flexWrap: 'wrap' }}>
                               <span style={{ fontWeight: 600, color: C.dark, fontSize: '0.8rem' }}>
@@ -763,9 +780,9 @@ const TeacherUpdates = () => {
 
                         {/* Form balasan untuk komentar ini */}
                         {isReplying && (
-                          <div style={{ marginTop: '8px', marginLeft: '36px' }}>
+                          <div style={{ marginTop: '8px', marginLeft: isMobile ? '20px' : '36px' }}>
                             <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-                              <Avatar name={guru?.nama} size={28} />
+                              <Avatar name={guru?.nama} size={isMobile ? 24 : 28} />
                               <div style={{ flex: 1, minWidth: 0 }}>
                                 <textarea
                                   value={replyTexts[root.id] || ''}
@@ -775,7 +792,7 @@ const TeacherUpdates = () => {
                                   style={{
                                     ...inputStyle,
                                     resize: 'vertical',
-                                    fontSize: '0.85rem',
+                                    fontSize: '16px',
                                     padding: '8px 10px',
                                     width: '100%',
                                   }}
@@ -808,10 +825,10 @@ const TeacherUpdates = () => {
 
                         {/* Tampilkan balasan (child) dengan indentasi */}
                         {childReplies.length > 0 && (
-                          <div style={{ marginLeft: '36px', marginTop: '8px', borderLeft: `2px solid ${C.border}`, paddingLeft: '12px' }}>
+                          <div style={{ marginLeft: isMobile ? '20px' : '36px', marginTop: '8px', borderLeft: `2px solid ${C.border}`, paddingLeft: isMobile ? '8px' : '12px' }}>
                             {childReplies.map((reply) => (
                               <div key={reply.id} style={{ display: 'flex', gap: '8px', padding: '4px 0', borderBottom: `1px solid ${C.border}` }}>
-                                <Avatar name={reply.profiles?.full_name || 'Guru'} size={24} />
+                                <Avatar name={reply.profiles?.full_name || 'Guru'} size={isMobile ? 20 : 24} />
                                 <div style={{ flex: 1, minWidth: 0 }}>
                                   <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', flexWrap: 'wrap' }}>
                                     <span style={{ fontWeight: 600, color: C.dark, fontSize: '0.75rem' }}>

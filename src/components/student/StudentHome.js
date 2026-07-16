@@ -40,7 +40,18 @@ const StatusPill = ({ status }) => {
 
 const STATUS_SISWA_SETUJU = ['disetujui_siswa', 'disetujui_menunggu_admin', 'disetujui_admin'];
 
+const useIsMobile = (bp = 768) => {
+  const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' ? window.innerWidth < bp : false);
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < bp);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [bp]);
+  return isMobile;
+};
+
 const StudentHome = () => {
+  const isMobile = useIsMobile();
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState(null);
   const [jadwalList, setJadwalList] = useState([]);
@@ -513,16 +524,16 @@ const StudentHome = () => {
   };
 
   // ========== RENDER ==========
-  const cardStyle = { background: C.white, borderRadius: '16px', border: `1.5px solid ${C.border}`, padding: '1.5rem' };
+  const cardStyle = { background: C.white, borderRadius: '16px', border: `1.5px solid ${C.border}`, padding: isMobile ? '1rem' : '1.5rem' };
   const linkBtn = { background: 'none', border: 'none', color: C.gold, fontWeight: '600', cursor: 'pointer' };
   const modalOverlayStyle = {
     position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
     display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 60,
   };
   const modalContentStyle = {
-    background: C.white, borderRadius: '16px', padding: '1.5rem',
-    width: '500px', maxWidth: '90vw',
-    display: 'flex', flexDirection: 'column', gap: '0.5rem',
+    background: C.white, borderRadius: '16px', padding: isMobile ? '1rem' : '1.5rem',
+    width: '500px', maxWidth: '92vw', maxHeight: '88vh', overflowY: 'auto',
+    display: 'flex', flexDirection: 'column', gap: '0.5rem', boxSizing: 'border-box',
   };
   const buttonBatal = {
     background: 'none', border: `1px solid ${C.border}`, borderRadius: '8px',
@@ -552,7 +563,7 @@ const StudentHome = () => {
     <div style={{ maxWidth: '1200px', margin: '0 auto', fontFamily: 'inherit' }}>
       {/* Sapaan */}
       <div style={{ marginBottom: '1.5rem' }}>
-        <h1 style={{ fontSize: '1.8rem', fontWeight: '700', color: C.dark, margin: '0' }}>
+        <h1 style={{ fontSize: isMobile ? '1.35rem' : '1.8rem', fontWeight: '700', color: C.dark, margin: '0' }}>
           {greeting}, {profile?.full_name || 'Siswa'}!
         </h1>
         <p style={{ fontSize: '1rem', color: C.gray, margin: '0.25rem 0 0 0' }}>
@@ -570,9 +581,9 @@ const StudentHome = () => {
       )}
 
       {/* Grid: kiri (Jadwal) 2 baris, kanan atas (Penilaian), kanan bawah (Pengajuan) */}
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1.5rem', marginBottom: '1.5rem', alignItems: 'start' }}>
-        {/* Kiri: Jadwal Les Minggu Ini - row 1 / 3 */}
-        <div style={{ ...cardStyle, gridRow: '1 / 3' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '2fr 1fr', gap: isMobile ? '1rem' : '1.5rem', marginBottom: isMobile ? '1rem' : '1.5rem', alignItems: 'start' }}>
+        {/* Kiri: Jadwal Les Minggu Ini - row 1 / 3 (desktop only) */}
+        <div style={{ ...cardStyle, gridRow: isMobile ? 'auto' : '1 / 3' }}>
           <h3 style={{ margin: '0 0 1rem 0', color: C.dark }}>Jadwal Les Minggu Ini</h3>
           {loading ? (
             <p style={{ color: C.gray, fontSize: '0.9rem' }}>Memuat jadwal...</p>
@@ -773,7 +784,7 @@ const StudentHome = () => {
       {/* Permintaan Materi Saya - grid 2 kolom */}
       <div style={cardStyle}>
         <h3 style={{ margin: '0 0 1rem 0', color: C.dark }}>Permintaan Materi Saya</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1.5rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '2fr 1fr', gap: isMobile ? '1rem' : '1.5rem' }}>
           {/* Kiri: daftar permintaan */}
           <div>
             {loading ? (

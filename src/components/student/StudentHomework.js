@@ -55,7 +55,7 @@ const FilterButton = ({ label, active, onClick }) => (
 );
 
 // ─── Komponen Task Card ──────────────────────────────────────────────────────
-const TaskCard = ({ task, onUpload, onView }) => {
+const TaskCard = ({ task, onUpload, onView, isMobile }) => {
   const isOverdue = new Date(task.deadline) < new Date() && task.status_pengumpulan !== 'Sudah';
   const isToday = new Date(task.deadline).toDateString() === new Date().toDateString();
   const isSubmitted = task.status_pengumpulan === 'Sudah';
@@ -65,14 +65,14 @@ const TaskCard = ({ task, onUpload, onView }) => {
       background: C.white,
       border: `1.5px solid ${isOverdue ? C.red : C.border}`,
       borderRadius: '16px',
-      padding: '1.2rem 1.5rem',
+      padding: isMobile ? '1rem' : '1.2rem 1.5rem',
       marginBottom: '1rem',
       transition: 'all 0.15s',
     }}
     onMouseEnter={e => e.currentTarget.style.borderColor = C.gold}
     onMouseLeave={e => e.currentTarget.style.borderColor = isOverdue ? C.red : C.border}
     >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
+      <div style={{ display: 'flex', flexWrap: isMobile ? 'wrap' : 'nowrap', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
         <div style={{ flex: 1 }}>
           <h4 style={{ margin: '0 0 4px', fontSize: '1rem', fontWeight: 'bold', color: C.dark }}>
             {task.judul}
@@ -173,7 +173,7 @@ const TaskCard = ({ task, onUpload, onView }) => {
 };
 
 // ─── Kalender Mini ──────────────────────────────────────────────────────────
-const MiniCalendar = ({ year, month, selectedDate, onSelectDate, tasksByDate }) => {
+const MiniCalendar = ({ year, month, selectedDate, onSelectDate, tasksByDate, isMobile }) => {
   const daysInMonth = getDaysInMonth(year, month);
   const firstDay = getFirstDayOfMonth(year, month);
   const today = new Date();
@@ -270,8 +270,9 @@ const MiniCalendar = ({ year, month, selectedDate, onSelectDate, tasksByDate }) 
       border: `1.5px solid ${C.border}`,
       borderRadius: '16px',
       padding: '1rem 0.5rem',
-      maxWidth: '280px',
+      maxWidth: isMobile ? '360px' : '280px',
       width: '100%',
+      margin: isMobile ? '0 auto' : 0,
     }}>
       <div style={{
         display: 'flex',
@@ -321,8 +322,19 @@ const MiniCalendar = ({ year, month, selectedDate, onSelectDate, tasksByDate }) 
   );
 };
 
+const useIsMobile = (bp = 768) => {
+  const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' ? window.innerWidth < bp : false);
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < bp);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [bp]);
+  return isMobile;
+};
+
 // ─── Halaman Utama ────────────────────────────────────────────────────────────
 const StudentHomework = () => {
+  const isMobile = useIsMobile();
   const [user, setUser] = useState(null);
   const [studentId, setStudentId] = useState(null);
   const [tasks, setTasks] = useState([]);
@@ -604,7 +616,7 @@ const StudentHomework = () => {
     <>
       <div style={{ maxWidth: '960px', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
         <div>
-          <h2 style={{ margin: '0 0 4px', fontSize: '1.6rem', fontWeight: 'bold', color: C.dark }}>
+          <h2 style={{ margin: '0 0 4px', fontSize: isMobile ? '1.25rem' : '1.6rem', fontWeight: 'bold', color: C.dark }}>
             Hi, {namaDepan}! 😊
           </h2>
           <p style={{ margin: '0 0 4px', color: C.gray, fontSize: '1rem' }}>
@@ -628,7 +640,7 @@ const StudentHomework = () => {
           alignItems: 'center',
           padding: '0.8rem 0',
         }}>
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', overflowX: isMobile ? 'auto' : 'visible', WebkitOverflowScrolling: 'touch', paddingBottom: isMobile ? '2px' : 0 }}>
             {['Semua', 'Belum Dikumpulkan', 'Sudah Dikumpulkan', 'Terlambat'].map(status => (
               <FilterButton
                 key={status}
@@ -638,7 +650,7 @@ const StudentHomework = () => {
               />
             ))}
           </div>
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginLeft: 'auto' }}>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginLeft: isMobile ? 0 : 'auto' }}>
             <select
               value={filterMapel}
               onChange={e => setFilterMapel(e.target.value)}
@@ -682,8 +694,8 @@ const StudentHomework = () => {
 
         <div style={{
           display: 'grid',
-          gridTemplateColumns: '280px 1fr',
-          gap: '1.5rem',
+          gridTemplateColumns: isMobile ? '1fr' : '280px 1fr',
+          gap: isMobile ? '1rem' : '1.5rem',
           alignItems: 'start',
         }}>
           <MiniCalendar
@@ -692,6 +704,7 @@ const StudentHomework = () => {
             selectedDate={selectedDate}
             onSelectDate={handleDateSelect}
             tasksByDate={tasksByDate}
+            isMobile={isMobile}
           />
 
           <div>
@@ -726,6 +739,7 @@ const StudentHomework = () => {
                   key={task.id}
                   task={task}
                   onUpload={openUploadModal}
+                  isMobile={isMobile}
                 />
               ))
             )}

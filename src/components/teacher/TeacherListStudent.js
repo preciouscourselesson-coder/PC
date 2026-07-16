@@ -14,11 +14,67 @@ const C = {
   goldLight: 'rgba(180,150,75,0.06)',
 };
 
+const MOBILE_BREAKPOINT = 768;
+
+// Hook kecil untuk deteksi ukuran layar (mobile vs desktop)
+const useIsMobile = () => {
+  const [isMobile, setIsMobile] = useState(
+    typeof window !== 'undefined' ? window.innerWidth <= MOBILE_BREAKPOINT : false
+  );
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth <= MOBILE_BREAKPOINT);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  return isMobile;
+};
+
+// Kartu siswa untuk tampilan mobile (menggantikan baris tabel)
+const StudentCard = ({ s }) => (
+  <div
+    style={{
+      background: C.white,
+      border: `1.5px solid ${C.border}`,
+      borderRadius: '14px',
+      padding: '1rem',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '0.5rem',
+    }}
+  >
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
+      <div style={{ fontWeight: '700', color: C.dark, fontSize: '1rem' }}>{s.nama}</div>
+      <span style={{ background: C.goldBg, color: C.gold, padding: '2px 10px', borderRadius: '12px', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
+        {s.status ?? 'Belum tersedia'}
+      </span>
+    </div>
+
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', rowGap: '6px', columnGap: '8px', fontSize: '0.85rem' }}>
+      <div style={{ color: C.grayLight }}>Kelas</div>
+      <div style={{ color: C.dark, textAlign: 'right' }}>{s.kelas}</div>
+
+      <div style={{ color: C.grayLight }}>Privat/Group</div>
+      <div style={{ color: C.dark, textAlign: 'right' }}>{s.jenisKelas}</div>
+
+      <div style={{ color: C.grayLight }}>Jenis Paket</div>
+      <div style={{ color: C.dark, textAlign: 'right' }}>{s.paket}</div>
+
+      <div style={{ color: C.grayLight }}>Kehadiran</div>
+      <div style={{ color: C.dark, textAlign: 'right' }}>{s.kehadiran ?? 'Belum tersedia'}</div>
+    </div>
+
+    <div style={{ borderTop: `1px solid ${C.border}`, marginTop: '4px', paddingTop: '8px', fontSize: '0.8rem', color: C.gray, wordBreak: 'break-word' }}>
+      📧 {s.kontak}
+    </div>
+  </div>
+);
+
 const TeacherListStudent = () => {
   const [search, setSearch] = useState('');
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
+  const isMobile = useIsMobile();
 
   // Ambil semua siswa yang diajar oleh guru yang sedang login,
   // digabung dari jadwal_les (privat: siswa_id, group: siswa_ids[])
@@ -142,9 +198,9 @@ const TeacherListStudent = () => {
   return (
     <div style={{ maxWidth: '1200px', margin: '0 auto', fontFamily: 'inherit' }}>
       {/* Header */}
-      <div style={{ marginBottom: '1.5rem' }}>
-        <h1 style={{ fontSize: '1.75rem', fontWeight: '700', color: C.dark, margin: '0 0 0.25rem 0' }}>Siswa</h1>
-        <p style={{ fontSize: '0.95rem', color: C.gray, margin: 0 }}>Daftar siswa yang sedang Anda ajarkan dan informasi penting terkait mereka.</p>
+      <div style={{ marginBottom: isMobile ? '1rem' : '1.5rem' }}>
+        <h1 style={{ fontSize: isMobile ? '1.35rem' : '1.75rem', fontWeight: '700', color: C.dark, margin: '0 0 0.25rem 0' }}>Siswa</h1>
+        <p style={{ fontSize: '0.9rem', color: C.gray, margin: 0 }}>Daftar siswa yang sedang Anda ajarkan dan informasi penting terkait mereka.</p>
       </div>
 
       {errorMsg && (
@@ -153,8 +209,8 @@ const TeacherListStudent = () => {
         </div>
       )}
 
-      {/* Tabel Siswa */}
-      <div style={{ background: C.white, borderRadius: '16px', border: `1.5px solid ${C.border}`, padding: '1.5rem' }}>
+      {/* Daftar Siswa */}
+      <div style={{ background: C.white, borderRadius: '16px', border: `1.5px solid ${C.border}`, padding: isMobile ? '1rem' : '1.5rem' }}>
         <h3 style={{ margin: '0 0 1rem 0', color: C.dark }}>Daftar Siswa</h3>
         <input
           type="text"
@@ -163,10 +219,10 @@ const TeacherListStudent = () => {
           onChange={(e) => setSearch(e.target.value)}
           style={{
             width: '100%',
-            padding: '8px 12px',
+            padding: '10px 12px',
             borderRadius: '8px',
             border: `1.5px solid ${C.border}`,
-            fontSize: '0.9rem',
+            fontSize: '16px', // 16px agar tidak memicu zoom otomatis di iOS
             marginBottom: '1rem',
             boxSizing: 'border-box',
             fontFamily: 'inherit',
@@ -177,7 +233,15 @@ const TeacherListStudent = () => {
           <div style={{ padding: '2rem 0', textAlign: 'center', color: C.grayLight }}>Memuat data siswa...</div>
         ) : filteredStudents.length === 0 ? (
           <div style={{ padding: '2rem 0', textAlign: 'center', color: C.grayLight }}>Belum ada siswa yang terdaftar di jadwal Anda.</div>
+        ) : isMobile ? (
+          // Tampilan kartu untuk layar kecil
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            {filteredStudents.map((s) => (
+              <StudentCard key={`${s.siswaId}-${s.no}`} s={s} />
+            ))}
+          </div>
         ) : (
+          // Tampilan tabel untuk layar besar
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
               <thead>

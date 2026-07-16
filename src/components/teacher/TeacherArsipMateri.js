@@ -18,6 +18,21 @@ const C = {
   grayBg: 'rgba(68,66,66,0.08)',
 };
 
+const MOBILE_BREAKPOINT = 768;
+
+// Hook kecil untuk deteksi ukuran layar (mobile vs desktop)
+const useIsMobile = () => {
+  const [isMobile, setIsMobile] = useState(
+    typeof window !== 'undefined' ? window.innerWidth <= MOBILE_BREAKPOINT : false
+  );
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth <= MOBILE_BREAKPOINT);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  return isMobile;
+};
+
 const TABS = ['Dipublish', 'Draft', 'Diarsipkan'];
 
 const STATUS_STYLE = {
@@ -44,18 +59,73 @@ const formatTanggal = (iso) => {
   return `${String(d.getDate()).padStart(2,'0')} ${bulan[d.getMonth()]} ${d.getFullYear()} ${hh}:${mm}`;
 };
 
-const IconBtn = ({ title, color, bg, onClick, children }) => (
+const IconBtn = ({ title, color, bg, onClick, children, size = 30 }) => (
   <button
     title={title}
     onClick={onClick}
     style={{
-      width: '30px', height: '30px', borderRadius: '8px', border: 'none',
+      width: `${size}px`, height: `${size}px`, borderRadius: '8px', border: 'none',
       background: bg, color, display: 'flex', alignItems: 'center',
       justifyContent: 'center', cursor: 'pointer', fontSize: '0.9rem', flexShrink: 0,
     }}
   >
     {children}
   </button>
+);
+
+// Kartu materi untuk tampilan mobile (menggantikan baris tabel)
+const MateriCard = ({ item, badge, icon, onView, onEdit, onArchive, onDelete }) => (
+  <div style={{ background: C.white, border: `1.5px solid ${C.border}`, borderRadius: '14px', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+    <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+      <div style={{ width: '36px', height: '36px', borderRadius: '8px', background: `${icon.color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem', flexShrink: 0 }}>
+        {icon.emoji}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontWeight: 'bold', color: C.dark, fontSize: '0.95rem', wordBreak: 'break-word' }}>{item.nama}</div>
+        {item.deskripsi && (
+          <div style={{ color: C.gray, fontSize: '0.78rem', marginTop: '2px', wordBreak: 'break-word' }}>{item.deskripsi}</div>
+        )}
+      </div>
+      <span style={{ padding: '3px 10px', borderRadius: '999px', fontSize: '0.72rem', fontWeight: 'bold', background: badge.bg, color: badge.color, whiteSpace: 'nowrap', flexShrink: 0 }}>
+        {item.status}
+      </span>
+    </div>
+
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', rowGap: '6px', columnGap: '8px', fontSize: '0.82rem' }}>
+      <div style={{ color: C.gray }}>Kelas</div>
+      <div style={{ color: C.dark, textAlign: 'right' }}>{item.kelas || '-'}</div>
+
+      <div style={{ color: C.gray }}>Mapel</div>
+      <div style={{ color: C.dark, textAlign: 'right' }}>{item.bab_ajar?.mapel || '-'}</div>
+
+      <div style={{ color: C.gray }}>Bab / Topik</div>
+      <div style={{ color: C.dark, textAlign: 'right' }}>{item.bab_ajar?.judul_bab || '-'}</div>
+
+      {item.sub_bab_ajar?.judul_sub_bab && (
+        <>
+          <div style={{ color: C.gray }}>Sub Bab</div>
+          <div style={{ color: C.dark, textAlign: 'right' }}>{item.sub_bab_ajar.judul_sub_bab}</div>
+        </>
+      )}
+
+      <div style={{ color: C.gray }}>Tanggal</div>
+      <div style={{ color: C.dark, textAlign: 'right' }}>{formatTanggal(item.tanggal)}</div>
+    </div>
+
+    <div style={{ display: 'flex', gap: '8px', borderTop: `1px solid ${C.border}`, paddingTop: '10px', marginTop: '2px' }}>
+      <IconBtn title="Lihat file" color={C.blue} bg={C.blueBg} onClick={onView} size={38}>👁️</IconBtn>
+      <IconBtn title="Edit" color={C.gold} bg={C.goldBg} onClick={onEdit} size={38}>✏️</IconBtn>
+      <IconBtn
+        title={item.status === 'Diarsipkan' ? 'Pulihkan' : 'Arsipkan'}
+        color="#b45309" bg="rgba(180,83,9,0.10)"
+        onClick={onArchive}
+        size={38}
+      >
+        {item.status === 'Diarsipkan' ? '📤' : '📦'}
+      </IconBtn>
+      <IconBtn title="Hapus" color={C.red} bg={C.redBg} onClick={onDelete} size={38}>🗑️</IconBtn>
+    </div>
+  </div>
 );
 
 /* ============================================================
@@ -65,7 +135,7 @@ const IconBtn = ({ title, color, bg, onClick, children }) => (
    ============================================================ */
 
 const uploadFieldLabel = { fontSize: '0.8rem', color: C.gray, display: 'block', marginBottom: '4px', marginTop: '10px' };
-const uploadFieldInput = { width: '100%', padding: '10px 11px', borderRadius: '9px', border: `1.5px solid ${C.border}`, boxSizing: 'border-box', fontFamily: 'inherit', fontSize: '0.88rem' };
+const uploadFieldInput = { width: '100%', padding: '10px 11px', borderRadius: '9px', border: `1.5px solid ${C.border}`, boxSizing: 'border-box', fontFamily: 'inherit', fontSize: '16px' };
 
 const TeacherUploadMateriModal = ({ userId, onUploaded }) => {
   const [babAjarList, setBabAjarList] = useState([]);
@@ -261,6 +331,7 @@ const TeacherUploadMateriModal = ({ userId, onUploaded }) => {
    ============================================================ */
 
 const TeacherArsipMateri = () => {
+  const isMobile = useIsMobile();
   const [userId, setUserId] = useState(null);
   const [activeTab, setActiveTab] = useState('Dipublish');
   const [search, setSearch] = useState('');
@@ -386,29 +457,35 @@ const TeacherArsipMateri = () => {
   };
 
   const selectStyle = {
-    padding: '9px 12px', borderRadius: '10px', border: `1.5px solid ${C.border}`,
-    fontSize: '0.85rem', color: C.dark, background: C.white, fontFamily: 'inherit', cursor: 'pointer',
+    padding: isMobile ? '9px 10px' : '9px 12px', borderRadius: '10px', border: `1.5px solid ${C.border}`,
+    fontSize: isMobile ? '0.82rem' : '0.85rem', color: C.dark, background: C.white, fontFamily: 'inherit', cursor: 'pointer',
+    flex: isMobile ? '1 1 47%' : 'initial', minWidth: 0,
   };
 
   return (
     <div style={{ fontFamily: 'inherit' }}>
-      <div style={{ display: 'flex', gap: '24px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? '16px' : '24px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
 
-      {/* Kolom kiri: tabs, filter, tabel */}
-      <div style={{ order: 1, flex: '1 1 560px', minWidth: 0 }}>
+      {/* Kolom kiri: tabs, filter, tabel/kartu */}
+      <div style={{ order: 1, flex: isMobile ? '1 1 100%' : '1 1 560px', minWidth: 0, width: isMobile ? '100%' : 'auto', boxSizing: 'border-box' }}>
 
       {/* Header (tabs) */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.2rem', flexWrap: 'wrap', gap: '10px' }}>
-        <div style={{ display: 'flex', gap: '4px', background: C.white, padding: '4px', borderRadius: '12px', border: `1.5px solid ${C.border}` }}>
+        <div style={{
+          display: 'flex', gap: '4px', background: C.white, padding: '4px', borderRadius: '12px',
+          border: `1.5px solid ${C.border}`, width: isMobile ? '100%' : 'auto',
+          overflowX: isMobile ? 'auto' : 'visible', boxSizing: 'border-box',
+        }}>
           {TABS.map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
               style={{
-                padding: '8px 18px', borderRadius: '9px', border: 'none', fontFamily: 'inherit',
-                fontSize: '0.9rem', fontWeight: activeTab === tab ? 'bold' : 'normal', cursor: 'pointer',
+                padding: isMobile ? '9px 10px' : '8px 18px', borderRadius: '9px', border: 'none', fontFamily: 'inherit',
+                fontSize: isMobile ? '0.82rem' : '0.9rem', fontWeight: activeTab === tab ? 'bold' : 'normal', cursor: 'pointer',
                 background: activeTab === tab ? C.goldBg : 'transparent',
                 color: activeTab === tab ? C.gold : C.gray,
+                flex: isMobile ? '1 1 0' : 'initial', whiteSpace: 'nowrap',
               }}
             >
               {tab}
@@ -419,7 +496,7 @@ const TeacherArsipMateri = () => {
 
       {/* Search & filter */}
       <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '1.2rem' }}>
-        <div style={{ flex: '1 1 260px', position: 'relative' }}>
+        <div style={{ flex: '1 1 100%', position: 'relative' }}>
           <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: C.gray }}>🔍</span>
           <input
             value={search}
@@ -427,7 +504,7 @@ const TeacherArsipMateri = () => {
             placeholder="Cari judul materi..."
             style={{
               width: '100%', padding: '10px 12px 10px 34px', borderRadius: '10px',
-              border: `1.5px solid ${C.border}`, fontSize: '0.9rem', fontFamily: 'inherit', boxSizing: 'border-box',
+              border: `1.5px solid ${C.border}`, fontSize: '16px', fontFamily: 'inherit', boxSizing: 'border-box',
             }}
           />
         </div>
@@ -453,90 +530,114 @@ const TeacherArsipMateri = () => {
 
         <button
           onClick={fetchMateri}
-          style={{ ...selectStyle, display: 'flex', alignItems: 'center', gap: '6px', background: C.cream }}
+          style={{ ...selectStyle, flex: isMobile ? '1 1 100%' : 'initial', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', background: C.cream }}
         >
           ⏳ Filter
         </button>
       </div>
 
-      {/* Tabel */}
-      <div style={{ background: C.white, borderRadius: '14px', border: `1.5px solid ${C.border}`, overflow: 'hidden' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.88rem' }}>
-          <thead>
-            <tr style={{ background: C.cream, textAlign: 'left' }}>
-              <th style={{ padding: '12px 16px', color: C.gray, fontWeight: 600 }}>Judul Materi</th>
-              <th style={{ padding: '12px 16px', color: C.gray, fontWeight: 600 }}>Kelas</th>
-              <th style={{ padding: '12px 16px', color: C.gray, fontWeight: 600 }}>Mapel</th>
-              <th style={{ padding: '12px 16px', color: C.gray, fontWeight: 600 }}>Bab / Topik</th>
-              <th style={{ padding: '12px 16px', color: C.gray, fontWeight: 600 }}>Sub Bab</th>
-              <th style={{ padding: '12px 16px', color: C.gray, fontWeight: 600 }}>Tanggal Publish</th>
-              <th style={{ padding: '12px 16px', color: C.gray, fontWeight: 600 }}>Status</th>
-              <th style={{ padding: '12px 16px', color: C.gray, fontWeight: 600 }}>Aksi</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading && (
-              <tr><td colSpan={8} style={{ padding: '28px', textAlign: 'center', color: C.gray }}>Memuat materi...</td></tr>
-            )}
-            {!loading && errorMsg && (
-              <tr><td colSpan={8} style={{ padding: '28px', textAlign: 'center', color: C.red }}>{errorMsg}</td></tr>
-            )}
-            {!loading && !errorMsg && materiList.length === 0 && (
-              <tr><td colSpan={8} style={{ padding: '28px', textAlign: 'center', color: C.gray }}>Belum ada materi di kategori "{activeTab}".</td></tr>
-            )}
-            {!loading && !errorMsg && materiList.map(item => {
-              const icon = fileIcon(item.tipe);
-              const badge = STATUS_STYLE[item.status] || STATUS_STYLE.Draft;
-              return (
-                <tr key={item.id} style={{ borderTop: `1px solid ${C.border}` }}>
-                  <td style={{ padding: '12px 16px' }}>
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
-                      <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: `${icon.color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem', flexShrink: 0 }}>
-                        {icon.emoji}
+      {/* Tabel (desktop) / Kartu (mobile) */}
+      {loading ? (
+        <div style={{ background: C.white, borderRadius: '14px', border: `1.5px solid ${C.border}`, padding: '28px', textAlign: 'center', color: C.gray }}>
+          Memuat materi...
+        </div>
+      ) : errorMsg ? (
+        <div style={{ background: C.white, borderRadius: '14px', border: `1.5px solid ${C.border}`, padding: '28px', textAlign: 'center', color: C.red }}>
+          {errorMsg}
+        </div>
+      ) : materiList.length === 0 ? (
+        <div style={{ background: C.white, borderRadius: '14px', border: `1.5px solid ${C.border}`, padding: '28px', textAlign: 'center', color: C.gray }}>
+          Belum ada materi di kategori "{activeTab}".
+        </div>
+      ) : isMobile ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          {materiList.map(item => {
+            const icon = fileIcon(item.tipe);
+            const badge = STATUS_STYLE[item.status] || STATUS_STYLE.Draft;
+            return (
+              <MateriCard
+                key={item.id}
+                item={item}
+                icon={icon}
+                badge={badge}
+                onView={() => window.open(item.url, '_blank')}
+                onEdit={() => setEditItem({ ...item })}
+                onArchive={() => handleArchiveToggle(item)}
+                onDelete={() => setDeleteItem(item)}
+              />
+            );
+          })}
+        </div>
+      ) : (
+        <div style={{ background: C.white, borderRadius: '14px', border: `1.5px solid ${C.border}`, overflow: 'hidden' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.88rem' }}>
+            <thead>
+              <tr style={{ background: C.cream, textAlign: 'left' }}>
+                <th style={{ padding: '12px 16px', color: C.gray, fontWeight: 600 }}>Judul Materi</th>
+                <th style={{ padding: '12px 16px', color: C.gray, fontWeight: 600 }}>Kelas</th>
+                <th style={{ padding: '12px 16px', color: C.gray, fontWeight: 600 }}>Mapel</th>
+                <th style={{ padding: '12px 16px', color: C.gray, fontWeight: 600 }}>Bab / Topik</th>
+                <th style={{ padding: '12px 16px', color: C.gray, fontWeight: 600 }}>Sub Bab</th>
+                <th style={{ padding: '12px 16px', color: C.gray, fontWeight: 600 }}>Tanggal Publish</th>
+                <th style={{ padding: '12px 16px', color: C.gray, fontWeight: 600 }}>Status</th>
+                <th style={{ padding: '12px 16px', color: C.gray, fontWeight: 600 }}>Aksi</th>
+              </tr>
+            </thead>
+            <tbody>
+              {materiList.map(item => {
+                const icon = fileIcon(item.tipe);
+                const badge = STATUS_STYLE[item.status] || STATUS_STYLE.Draft;
+                return (
+                  <tr key={item.id} style={{ borderTop: `1px solid ${C.border}` }}>
+                    <td style={{ padding: '12px 16px' }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                        <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: `${icon.color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem', flexShrink: 0 }}>
+                          {icon.emoji}
+                        </div>
+                        <div>
+                          <div style={{ fontWeight: 'bold', color: C.dark }}>{item.nama}</div>
+                          {item.deskripsi && (
+                            <div style={{ color: C.gray, fontSize: '0.78rem', marginTop: '2px' }}>{item.deskripsi}</div>
+                          )}
+                        </div>
                       </div>
-                      <div>
-                        <div style={{ fontWeight: 'bold', color: C.dark }}>{item.nama}</div>
-                        {item.deskripsi && (
-                          <div style={{ color: C.gray, fontSize: '0.78rem', marginTop: '2px' }}>{item.deskripsi}</div>
-                        )}
+                    </td>
+                    <td style={{ padding: '12px 16px', color: C.dark }}>{item.kelas || '-'}</td>
+                    <td style={{ padding: '12px 16px', color: C.dark }}>{item.bab_ajar?.mapel || '-'}</td>
+                    <td style={{ padding: '12px 16px', color: C.dark }}>{item.bab_ajar?.judul_bab || '-'}</td>
+                    <td style={{ padding: '12px 16px', color: C.dark }}>{item.sub_bab_ajar?.judul_sub_bab || '-'}</td>
+                    <td style={{ padding: '12px 16px', color: C.gray }}>{formatTanggal(item.tanggal)}</td>
+                    <td style={{ padding: '12px 16px' }}>
+                      <span style={{ padding: '4px 12px', borderRadius: '999px', fontSize: '0.78rem', fontWeight: 'bold', background: badge.bg, color: badge.color }}>
+                        {item.status}
+                      </span>
+                    </td>
+                    <td style={{ padding: '12px 16px' }}>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <IconBtn title="Lihat file" color={C.blue} bg={C.blueBg} onClick={() => window.open(item.url, '_blank')}>👁️</IconBtn>
+                        <IconBtn title="Edit" color={C.gold} bg={C.goldBg} onClick={() => setEditItem({ ...item })}>✏️</IconBtn>
+                        <IconBtn
+                          title={item.status === 'Diarsipkan' ? 'Pulihkan' : 'Arsipkan'}
+                          color="#b45309" bg="rgba(180,83,9,0.10)"
+                          onClick={() => handleArchiveToggle(item)}
+                        >
+                          {item.status === 'Diarsipkan' ? '📤' : '📦'}
+                        </IconBtn>
+                        <IconBtn title="Hapus" color={C.red} bg={C.redBg} onClick={() => setDeleteItem(item)}>🗑️</IconBtn>
                       </div>
-                    </div>
-                  </td>
-                  <td style={{ padding: '12px 16px', color: C.dark }}>{item.kelas || '-'}</td>
-                  <td style={{ padding: '12px 16px', color: C.dark }}>{item.bab_ajar?.mapel || '-'}</td>
-                  <td style={{ padding: '12px 16px', color: C.dark }}>{item.bab_ajar?.judul_bab || '-'}</td>
-                  <td style={{ padding: '12px 16px', color: C.dark }}>{item.sub_bab_ajar?.judul_sub_bab || '-'}</td>
-                  <td style={{ padding: '12px 16px', color: C.gray }}>{formatTanggal(item.tanggal)}</td>
-                  <td style={{ padding: '12px 16px' }}>
-                    <span style={{ padding: '4px 12px', borderRadius: '999px', fontSize: '0.78rem', fontWeight: 'bold', background: badge.bg, color: badge.color }}>
-                      {item.status}
-                    </span>
-                  </td>
-                  <td style={{ padding: '12px 16px' }}>
-                    <div style={{ display: 'flex', gap: '6px' }}>
-                      <IconBtn title="Lihat file" color={C.blue} bg={C.blueBg} onClick={() => window.open(item.url, '_blank')}>👁️</IconBtn>
-                      <IconBtn title="Edit" color={C.gold} bg={C.goldBg} onClick={() => setEditItem({ ...item })}>✏️</IconBtn>
-                      <IconBtn
-                        title={item.status === 'Diarsipkan' ? 'Pulihkan' : 'Arsipkan'}
-                        color="#b45309" bg="rgba(180,83,9,0.10)"
-                        onClick={() => handleArchiveToggle(item)}
-                      >
-                        {item.status === 'Diarsipkan' ? '📤' : '📦'}
-                      </IconBtn>
-                      <IconBtn title="Hapus" color={C.red} bg={C.redBg} onClick={() => setDeleteItem(item)}>🗑️</IconBtn>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       </div>
 
       {/* Kolom kanan: form unggah materi */}
-      <div style={{ order: 2, width: '360px', flexShrink: 0, position: 'sticky', top: 0 }}>
+      <div style={{ order: 2, width: isMobile ? '100%' : '360px', flexShrink: 0, position: isMobile ? 'static' : 'sticky', top: 0, boxSizing: 'border-box' }}>
         <TeacherUploadMateriModal
           userId={userId}
           onUploaded={(uploadedStatus) => {
@@ -550,15 +651,23 @@ const TeacherArsipMateri = () => {
 
       {/* Modal Edit */}
       {editItem && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200 }}>
-          <div style={{ background: C.white, borderRadius: '16px', padding: '1.6rem', width: '360px', maxWidth: '90vw' }}>
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', display: 'flex',
+          alignItems: isMobile ? 'flex-end' : 'center', justifyContent: 'center', zIndex: 200,
+        }}>
+          <div style={{
+            background: C.white, padding: isMobile ? '1.3rem' : '1.6rem',
+            width: isMobile ? '100%' : '360px', maxWidth: isMobile ? '100%' : '90vw',
+            borderRadius: isMobile ? '18px 18px 0 0' : '16px',
+            maxHeight: '88vh', overflowY: 'auto', boxSizing: 'border-box',
+          }}>
             <div style={{ fontWeight: 'bold', fontSize: '1.05rem', marginBottom: '1rem', color: C.dark }}>Edit Materi</div>
 
             <label style={{ fontSize: '0.8rem', color: C.gray }}>Judul Materi</label>
             <input
               value={editItem.nama || ''}
               onChange={e => setEditItem({ ...editItem, nama: e.target.value })}
-              style={{ width: '100%', padding: '9px 10px', borderRadius: '8px', border: `1.5px solid ${C.border}`, marginBottom: '10px', boxSizing: 'border-box', fontFamily: 'inherit' }}
+              style={{ width: '100%', padding: '9px 10px', borderRadius: '8px', border: `1.5px solid ${C.border}`, marginBottom: '10px', boxSizing: 'border-box', fontFamily: 'inherit', fontSize: '16px' }}
             />
 
             <label style={{ fontSize: '0.8rem', color: C.gray }}>Deskripsi</label>
@@ -566,31 +675,31 @@ const TeacherArsipMateri = () => {
               value={editItem.deskripsi || ''}
               onChange={e => setEditItem({ ...editItem, deskripsi: e.target.value })}
               rows={2}
-              style={{ width: '100%', padding: '9px 10px', borderRadius: '8px', border: `1.5px solid ${C.border}`, marginBottom: '10px', boxSizing: 'border-box', fontFamily: 'inherit', resize: 'vertical' }}
+              style={{ width: '100%', padding: '9px 10px', borderRadius: '8px', border: `1.5px solid ${C.border}`, marginBottom: '10px', boxSizing: 'border-box', fontFamily: 'inherit', fontSize: '16px', resize: 'vertical' }}
             />
 
             <label style={{ fontSize: '0.8rem', color: C.gray }}>Kelas</label>
             <input
               value={editItem.kelas || ''}
               onChange={e => setEditItem({ ...editItem, kelas: e.target.value })}
-              style={{ width: '100%', padding: '9px 10px', borderRadius: '8px', border: `1.5px solid ${C.border}`, marginBottom: '10px', boxSizing: 'border-box', fontFamily: 'inherit' }}
+              style={{ width: '100%', padding: '9px 10px', borderRadius: '8px', border: `1.5px solid ${C.border}`, marginBottom: '10px', boxSizing: 'border-box', fontFamily: 'inherit', fontSize: '16px' }}
             />
 
             <label style={{ fontSize: '0.8rem', color: C.gray }}>Status</label>
             <select
               value={editItem.status}
               onChange={e => setEditItem({ ...editItem, status: e.target.value })}
-              style={{ width: '100%', padding: '9px 10px', borderRadius: '8px', border: `1.5px solid ${C.border}`, marginBottom: '16px', fontFamily: 'inherit' }}
+              style={{ width: '100%', padding: '9px 10px', borderRadius: '8px', border: `1.5px solid ${C.border}`, marginBottom: '16px', fontFamily: 'inherit', fontSize: '16px', boxSizing: 'border-box' }}
             >
               {TABS.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
 
             <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-              <button onClick={() => setEditItem(null)} style={{ padding: '9px 16px', borderRadius: '9px', border: `1.5px solid ${C.border}`, background: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>Batal</button>
+              <button onClick={() => setEditItem(null)} style={{ padding: '9px 16px', borderRadius: '9px', border: `1.5px solid ${C.border}`, background: 'none', cursor: 'pointer', fontFamily: 'inherit', flex: isMobile ? 1 : 'initial' }}>Batal</button>
               <button
                 onClick={handleSaveEdit}
                 disabled={savingEdit}
-                style={{ padding: '9px 16px', borderRadius: '9px', border: 'none', background: C.gold, color: C.white, fontWeight: 'bold', cursor: 'pointer', fontFamily: 'inherit' }}
+                style={{ padding: '9px 16px', borderRadius: '9px', border: 'none', background: C.gold, color: C.white, fontWeight: 'bold', cursor: 'pointer', fontFamily: 'inherit', flex: isMobile ? 1 : 'initial' }}
               >
                 {savingEdit ? 'Menyimpan...' : 'Simpan'}
               </button>
@@ -601,15 +710,22 @@ const TeacherArsipMateri = () => {
 
       {/* Modal Konfirmasi Hapus */}
       {deleteItem && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200 }}>
-          <div style={{ background: C.white, borderRadius: '16px', padding: '1.6rem', width: '340px', maxWidth: '90vw' }}>
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', display: 'flex',
+          alignItems: isMobile ? 'flex-end' : 'center', justifyContent: 'center', zIndex: 200,
+        }}>
+          <div style={{
+            background: C.white, padding: isMobile ? '1.3rem' : '1.6rem',
+            width: isMobile ? '100%' : '340px', maxWidth: isMobile ? '100%' : '90vw',
+            borderRadius: isMobile ? '18px 18px 0 0' : '16px', boxSizing: 'border-box',
+          }}>
             <div style={{ fontWeight: 'bold', fontSize: '1.05rem', marginBottom: '8px', color: C.dark }}>Hapus Materi?</div>
             <div style={{ color: C.gray, fontSize: '0.88rem', marginBottom: '18px' }}>
               "{deleteItem.nama}" akan dihapus permanen dan tidak bisa dikembalikan.
             </div>
             <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-              <button onClick={() => setDeleteItem(null)} style={{ padding: '9px 16px', borderRadius: '9px', border: `1.5px solid ${C.border}`, background: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>Batal</button>
-              <button onClick={handleDelete} style={{ padding: '9px 16px', borderRadius: '9px', border: 'none', background: C.red, color: C.white, fontWeight: 'bold', cursor: 'pointer', fontFamily: 'inherit' }}>Hapus</button>
+              <button onClick={() => setDeleteItem(null)} style={{ padding: '9px 16px', borderRadius: '9px', border: `1.5px solid ${C.border}`, background: 'none', cursor: 'pointer', fontFamily: 'inherit', flex: isMobile ? 1 : 'initial' }}>Batal</button>
+              <button onClick={handleDelete} style={{ padding: '9px 16px', borderRadius: '9px', border: 'none', background: C.red, color: C.white, fontWeight: 'bold', cursor: 'pointer', fontFamily: 'inherit', flex: isMobile ? 1 : 'initial' }}>Hapus</button>
             </div>
           </div>
         </div>

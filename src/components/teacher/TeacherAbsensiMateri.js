@@ -84,7 +84,23 @@ const statusStyle = (status) => {
 const BUCKET = 'materi';
 const TABLE = 'sesi_pembelajaran';
 
+const MOBILE_BREAKPOINT = 768;
+
+// Hook kecil untuk deteksi ukuran layar (mobile vs desktop)
+const useIsMobile = () => {
+  const [isMobile, setIsMobile] = useState(
+    typeof window !== 'undefined' ? window.innerWidth <= MOBILE_BREAKPOINT : false
+  );
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth <= MOBILE_BREAKPOINT);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  return isMobile;
+};
+
 const TeacherAbsensiMateri = () => {
+  const isMobile = useIsMobile();
   const [guruId, setGuruId] = useState(null); // auth.uid() / profiles.id — dipakai untuk sesi_pembelajaran.guru_id
   const [guruTableId, setGuruTableId] = useState(null); // guru.id — dipakai untuk filter jadwal_les.guru_id
 
@@ -405,7 +421,7 @@ const TeacherAbsensiMateri = () => {
         {/* Header bar */}
         <div
           style={{
-            padding: '1.1rem 1.75rem',
+            padding: isMobile ? '0.9rem 1.1rem' : '1.1rem 1.75rem',
             background: D.bgSoft,
             borderBottom: `1px solid ${D.gold}`,
             display: 'flex',
@@ -422,8 +438,8 @@ const TeacherAbsensiMateri = () => {
           </span>
         </div>
 
-        <div style={{ padding: '1.75rem' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '2rem' }}>
+        <div style={{ padding: isMobile ? '1.1rem' : '1.75rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(280px, 1fr))', gap: isMobile ? '1.25rem' : '2rem' }}>
             {/* Kolom kiri */}
             <div>
               <label style={darkLabelStyle}>Nama Siswa</label>
@@ -612,9 +628,16 @@ const TeacherAbsensiMateri = () => {
             <div style={{ color: D.danger, fontSize: '0.82rem', marginTop: '1rem' }}>{saveError}</div>
           )}
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '1rem', marginTop: '1.5rem' }}>
+          <div style={{
+            display: 'flex',
+            flexDirection: isMobile ? 'column-reverse' : 'row',
+            justifyContent: 'flex-end',
+            alignItems: isMobile ? 'stretch' : 'center',
+            gap: '0.75rem',
+            marginTop: '1.5rem',
+          }}>
             {justAdded && (
-              <span style={{ color: '#7fbf9e', fontSize: '0.85rem', fontWeight: 600 }}>
+              <span style={{ color: '#7fbf9e', fontSize: '0.85rem', fontWeight: 600, textAlign: isMobile ? 'center' : 'left' }}>
                 ✓ Pertemuan berhasil dicatat
               </span>
             )}
@@ -637,9 +660,9 @@ const TeacherAbsensiMateri = () => {
       </div>
 
       {/* Tabel Riwayat */}
-      <div style={{ background: C.white, borderRadius: '16px', border: `1.5px solid ${C.border}`, padding: '1.75rem' }}>
+      <div style={{ background: C.white, borderRadius: '16px', border: `1.5px solid ${C.border}`, padding: isMobile ? '1.1rem' : '1.75rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1.25rem' }}>
-          <h2 style={{ fontSize: '1.15rem', fontWeight: '700', color: C.dark, margin: 0 }}>Riwayat Absensi &amp; Materi</h2>
+          <h2 style={{ fontSize: isMobile ? '1rem' : '1.15rem', fontWeight: '700', color: C.dark, margin: 0 }}>Riwayat Absensi &amp; Materi</h2>
           <span style={{ fontSize: '0.8rem', color: C.gray }}>
             {filteredEntries.length} dari {entries.length} pertemuan
           </span>
@@ -680,7 +703,113 @@ const TeacherAbsensiMateri = () => {
           <div style={{ color: C.red, fontSize: '0.85rem', marginBottom: '1rem' }}>{entriesError}</div>
         )}
 
-        {/* Table */}
+        {/* Riwayat: kartu di mobile, tabel di desktop */}
+        {isMobile ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            {loadingEntries && (
+              <div style={{ padding: '2rem', textAlign: 'center', color: C.grayLight }}>Memuat riwayat...</div>
+            )}
+            {!loadingEntries && filteredEntries.length === 0 && (
+              <div style={{ padding: '2rem', textAlign: 'center', color: C.grayLight }}>
+                Belum ada pertemuan yang cocok dengan filter ini.
+              </div>
+            )}
+            {!loadingEntries && filteredEntries.map((item) => {
+              const st = statusStyle(item.status);
+              const namaSiswa = item.profiles?.full_name || 'Siswa tidak ditemukan';
+              return (
+                <div
+                  key={item.id}
+                  style={{
+                    border: `1.5px solid ${C.border}`,
+                    borderRadius: '14px',
+                    padding: '1rem',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '0.5rem',
+                    position: 'relative',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                      <span
+                        style={{
+                          width: '28px', height: '28px', borderRadius: '50%',
+                          background: avatarColor(namaSiswa), color: C.white,
+                          fontSize: '0.65rem', fontWeight: 700,
+                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                        }}
+                      >
+                        {initials(namaSiswa)}
+                      </span>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontWeight: 600, color: C.dark, fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{namaSiswa}</div>
+                        <div style={{ fontSize: '0.72rem', color: C.gray }}>{formatTanggalDisplay(item.tanggal)}</div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setOpenMenuId(openMenuId === item.id ? null : item.id)}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.gray, fontSize: '1.1rem', padding: '0 4px', flexShrink: 0 }}
+                    >
+                      ⋮
+                    </button>
+                    {openMenuId === item.id && (
+                      <div
+                        style={{
+                          position: 'absolute', right: '0.5rem', top: '2.5rem',
+                          background: C.white, border: `1px solid ${C.border}`, borderRadius: '8px',
+                          boxShadow: '0 4px 12px rgba(0,0,0,0.08)', zIndex: 10, minWidth: '110px',
+                        }}
+                      >
+                        <button style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer', color: C.dark, fontSize: '0.82rem' }}>
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDelete(item.id)}
+                          style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer', color: C.red, fontSize: '0.82rem' }}
+                        >
+                          Hapus
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={{ fontSize: '0.85rem', fontWeight: 500, color: C.dark }}>{item.judul_materi}</div>
+                  {item.catatan && (
+                    <div style={{ fontSize: '0.8rem', color: C.gray }}>{item.catatan}</div>
+                  )}
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '2px' }}>
+                    <span style={{ background: st.bg, color: st.fg, padding: '3px 10px', borderRadius: '999px', fontSize: '0.72rem', fontWeight: 600 }}>
+                      {item.status}
+                    </span>
+                    {item.bukti_urls && item.bukti_urls.length > 0 && (
+                      <div style={{ display: 'flex', gap: '4px' }}>
+                        {item.bukti_urls.map((url, i) => (
+                          <a
+                            key={i}
+                            href={url}
+                            target="_blank"
+                            rel="noreferrer"
+                            title={fileNameFromUrl(url)}
+                            style={{
+                              width: '24px', height: '24px', borderRadius: '6px',
+                              background: fileTypeFromUrl(url) === 'pdf' ? '#e0574f' : '#3f7ea6',
+                              color: '#fff', fontSize: '0.55rem', fontWeight: 700,
+                              display: 'inline-flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none',
+                            }}
+                          >
+                            {fileTypeFromUrl(url) === 'pdf' ? 'PDF' : 'IMG'}
+                          </a>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
             <thead>
@@ -829,6 +958,7 @@ const TeacherAbsensiMateri = () => {
             </tbody>
           </table>
         </div>
+        )}
       </div>
     </div>
   );

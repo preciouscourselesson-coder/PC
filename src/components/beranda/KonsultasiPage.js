@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../supabaseClient';
-import bgPeople from '../Resource/bg_people.png';
+import bgPeople from '../../Resource/bg_people.png';
 
 // ─── Konstanta & Data ────────────────────────────────────────────────────────
 
@@ -40,31 +40,32 @@ const C = {
 // ─── Komponen Kecil ──────────────────────────────────────────────────────────
 
 const StepIndicator = ({ current }) => (
-  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '2rem', gap: 0 }}>
+  <div className="step-indicator" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '2rem', gap: 0 }}>
     {STEPS.map((s, idx) => {
       const done   = s.number < current;
       const active = s.number === current;
       return (
         <React.Fragment key={s.number}>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
-            <div style={{
+            <div className="step-circle" style={{
               width: '36px', height: '36px', borderRadius: '50%',
               background: done ? C.green : active ? C.gold : C.border,
               color: done || active ? 'white' : C.gray,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               fontWeight: 'bold', fontSize: '0.95rem',
-              transition: 'all 0.3s'
+              transition: 'all 0.3s',
+              flexShrink: 0
             }}>
               {done ? '✓' : s.number}
             </div>
-            <span style={{
+            <span className="step-label" style={{
               fontSize: '0.72rem', fontWeight: active ? 'bold' : 'normal',
               color: active ? C.gold : done ? C.green : C.gray,
               whiteSpace: 'nowrap'
             }}>{s.label}</span>
           </div>
           {idx < STEPS.length - 1 && (
-            <div style={{
+            <div className="step-connector" style={{
               height: '2px', width: '60px', marginBottom: '18px',
               background: done ? C.green : C.border,
               transition: 'background 0.3s'
@@ -214,7 +215,7 @@ const StepDataDiri = ({ data, setData, onNext }) => {
         </div>
 
         {(data.status === 'SMP' || data.status === 'SMA') && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+          <div className="two-col-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
             <div>
               <Label>Asal Sekolah</Label>
               <Input placeholder="Contoh: SMA Negeri 1 Surabaya" value={data.sekolah} onChange={update('sekolah')} />
@@ -656,22 +657,25 @@ const KonsultasiPage = () => {
       </div>
 
       {/* Layout Dua Kolom */}
-      <div style={{
+      <div className="konsultasi-layout" style={{
         maxWidth: '1100px', margin: '0 auto', padding: '2.5rem 5%',
         display: 'grid',
         gridTemplateColumns: '1fr 1.4fr',
         gap: '2rem',
-        alignItems: 'start'
+        alignItems: 'start',
+        boxSizing: 'border-box'
       }}>
 
         {/* Kolom Kiri: Sidebar */}
-        <LeftSidebar />
+        <div className="konsultasi-sidebar">
+          <LeftSidebar />
+        </div>
 
         {/* Kolom Kanan: Form */}
         <div>
           {/* Judul */}
           <div style={{ marginBottom: '1.5rem' }}>
-            <h1 style={{ fontSize: '1.6rem', color: C.dark, margin: '0 0 6px', fontWeight: 'bold' }}>
+            <h1 style={{ fontSize: 'clamp(1.3rem, 4.5vw, 1.6rem)', color: C.dark, margin: '0 0 6px', fontWeight: 'bold' }}>
               ✨ Form Konsultasi <span style={{ color: C.gold }}>Gratis</span>
             </h1>
             <p style={{ color: C.gray, margin: 0, fontSize: '0.88rem' }}>
@@ -686,7 +690,8 @@ const KonsultasiPage = () => {
           <div style={{
             background: C.white, borderRadius: '24px',
             boxShadow: '0 10px 30px rgba(0,0,0,0.08)',
-            padding: '2rem'
+            padding: 'clamp(1.25rem, 5vw, 2rem)',
+            boxSizing: 'border-box'
           }}>
             {step === 1 && (
               <StepDataDiri data={dataDiri} setData={setDataDiri} onNext={() => setStep(2)} />
@@ -716,6 +721,37 @@ const KonsultasiPage = () => {
           )}
         </div>
       </div>
+
+      <style>{`
+        @media (max-width: 900px) {
+          .konsultasi-layout {
+            grid-template-columns: 1fr !important;
+          }
+          .konsultasi-sidebar > div {
+            position: static !important;
+            top: auto !important;
+          }
+        }
+        @media (max-width: 640px) {
+          .two-col-grid {
+            grid-template-columns: 1fr !important;
+          }
+          .step-indicator {
+            flex-wrap: nowrap;
+          }
+          .step-connector {
+            width: 20px !important;
+          }
+          .step-circle {
+            width: 30px !important;
+            height: 30px !important;
+            font-size: 0.82rem !important;
+          }
+          .step-label {
+            font-size: 0.6rem !important;
+          }
+        }
+      `}</style>
     </div>
   );
 };

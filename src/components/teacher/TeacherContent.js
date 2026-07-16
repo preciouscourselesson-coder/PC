@@ -15,6 +15,21 @@ const C = {
   dangerBg: '#fff0f0',
 };
 
+const MOBILE_BREAKPOINT = 768;
+
+// Hook kecil untuk deteksi ukuran layar (mobile vs desktop)
+const useIsMobile = () => {
+  const [isMobile, setIsMobile] = useState(
+    typeof window !== 'undefined' ? window.innerWidth <= MOBILE_BREAKPOINT : false
+  );
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth <= MOBILE_BREAKPOINT);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  return isMobile;
+};
+
 const btnPrimary = {
   padding: '9px 18px',
   borderRadius: '10px',
@@ -43,7 +58,7 @@ const inputStyle = {
   padding: '9px 12px',
   borderRadius: '10px',
   border: `1.5px solid ${C.border}`,
-  fontSize: '0.9rem',
+  fontSize: '16px',
   fontFamily: 'inherit',
   boxSizing: 'border-box',
   outline: 'none',
@@ -56,6 +71,7 @@ const textareaStyle = {
 };
 
 const TeacherContent = () => {
+  const isMobile = useIsMobile();
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
   const [userId, setUserId] = useState(null);
@@ -341,10 +357,14 @@ const TeacherContent = () => {
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: '24px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? '16px' : '24px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
 
       {/* Form tambah mapel + bab + sub bab (kolom kanan) */}
-      <div style={{ order: 2, width: '340px', flexShrink: 0, background: C.white, border: `1.5px solid ${C.border}`, borderRadius: '16px', padding: '1.2rem', position: 'sticky', top: 0 }}>
+      <div style={{
+        order: 2, width: isMobile ? '100%' : '340px', flexShrink: 0, background: C.white,
+        border: `1.5px solid ${C.border}`, borderRadius: '16px', padding: isMobile ? '1rem' : '1.2rem',
+        position: isMobile ? 'static' : 'sticky', top: 0, boxSizing: 'border-box',
+      }}>
         <div style={{ fontWeight: 'bold', color: C.dark, marginBottom: '10px', fontSize: '0.95rem' }}>+ Tambah Bahan Ajar</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           <div>
@@ -381,7 +401,7 @@ const TeacherContent = () => {
             />
           </div>
           <button
-            style={{ ...btnPrimary, alignSelf: 'flex-start' }}
+            style={{ ...btnPrimary, alignSelf: isMobile ? 'stretch' : 'flex-start', textAlign: 'center' }}
             onClick={handleTambahBab}
             disabled={addingBab || !mapelBaru.trim() || !judulBabBaru.trim()}
           >
@@ -391,7 +411,7 @@ const TeacherContent = () => {
       </div>
 
       {/* Daftar bab, dikelompokkan per mapel (kolom kiri) */}
-      <div style={{ order: 1, flex: '1 1 420px', minWidth: 0 }}>
+      <div style={{ order: 1, flex: isMobile ? '1 1 100%' : '1 1 420px', minWidth: 0, width: isMobile ? '100%' : 'auto' }}>
       {babList.length === 0 ? (
         <div style={{ textAlign: 'center', color: C.gray, padding: '2rem', background: C.white, borderRadius: '16px', border: `1.5px dashed ${C.border}` }}>
           Belum ada bahan ajar. Tambahkan mapel & bab pertama Anda di samping.
@@ -413,13 +433,16 @@ const TeacherContent = () => {
               {babGroup.map((bab, idx) => (
             <div key={bab.id} style={{ background: C.white, border: `1.5px solid ${C.border}`, borderRadius: '16px', overflow: 'hidden' }}>
               {/* Header bab */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '14px 16px', background: C.cream }}>
-                <button onClick={() => toggleExpand(bab.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1rem', color: C.gray }}>
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: isMobile ? '8px' : '10px',
+                padding: isMobile ? '12px' : '14px 16px', background: C.cream, flexWrap: 'wrap',
+              }}>
+                <button onClick={() => toggleExpand(bab.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1rem', color: C.gray, flexShrink: 0 }}>
                   {expanded[bab.id] ? '▾' : '▸'}
                 </button>
 
                 {editingBabId === bab.id ? (
-                  <>
+                  <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: '8px', flex: 1, minWidth: isMobile ? '100%' : 'auto' }}>
                     <input
                       style={{ ...inputStyle, flex: 1 }}
                       value={editBabValue}
@@ -427,26 +450,30 @@ const TeacherContent = () => {
                       onKeyDown={e => e.key === 'Enter' && handleSimpanEditBab(bab.id)}
                       autoFocus
                     />
-                    <button style={btnPrimary} onClick={() => handleSimpanEditBab(bab.id)}>Simpan</button>
-                    <button style={btnGhost} onClick={() => setEditingBabId(null)}>Batal</button>
-                  </>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button style={{ ...btnPrimary, flex: isMobile ? 1 : 'initial' }} onClick={() => handleSimpanEditBab(bab.id)}>Simpan</button>
+                      <button style={{ ...btnGhost, flex: isMobile ? 1 : 'initial' }} onClick={() => setEditingBabId(null)}>Batal</button>
+                    </div>
+                  </div>
                 ) : (
                   <>
-                    <span style={{ flex: 1, fontWeight: 'bold', color: C.dark, fontSize: '1rem' }}>
+                    <span style={{ flex: '1 1 auto', minWidth: isMobile ? '100%' : 0, fontWeight: 'bold', color: C.dark, fontSize: isMobile ? '0.95rem' : '1rem', wordBreak: 'break-word' }}>
                       {idx + 1}. {bab.judul_bab}
                     </span>
                     <span style={{ color: C.gray, fontSize: '0.8rem' }}>
                       {(bab.sub_bab_ajar || []).length} sub bab
                     </span>
-                    <button style={btnGhost} onClick={() => handleEditBab(bab)}>✏️ Edit</button>
-                    <button style={{ ...btnGhost, color: C.danger }} onClick={() => handleHapusBab(bab.id)}>🗑️ Hapus</button>
+                    <div style={{ display: 'flex', gap: '6px', marginLeft: isMobile ? 0 : 'auto' }}>
+                      <button style={btnGhost} onClick={() => handleEditBab(bab)}>✏️ Edit</button>
+                      <button style={{ ...btnGhost, color: C.danger }} onClick={() => handleHapusBab(bab.id)}>🗑️ Hapus</button>
+                    </div>
                   </>
                 )}
               </div>
 
               {/* Isi bab: sub bab */}
               {expanded[bab.id] && (
-                <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div style={{ padding: isMobile ? '12px' : '14px 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   {(bab.sub_bab_ajar || []).length === 0 && (
                     <div style={{ color: C.gray, fontSize: '0.85rem', fontStyle: 'italic' }}>Belum ada sub bab.</div>
                   )}
@@ -486,8 +513,8 @@ const TeacherContent = () => {
                             )}
                           </div>
                           <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
-                            <button style={btnGhost} onClick={() => handleEditSub(sub)}>✏️</button>
-                            <button style={{ ...btnGhost, color: C.danger }} onClick={() => handleHapusSub(bab.id, sub.id)}>🗑️</button>
+                            <button style={{ ...btnGhost, padding: isMobile ? '8px 12px' : btnGhost.padding }} onClick={() => handleEditSub(sub)}>✏️</button>
+                            <button style={{ ...btnGhost, color: C.danger, padding: isMobile ? '8px 12px' : btnGhost.padding }} onClick={() => handleHapusSub(bab.id, sub.id)}>🗑️</button>
                           </div>
                         </div>
                       )}

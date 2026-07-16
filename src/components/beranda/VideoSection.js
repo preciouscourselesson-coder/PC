@@ -43,13 +43,13 @@ const VideoSection = () => {
         <h2 style={{ color: '#b4964b', fontSize: '1rem', letterSpacing: '2px', marginBottom: '8px', fontWeight: 'bold' }}>
           VIDEO PEMBAHASAN
         </h2>
-        <h3 style={{ color: '#171411', fontSize: '1.6rem', fontWeight: 'bold', margin: 0 }}>
+        <h3 style={{ color: '#171411', fontSize: 'clamp(1.3rem, 4vw, 1.6rem)', fontWeight: 'bold', margin: 0 }}>
           Belajar Lewat Pembahasan Video
         </h3>
       </div>
 
       {/* Konten: embed + daftar */}
-      <div style={{
+      <div className="video-grid" style={{
         display: 'grid',
         gridTemplateColumns: '2fr 1fr',
         gap: '1.5rem',
@@ -115,7 +115,7 @@ const VideoSection = () => {
         </div>
 
         {/* Kanan: Daftar Video */}
-        <div style={{
+        <div className="video-list" style={{
           background: '#1e1e2f',
           borderRadius: '24px',
           padding: '1.2rem',
@@ -171,6 +171,17 @@ const VideoSection = () => {
           ))}
         </div>
       </div>
+
+      <style>{`
+        @media (max-width: 700px) {
+          .video-grid {
+            grid-template-columns: 1fr !important;
+          }
+          .video-list {
+            max-height: none;
+          }
+        }
+      `}</style>
     </section>
   );
 };
