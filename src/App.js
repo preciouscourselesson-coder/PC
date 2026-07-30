@@ -47,7 +47,9 @@ import Pricelist from './components/admin/Pricelist';
 import PaketSiswa from './components/admin/PaketSiswa';
 import AdminUpdates from './components/admin/AdminUpdates';
 import AdminProfile from './components/admin/AdminProfile';
-import RecapPerubahanJadwal from './components/admin/RecapPerubahanJadwal'; // <-- import baru
+import RecapPerubahanJadwal from './components/admin/RecapPerubahanJadwal';
+import AdminAbsensi from './components/admin/AdminAbsensi';
+import AdminPayment from './components/admin/AdminPayment';
 
 import './App.css';
 
@@ -112,7 +114,9 @@ function App() {
           <Route path="paket-siswa" element={<PaketSiswa />} />
           <Route path="updates" element={<AdminUpdates />} />
           <Route path="profil" element={<AdminProfile />} />
-          <Route path="recap-perubahan-jadwal" element={<RecapPerubahanJadwal />} /> {/* <-- tambahan */}
+          <Route path="recap-perubahan-jadwal" element={<RecapPerubahanJadwal />} /> 
+          <Route path="rekap-absensi" element={<AdminAbsensi />} /> 
+          <Route path="payment" element={<AdminPayment />} />
         </Route>
       </Routes>
     </BrowserRouter>

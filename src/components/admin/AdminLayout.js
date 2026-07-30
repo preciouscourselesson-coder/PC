@@ -31,7 +31,9 @@ const navItems = [
   { label: 'Testimoni',               path: '/admin/testimoni',            icon: '⭐' },
   { label: 'Pengaturan Materi',       path: '/admin/pengaturan-materi',    icon: '📁' },
   { label: 'Paket & Siswa',           path: '/admin/paket-siswa',          icon: '📦' },
-  { label: 'Perubahan Jadwal',        path: '/admin/recap-perubahan-jadwal',     icon: '🔄' }, // <-- menu baru
+  { label: 'Payment',                 path: '/admin/payment',              icon: '💳' }, // <-- menu baru
+  { label: 'Perubahan Jadwal',        path: '/admin/recap-perubahan-jadwal', icon: '🔄' },
+  { label: 'Rekap Absensi',           path: '/admin/rekap-absensi',        icon: '📋' },
 ];
 
 const Sidebar = ({ user }) => {
@@ -73,7 +75,9 @@ const Topbar = ({ user, avatarUrl }) => {
     '/admin/pengaturan-materi': 'Pengaturan Materi',
     '/admin/pricelist': 'Pricelist',
     '/admin/paket-siswa': 'Paket & Siswa',
-    '/admin/recap-perubahan-jadwal': 'Perubahan Jadwal', // tambahan
+    '/admin/payment': 'Payment', // tambahan
+    '/admin/recap-perubahan-jadwal': 'Perubahan Jadwal',
+    '/admin/rekap-absensi': 'Rekap Absensi',
     '/admin/profil': 'Profil Admin',
   };
   const pageTitle = pageTitles[location.pathname] || 'Dashboard';

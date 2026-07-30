@@ -224,7 +224,7 @@ const TeacherUploadMateriModal = ({ userId, onUploaded }) => {
       const { data: publicUrlData } = supabase.storage.from('materi').getPublicUrl(path);
 
       const { error: insertError } = await supabase.from('materi_file').insert({
-        bab_id: babId,
+        bab_id_new: babId,
         sub_bab_id: subBabId || null,
         user_id: userId,
         nama: judul.trim(),
@@ -381,13 +381,13 @@ const TeacherArsipMateri = () => {
     try {
       let query = supabase
         .from('materi_file')
-        .select('id, nama, tipe, tanggal, url, kelas, status, deskripsi, bab_id, sub_bab_id, bab_ajar ( id, judul_bab, mapel ), sub_bab_ajar ( id, judul_sub_bab )')
+        .select('id, nama, tipe, tanggal, url, kelas, status, deskripsi, bab_id_new, sub_bab_id, bab_ajar ( id, judul_bab, mapel ), sub_bab_ajar ( id, judul_sub_bab )')
         .eq('user_id', userId)
         .eq('status', activeTab)
         .order('tanggal', { ascending: false });
 
       if (filterKelas) query = query.eq('kelas', filterKelas);
-      if (filterBab) query = query.eq('bab_id', filterBab);
+      if (filterBab) query = query.eq('bab_id_new', filterBab);
       if (search.trim()) query = query.ilike('nama', `%${search.trim()}%`);
 
       const { data, error } = await query;

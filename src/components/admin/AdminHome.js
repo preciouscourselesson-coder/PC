@@ -27,7 +27,7 @@ const btnSecondary = { background: 'none', border: `1px solid ${C.border}`, bord
 const btnDelete = { background: C.red, color: 'white', border: 'none', borderRadius: '6px', padding: '2px 8px', fontSize: '0.7rem', cursor: 'pointer' };
 
 // Komponen tabel mingguan (sama seperti sebelumnya)
-const WeeklyScheduleTable = ({ schedules, teachers, students, filterType }) => {
+const WeeklyScheduleTable = ({ schedules, teachers, students, filterType, onDelete }) => {
   const timeSlots = useMemo(() => {
     const set = new Set();
     schedules.forEach(s => set.add(`${s.jam_mulai}-${s.jam_selesai}`));
@@ -97,10 +97,34 @@ const WeeklyScheduleTable = ({ schedules, teachers, students, filterType }) => {
                     padding: '6px 8px', 
                     border: `1px solid ${C.border}`, 
                     textAlign: 'center',
+                    position: 'relative',
                     ...getCellStyle(s?.jenis)
                   }}>
                     {s ? (
                       <>
+                        {onDelete && (
+                          <button
+                            onClick={() => onDelete(s.id)}
+                            title="Hapus jadwal ini"
+                            style={{
+                              position: 'absolute',
+                              top: '2px',
+                              right: '2px',
+                              width: '16px',
+                              height: '16px',
+                              lineHeight: '14px',
+                              padding: 0,
+                              borderRadius: '50%',
+                              border: 'none',
+                              background: C.red,
+                              color: 'white',
+                              fontSize: '0.65rem',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            ×
+                          </button>
+                        )}
                         <div style={{ fontWeight: '500' }}>
                           {filterType === 'siswa' && (
                             <div style={{ fontSize: '0.7rem', color: C.gray, fontWeight: 'normal' }}>
@@ -431,6 +455,17 @@ const AdminHome = () => {
       });
     } catch (err) {
       alert('Gagal menyimpan jadwal guru: ' + err.message);
+    }
+  };
+
+  const handleDeleteJadwal = async (id) => {
+    if (!window.confirm('Yakin ingin menghapus jadwal ini? Tindakan ini tidak bisa dibatalkan.')) return;
+    try {
+      const { error } = await supabase.from('jadwal_les').delete().eq('id', id);
+      if (error) throw error;
+      setSchedules(prev => prev.filter(s => s.id !== id));
+    } catch (err) {
+      alert('Gagal menghapus jadwal: ' + err.message);
     }
   };
 
@@ -929,6 +964,7 @@ const AdminHome = () => {
                 teachers={teachers}
                 students={students}
                 filterType={filterType}
+                onDelete={handleDeleteJadwal}
               />
 
               {/* Jadwal Hari Ini */}
@@ -946,11 +982,12 @@ const AdminHome = () => {
                         <th style={{ padding: '8px 10px', textAlign: 'left', borderBottom: `1px solid ${C.border}` }}>Siswa</th>
                         <th style={{ padding: '8px 10px', textAlign: 'left', borderBottom: `1px solid ${C.border}` }}>Tipe</th>
                         <th style={{ padding: '8px 10px', textAlign: 'left', borderBottom: `1px solid ${C.border}` }}>Jenis</th>
+                        <th style={{ padding: '8px 10px', textAlign: 'left', borderBottom: `1px solid ${C.border}` }}>Aksi</th>
                       </tr>
                     </thead>
                     <tbody>
                       {todaySchedule.length === 0 && (
-                        <tr><td colSpan={filterType === 'siswa' ? 6 : 5} style={{ padding: '12px 10px', color: C.gray, textAlign: 'center' }}>Tidak ada jadwal les hari ini untuk filter ini.</td></tr>
+                        <tr><td colSpan={filterType === 'siswa' ? 7 : 6} style={{ padding: '12px 10px', color: C.gray, textAlign: 'center' }}>Tidak ada jadwal les hari ini untuk filter ini.</td></tr>
                       )}
                       {todaySchedule.map((row) => (
                         <tr key={row.id} style={{ borderBottom: `1px solid ${C.border}` }}>
@@ -983,6 +1020,15 @@ const AdminHome = () => {
                             }}>
                               {row.jenis}
                             </span>
+                          </td>
+                          <td style={{ padding: '8px 10px' }}>
+                            <button
+                              onClick={() => handleDeleteJadwal(row.id)}
+                              title="Hapus jadwal ini"
+                              style={btnDelete}
+                            >
+                              🗑️
+                            </button>
                           </td>
                         </tr>
                       ))}

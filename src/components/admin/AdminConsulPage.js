@@ -84,6 +84,23 @@ const FilterChip = ({ label, active, onClick }) => (
   </button>
 );
 
+// ─── Komponen Statistik ──────────────────────────────────────────────────────
+
+const StatCard = ({ label, value, color }) => (
+  <div style={{
+    background: C.white,
+    borderRadius: '16px',
+    padding: '12px 20px',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+    border: `1px solid ${C.border}`,
+    minWidth: '100px',
+    textAlign: 'center',
+  }}>
+    <div style={{ fontSize: '0.8rem', color: C.gray, marginBottom: '4px' }}>{label}</div>
+    <div style={{ fontSize: '1.8rem', fontWeight: 'bold', color: color || C.dark }}>{value}</div>
+  </div>
+);
+
 // ─── Halaman Admin ──────────────────────────────────────────────────────────
 
 const AdminConsulPage = () => {
@@ -113,7 +130,6 @@ const AdminConsulPage = () => {
 
       if (error) throw error;
 
-      // Bersihkan data: pastikan status memiliki nilai yang valid
       const cleanedData = (data || []).map(item => {
         if (!['baru', 'diproses', 'selesai'].includes(item.status_konsultasi)) {
           item.status_konsultasi = 'baru';
@@ -193,7 +209,6 @@ const AdminConsulPage = () => {
 
       if (error) throw error;
 
-      // Update local state
       const updatedList = konsultasiList.map(item =>
         item.id === selectedId ? { ...item, ...updateData } : item
       );
@@ -213,6 +228,12 @@ const AdminConsulPage = () => {
       setUpdating(false);
     }
   };
+
+  // ─── Hitung statistik ─────────────────────────────────────────────────────
+  const total = konsultasiList.length;
+  const countBaru = konsultasiList.filter(item => item.status_konsultasi === 'baru').length;
+  const countDiproses = konsultasiList.filter(item => item.status_konsultasi === 'diproses').length;
+  const countSelesai = konsultasiList.filter(item => item.status_konsultasi === 'selesai').length;
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
@@ -258,6 +279,14 @@ const AdminConsulPage = () => {
         <FilterChip label="Baru" active={filterStatus === 'baru'} onClick={() => setFilterStatus('baru')} />
         <FilterChip label="Diproses" active={filterStatus === 'diproses'} onClick={() => setFilterStatus('diproses')} />
         <FilterChip label="Selesai" active={filterStatus === 'selesai'} onClick={() => setFilterStatus('selesai')} />
+      </div>
+
+      {/* Statistik */}
+      <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
+        <StatCard label="Total" value={total} color={C.dark} />
+        <StatCard label="Baru" value={countBaru} color="#2e7d32" />
+        <StatCard label="Diproses" value={countDiproses} color="#e65100" />
+        <StatCard label="Selesai" value={countSelesai} color="#0d47a1" />
       </div>
 
       {/* Tabel */}
@@ -328,7 +357,7 @@ const AdminConsulPage = () => {
         </div>
       )}
 
-      {/* Modal Detail */}
+      {/* Modal Detail (tidak berubah) */}
       {showDetail && detailData && (
         <div style={{
           position: 'fixed',
