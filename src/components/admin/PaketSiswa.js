@@ -67,6 +67,18 @@ const formatRupiah = (value) => {
   return 'Rp' + num.toLocaleString('id-ID');
 };
 
+// Hitung harga pricelist sesuai jenis paket (Private/Group) & jumlah siswa group.
+// Disamakan persis dengan getHargaPaket di InvoicePaketSiswa.js agar Total Harga
+// yang ditampilkan di sini konsisten dengan nominal yang muncul di invoice.
+const getHargaPaket = (jenis, jumlahGroup, pricelist) => {
+  if (!pricelist) return 0;
+  if (jenis !== 'Group') return pricelist.harga_privat || 0;
+  if (jumlahGroup === 2) return pricelist.harga_2siswa ?? pricelist.harga_privat ?? 0;
+  if (jumlahGroup === 3) return pricelist.harga_3siswa ?? pricelist.harga_privat ?? 0;
+  if (jumlahGroup === 4) return pricelist.harga_4siswa ?? pricelist.harga_privat ?? 0;
+  return pricelist.harga_privat || 0;
+};
+
 const BULAN_SINGKAT = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
 
 const formatTanggal = (isoDate) => {
@@ -180,6 +192,8 @@ const FormTambahSiswa = ({ onSuccess, onCancelEdit, userRole, guruId, editingIte
     jenis: 'Private',
     jumlah_siswa_group: '2',
     status: 'Aktif',
+    harga_custom: '',
+    catatan_harga_custom: '',
   });
   const [errors, setErrors] = useState({});
 
@@ -233,6 +247,8 @@ const FormTambahSiswa = ({ onSuccess, onCancelEdit, userRole, guruId, editingIte
         jenis: editingItem.jenis === 'Group' ? 'Group' : 'Private',
         jumlah_siswa_group: editingItem.jumlah_siswa_group ? String(editingItem.jumlah_siswa_group) : '2',
         status: editingItem.status || 'Aktif',
+        harga_custom: editingItem.harga_custom != null ? String(editingItem.harga_custom) : '',
+        catatan_harga_custom: editingItem.catatan_harga_custom || '',
       });
     } else {
       resetForm();
@@ -250,6 +266,8 @@ const FormTambahSiswa = ({ onSuccess, onCancelEdit, userRole, guruId, editingIte
       jenis: 'Private',
       jumlah_siswa_group: '2',
       status: 'Aktif',
+      harga_custom: '',
+      catatan_harga_custom: '',
     });
   };
 
@@ -314,6 +332,8 @@ const FormTambahSiswa = ({ onSuccess, onCancelEdit, userRole, guruId, editingIte
         total_pertemuan: totalPertemuan,
         sisa_pertemuan: sisaPertemuan,
         status: form.status,
+        harga_custom: form.harga_custom !== '' ? Number(form.harga_custom) : null,
+        catatan_harga_custom: form.harga_custom !== '' ? (form.catatan_harga_custom || null) : null,
       };
 
       const { error } = isEditing
@@ -499,6 +519,32 @@ const FormTambahSiswa = ({ onSuccess, onCancelEdit, userRole, guruId, editingIte
           </select>
         </div>
 
+        <div style={{ borderTop: `1px dashed ${C.border}`, paddingTop: '0.85rem' }}>
+          <label style={labelStyle}>Harga Khusus (opsional)</label>
+          <input
+            type="number"
+            name="harga_custom"
+            value={form.harga_custom}
+            onChange={handleChange}
+            placeholder="Kosongkan untuk pakai harga pricelist otomatis"
+            style={inputStyle(false)}
+            min="0"
+          />
+          {form.harga_custom !== '' && (
+            <input
+              type="text"
+              name="catatan_harga_custom"
+              value={form.catatan_harga_custom}
+              onChange={handleChange}
+              placeholder="Alasan, mis. Lokasi Batam - tambahan transport"
+              style={{ ...inputStyle(false), marginTop: '6px' }}
+            />
+          )}
+          <div style={{ fontSize: '0.72rem', color: C.grayLight, marginTop: '4px' }}>
+            Isi hanya kalau siswa ini butuh harga berbeda dari pricelist standar (mis. lokasi berbeda). Harga pricelist tidak berubah untuk siswa lain.
+          </div>
+        </div>
+
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', paddingTop: '0.25rem' }}>
           {isEditing && (
             <button
@@ -632,7 +678,12 @@ const PaketSiswa = () => {
           jumlah_siswa_group: item.jumlah_siswa_group || null,
           pengajar: pricelist.pengajar || '-',
           durasi: pricelist.durasi || '-',
-          harga: pricelist.harga_privat || 0,
+          harga: item.harga_custom != null
+            ? item.harga_custom
+            : getHargaPaket(item.jenis, item.jumlah_siswa_group, pricelist),
+          harga_dari_pricelist: getHargaPaket(item.jenis, item.jumlah_siswa_group, pricelist),
+          is_harga_custom: item.harga_custom != null,
+          catatan_harga_custom: item.catatan_harga_custom || null,
           pricelist: pricelist,
           total_pertemuan: item.total_pertemuan,
           sisa_pertemuan: item.sisa_pertemuan,
@@ -891,6 +942,26 @@ const PaketSiswa = () => {
                       <td style={{ padding: '10px' }}>{item.kelas_siswa}</td>
                       <td style={{ padding: '10px', fontWeight: 600 }}>
                         <div>{item.paket}</div>
+                        {item.is_harga_custom && (
+                          <span
+                            title={item.catatan_harga_custom || 'Harga khusus'}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '3px',
+                              marginTop: '3px',
+                              marginRight: '4px',
+                              background: C.redBg,
+                              color: C.red,
+                              padding: '1px 8px',
+                              borderRadius: '999px',
+                              fontSize: '0.65rem',
+                              fontWeight: 700,
+                            }}
+                          >
+                            💰 Harga Khusus
+                          </span>
+                        )}
                         {item.pengajar && item.pengajar !== '-' && (
                           <span
                             style={{
@@ -1164,6 +1235,28 @@ const PaketSiswa = () => {
                         {formatRupiah(selectedItem.harga)}
                       </span>
                     </div>
+                    {selectedItem.is_harga_custom && (
+                      <div
+                        style={{
+                          background: 'rgba(224,87,79,0.12)',
+                          border: `1px solid ${D.danger}`,
+                          borderRadius: '8px',
+                          padding: '8px 10px',
+                          fontSize: '0.72rem',
+                          color: D.text,
+                        }}
+                      >
+                        ⚠️ Harga khusus, bukan dari pricelist standar
+                        <span style={{ color: D.textMuted }}>
+                          {' '}(pricelist: {formatRupiah(selectedItem.harga_dari_pricelist)})
+                        </span>
+                        {selectedItem.catatan_harga_custom && (
+                          <div style={{ color: D.textMuted, marginTop: '3px' }}>
+                            {selectedItem.catatan_harga_custom}
+                          </div>
+                        )}
+                      </div>
+                    )}
                     {selectedItem.pricelist && (
                       <div
                         style={{

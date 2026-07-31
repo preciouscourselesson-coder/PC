@@ -60,8 +60,10 @@ const addDaysISO = (isoDate, days) => {
   return d.toISOString().slice(0, 10);
 };
 
-// Hitung harga sesuai jenis paket (Private/Group) mengikuti kolom harga di pricelist
-const getHargaPaket = (jenis, jumlahGroup, pricelist) => {
+// Hitung harga sesuai jenis paket (Private/Group) mengikuti kolom harga di pricelist.
+// Kalau ada hargaCustom (harga khusus per siswa), itu yang dipakai dan pricelist diabaikan.
+const getHargaPaket = (jenis, jumlahGroup, pricelist, hargaCustom) => {
+  if (hargaCustom != null) return hargaCustom;
   if (!pricelist) return 0;
   if (jenis !== 'Group') return pricelist.harga_privat || 0;
   if (jumlahGroup === 2) return pricelist.harga_2siswa ?? pricelist.harga_privat ?? 0;
@@ -78,7 +80,8 @@ const normalizeFromItem = (it) => ({
   jumlah_siswa_group: it.jumlah_siswa_group,
   totalPertemuan: it.total_pertemuan,
   durasi: it.durasi,
-  harga: getHargaPaket(it.jenis, it.jumlah_siswa_group, it.pricelist),
+  harga: getHargaPaket(it.jenis, it.jumlah_siswa_group, it.pricelist, it.harga_custom),
+  isHargaCustom: it.harga_custom != null,
 });
 
 // Paket lain milik siswa yang sama, diambil langsung dari Supabase
@@ -89,7 +92,8 @@ const normalizeFromRow = (row) => ({
   jumlah_siswa_group: row.jumlah_siswa_group,
   totalPertemuan: row.total_pertemuan,
   durasi: row.pricelist?.durasi,
-  harga: getHargaPaket(row.jenis, row.jumlah_siswa_group, row.pricelist),
+  harga: getHargaPaket(row.jenis, row.jumlah_siswa_group, row.pricelist, row.harga_custom),
+  isHargaCustom: row.harga_custom != null,
 });
 
 const fieldStyle = {
@@ -140,7 +144,7 @@ const InvoicePaketSiswa = ({ item, onClose }) => {
       const { data, error } = await supabase
         .from('paket_siswa')
         .select(`
-          id, jenis, jumlah_siswa_group, total_pertemuan, status,
+          id, jenis, jumlah_siswa_group, total_pertemuan, status, harga_custom,
           pricelist:pricelist!paket_siswa_pricelist_id_fkey (program, durasi, harga_privat, harga_2siswa, harga_3siswa, harga_4siswa)
         `)
         .eq('siswa_id', item.siswa_id)
@@ -294,6 +298,20 @@ const InvoicePaketSiswa = ({ item, onClose }) => {
                         {l.jenis}{l.jenis === 'Group' && l.jumlah_siswa_group ? ` (${l.jumlah_siswa_group} org)` : ''}
                         {isCurrent ? ' - paket yang dipilih' : ''}
                       </span>
+                      {l.isHargaCustom && (
+                        <span
+                          style={{
+                            background: 'rgba(224,87,79,0.16)',
+                            color: '#e0574f',
+                            padding: '1px 8px',
+                            borderRadius: '999px',
+                            fontSize: '0.65rem',
+                            fontWeight: 700,
+                          }}
+                        >
+                          💰 Harga Khusus
+                        </span>
+                      )}
                     </label>
                     {state.included && (
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', paddingLeft: '24px' }}>
