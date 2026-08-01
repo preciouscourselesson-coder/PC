@@ -100,7 +100,7 @@ const Sidebar = ({ user, isMobile, open, onClose }) => {
             <button
               onClick={onClose}
               aria-label="Tutup menu"
-              style={{ border: 'none', background: 'none', fontSize: '1.3rem', cursor: 'pointer', color: C.gray, lineHeight: 1 }}
+              style={{ border: 'none', background: 'none', fontSize: '1.3rem', cursor: 'pointer', color: C.gray, lineHeight: 1, padding: '8px' }}
             >
               ✕
             </button>
@@ -114,10 +114,12 @@ const Sidebar = ({ user, isMobile, open, onClose }) => {
                 key={item.path}
                 onClick={() => handleNavigate(item.path)}
                 style={{
-                  display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 14px', borderRadius: '12px',
+                  display: 'flex', alignItems: 'center', gap: '10px', padding: isMobile ? '14px 14px' : '12px 14px',
+                  borderRadius: '12px',
                   border: 'none', background: active ? C.goldBg : 'transparent', color: active ? C.gold : C.gray,
-                  fontWeight: active ? 'bold' : 'normal', fontSize: '0.95rem', cursor: 'pointer', fontFamily: 'inherit',
-                  textAlign: 'left', width: '100%', transition: 'all 0.15s',
+                  fontWeight: active ? 'bold' : 'normal', fontSize: isMobile ? '1rem' : '0.95rem', cursor: 'pointer',
+                  fontFamily: 'inherit', textAlign: 'left', width: '100%', transition: 'all 0.15s',
+                  minHeight: isMobile ? '48px' : 'auto',
                 }}
                 onMouseEnter={e => { if (!active) e.currentTarget.style.background = C.cream; }}
                 onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent'; }}
@@ -130,7 +132,12 @@ const Sidebar = ({ user, isMobile, open, onClose }) => {
         <div style={{ padding: '0 0.8rem', display: 'flex', flexDirection: 'column', gap: '4px' }}>
           <button
             onClick={handleLogout}
-            style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 14px', borderRadius: '12px', border: 'none', background: 'transparent', color: '#e74c3c', fontSize: '0.95rem', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', width: '100%' }}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '10px', padding: isMobile ? '14px 14px' : '12px 14px',
+              borderRadius: '12px', border: 'none', background: 'transparent', color: '#e74c3c',
+              fontSize: isMobile ? '1rem' : '0.95rem', cursor: 'pointer', fontFamily: 'inherit',
+              textAlign: 'left', width: '100%', minHeight: isMobile ? '48px' : 'auto',
+            }}
             onMouseEnter={e => e.currentTarget.style.background = '#fff0f0'}
             onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
           >
@@ -225,7 +232,7 @@ const Topbar = ({ user, isMobile, onMenuClick }) => {
           <button
             onClick={onMenuClick}
             aria-label="Buka menu"
-            style={{ border: 'none', background: 'none', fontSize: '1.4rem', cursor: 'pointer', color: C.dark, lineHeight: 1, padding: '4px' }}
+            style={{ border: 'none', background: 'none', fontSize: '1.4rem', cursor: 'pointer', color: C.dark, lineHeight: 1, padding: '8px', minHeight: '44px', minWidth: '44px' }}
           >
             ☰
           </button>
@@ -246,9 +253,9 @@ const Topbar = ({ user, isMobile, onMenuClick }) => {
           style={{
             display: 'flex', alignItems: 'center', gap: '6px',
             background: 'none', border: 'none', cursor: 'pointer',
-            fontFamily: 'inherit', fontSize: '0.9rem', color: C.gray,
-            padding: isMobile ? '6px 8px' : '6px 12px', borderRadius: '8px',
-            transition: 'all 0.15s',
+            fontFamily: 'inherit', fontSize: isMobile ? '1rem' : '0.9rem', color: C.gray,
+            padding: isMobile ? '10px 12px' : '6px 12px', borderRadius: '8px',
+            transition: 'all 0.15s', minHeight: '44px',
           }}
           onMouseEnter={e => e.currentTarget.style.background = C.cream}
           onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
@@ -259,8 +266,21 @@ const Topbar = ({ user, isMobile, onMenuClick }) => {
 
         {/* User info (avatar + nama + dropdown) */}
         <div style={{ position: 'relative' }}>
-          <button onClick={() => setDropOpen(!dropOpen)} style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
-            <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: C.gold, color: C.white, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '1rem', overflow: 'hidden', flexShrink: 0 }}>
+          <button
+            onClick={() => setDropOpen(!dropOpen)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '10px',
+              background: 'none', border: 'none', cursor: 'pointer',
+              fontFamily: 'inherit', padding: isMobile ? '8px 0' : 0,
+              minHeight: '44px',
+            }}
+          >
+            <div style={{
+              width: '36px', height: '36px', borderRadius: '50%',
+              background: C.gold, color: C.white,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontWeight: 'bold', fontSize: '1rem', overflow: 'hidden', flexShrink: 0,
+            }}>
               {avatarUrl ? (
                 <img src={avatarUrl} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               ) : (
@@ -276,9 +296,41 @@ const Topbar = ({ user, isMobile, onMenuClick }) => {
             <span style={{ color: C.gray, fontSize: '0.8rem' }}>▾</span>
           </button>
           {dropOpen && (
-            <div style={{ position: 'absolute', right: 0, top: 'calc(100% + 8px)', background: C.white, borderRadius: '14px', minWidth: '160px', boxShadow: '0 8px 24px rgba(0,0,0,0.1)', overflow: 'hidden', border: `1px solid ${C.border}`, zIndex: 100 }}>
-              <button onClick={() => { setDropOpen(false); navigate('/guru/profil'); }} style={{ display: 'block', width: '100%', padding: '11px 16px', border: 'none', background: 'none', textAlign: 'left', fontSize: '0.9rem', color: C.dark, cursor: 'pointer', fontFamily: 'inherit', borderBottom: `1px solid ${C.border}` }} onMouseEnter={e => e.currentTarget.style.background = C.cream} onMouseLeave={e => e.currentTarget.style.background = 'none'}>👤 Profil Saya</button>
-              <button onClick={handleLogout} style={{ display: 'block', width: '100%', padding: '11px 16px', border: 'none', background: 'none', textAlign: 'left', fontSize: '0.9rem', color: '#e74c3c', cursor: 'pointer', fontFamily: 'inherit' }} onMouseEnter={e => e.currentTarget.style.background = '#fff0f0'} onMouseLeave={e => e.currentTarget.style.background = 'none'}>🚪 Keluar</button>
+            <div style={{
+              position: 'absolute', right: 0, top: 'calc(100% + 8px)',
+              background: C.white, borderRadius: '14px', minWidth: '160px',
+              boxShadow: '0 8px 24px rgba(0,0,0,0.1)',
+              overflow: 'hidden', border: `1px solid ${C.border}`, zIndex: 100,
+            }}>
+              <button
+                onClick={() => { setDropOpen(false); navigate('/guru/profil'); }}
+                style={{
+                  display: 'block', width: '100%', padding: '12px 16px',
+                  border: 'none', background: 'none', textAlign: 'left',
+                  fontSize: isMobile ? '1rem' : '0.9rem', color: C.dark,
+                  cursor: 'pointer', fontFamily: 'inherit',
+                  borderBottom: `1px solid ${C.border}`,
+                  minHeight: '44px',
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = C.cream}
+                onMouseLeave={e => e.currentTarget.style.background = 'none'}
+              >
+                👤 Profil Saya
+              </button>
+              <button
+                onClick={handleLogout}
+                style={{
+                  display: 'block', width: '100%', padding: '12px 16px',
+                  border: 'none', background: 'none', textAlign: 'left',
+                  fontSize: isMobile ? '1rem' : '0.9rem', color: '#e74c3c',
+                  cursor: 'pointer', fontFamily: 'inherit',
+                  minHeight: '44px',
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = '#fff0f0'}
+                onMouseLeave={e => e.currentTarget.style.background = 'none'}
+              >
+                🚪 Keluar
+              </button>
             </div>
           )}
         </div>

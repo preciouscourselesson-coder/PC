@@ -19,7 +19,6 @@ const HARI_LIST = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu
 
 const MOBILE_BREAKPOINT = 768;
 
-// Hook kecil untuk deteksi ukuran layar (mobile vs desktop)
 const useIsMobile = () => {
   const [isMobile, setIsMobile] = useState(
     typeof window !== 'undefined' ? window.innerWidth <= MOBILE_BREAKPOINT : false
@@ -54,8 +53,6 @@ const StatusPill = ({ status }) => {
 const STATUS_SISWA_SETUJU = ['disetujui_siswa', 'disetujui_menunggu_admin', 'disetujui_admin'];
 
 const getAggregateStatus = (rows) => {
-  // Bukan batch (cuma 1 siswa) -> tampilkan status aslinya langsung,
-  // tidak perlu logika agregat.
   if (rows.length === 1) return rows[0].status;
   if (rows.some(r => r.status === 'ditolak')) return 'ditolak';
   if (rows.some(r => r.status === 'ditolak_admin')) return 'ditolak_admin';
@@ -248,7 +245,6 @@ const TeacherHome = () => {
       if (materiError) throw materiError;
       setMateriRequestList(materiData || []);
 
-      // 🔥 Perbaikan: Hapus filter tanggal agar semua data dari siswa muncul
       const { data: tugasData, error: tugasError } = await supabase
         .from('tugas_penilaian')
         .select(`
@@ -257,13 +253,12 @@ const TeacherHome = () => {
           id_bab (id, nama)
         `)
         .eq('id_guru', guruData.id)
-        .not('siswa_id', 'is', null)  // hanya dari siswa
+        .not('siswa_id', 'is', null)
         .order('tanggal', { ascending: true });
       if (tugasError) throw tugasError;
       setUjianTerdekatList(tugasData || []);
 
       await refreshMateriArsip(profileId);
-
       await loadMapel();
     } catch (err) {
       console.error(err);
@@ -273,11 +268,6 @@ const TeacherHome = () => {
     }
   };
 
-  // materi_file.bab_id TIDAK punya FK constraint di database (lihat dokumentasi
-  // audit skema, bagian 4.4), jadi PostgREST tidak bisa melakukan embed
-  // `bab_id (id, nama, mapel_id(...))` secara langsung — ini yang menyebabkan
-  // error PGRST200. Solusinya: ambil materi_file dan materi_bab secara
-  // terpisah, lalu gabungkan manual di JS.
   const refreshMateriArsip = async (userId) => {
     const { data: rows, error: fileError } = await supabase
       .from('materi_file')
@@ -288,10 +278,8 @@ const TeacherHome = () => {
       console.error(fileError);
       return;
     }
-
     const list = rows || [];
     const babIds = [...new Set(list.map(r => r.bab_id).filter(Boolean))];
-
     let babMap = {};
     if (babIds.length > 0) {
       const { data: babRows, error: babError } = await supabase
@@ -304,7 +292,6 @@ const TeacherHome = () => {
         babMap = Object.fromEntries((babRows || []).map(b => [b.id, b]));
       }
     }
-
     setMateriArsip(list.map(r => ({ ...r, bab_id: r.bab_id ? (babMap[r.bab_id] || null) : null })));
   };
 
@@ -365,20 +352,16 @@ const TeacherHome = () => {
     setErrorMsg('');
     try {
       const jadwalTerpilih = jadwalList.find(j => j.id === selectedJadwalId);
-
       const daftarSiswaId = jadwalTerpilih?.siswa_id
         ? [jadwalTerpilih.siswa_id]
         : (Array.isArray(jadwalTerpilih?.siswa_ids) ? jadwalTerpilih.siswa_ids : []);
-
       if (daftarSiswaId.length === 0) {
         throw new Error('Jadwal ini tidak memiliki siswa terdaftar, tidak bisa mengajukan perubahan.');
       }
-
       const isKelompok = daftarSiswaId.length > 1;
       const batchId = isKelompok
         ? (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`)
         : null;
-
       const basePayload = {
         jadwal_id: selectedJadwalId,
         guru_id: guru.id,
@@ -392,16 +375,13 @@ const TeacherHome = () => {
         alasan: formData.alasan || null,
         status: 'menunggu_persetujuan',
       };
-
       const payloads = daftarSiswaId.map(siswaId => ({
         ...basePayload,
         siswa_id: siswaId,
         batch_id: batchId,
       }));
-
       const { error } = await supabase.from('pengajuan_perubahan_jadwal').insert(payloads);
       if (error) throw error;
-
       try {
         if (daftarSiswaId.length > 0) {
           const pesan = `Guru ${guru.nama} mengajukan perubahan jadwal ke ${formData.hari_baru || '-'} ${formData.jam_mulai_baru || ''}-${formData.jam_selesai_baru || ''}.${isKelompok ? ' Perubahan ini butuh persetujuan semua siswa di kelompok.' : ''} Mohon segera direspons.`;
@@ -412,7 +392,6 @@ const TeacherHome = () => {
       } catch (notifErr) {
         console.error('Gagal mengirim notifikasi ke siswa:', notifErr);
       }
-
       setShowForm(false);
       await loadAll();
     } catch (err) {
@@ -433,7 +412,6 @@ const TeacherHome = () => {
         .update({ status: newStatus })
         .eq('id', p.id);
       if (error) throw error;
-
       if (setuju) {
         const { data: adminUsers, error: adminError } = await supabase
           .from('profiles')
@@ -451,7 +429,6 @@ const TeacherHome = () => {
           }
         }
       }
-
       setConfirmTolakId(null);
       await loadAll();
     } catch (err) {
@@ -495,13 +472,11 @@ const TeacherHome = () => {
         })
         .eq('id', materiRespondId);
       if (error) throw error;
-
       setMateriRequestList(list => list.map(m => (
         m.id === materiRespondId
           ? { ...m, status: materiRespondAksi, catatan_guru: materiCatatan || null }
           : m
       )));
-
       if (item?.siswa_id) {
         try {
           const label = materiRespondAksi === 'selesai' ? 'diselesaikan' : 'ditolak';
@@ -514,7 +489,6 @@ const TeacherHome = () => {
           console.error('Gagal mengirim notifikasi ke siswa:', notifErr);
         }
       }
-
       cancelMateriRespond();
     } catch (err) {
       console.error(err);
@@ -541,7 +515,6 @@ const TeacherHome = () => {
       const request = materiRequestList.find(m => m.id === selectedRequestId);
       const materi = materiArsip.find(m => m.id === selectedMateriId);
       if (!request || !materi) throw new Error('Data tidak ditemukan.');
-
       const { error } = await supabase
         .from('materi_request')
         .update({
@@ -551,7 +524,6 @@ const TeacherHome = () => {
         })
         .eq('id', selectedRequestId);
       if (error) throw error;
-
       if (request?.siswa_id) {
         await supabase.from('notifikasi').insert({
           user_id: request.siswa_id,
@@ -559,13 +531,11 @@ const TeacherHome = () => {
           link: null,
         });
       }
-
       setMateriRequestList(list => list.map(m =>
         m.id === selectedRequestId
           ? { ...m, status: 'selesai', catatan_guru: `Materi "${materi.nama}" telah dikirimkan.${kirimMateriNote ? ` Catatan: ${kirimMateriNote}` : ''}` }
           : m
       ));
-
       setShowKirimMateri(false);
       setSelectedRequestId(null);
       setSelectedMateriId('');
@@ -576,7 +546,7 @@ const TeacherHome = () => {
     }
   };
 
-  // ========== PENGAJUAN PENILAIAN/TUGAS (untuk guru, tetap dipertahankan) ==========
+  // ========== PENGAJUAN PENILAIAN/TUGAS ==========
   const submitUjian = async () => {
     if (!ujianForm.mapel_id) {
       setErrorMsg('Pilih mapel terlebih dahulu.');
@@ -613,10 +583,8 @@ const TeacherHome = () => {
         .insert(payload)
         .select();
       if (error) throw error;
-
       const mapelNama = mapelOptions.find(m => m.id === ujianForm.mapel_id)?.nama || '';
       const babNama = ujianBabOptions.find(b => b.id === ujianForm.bab_id)?.nama || '';
-
       const { data: adminUsers, error: adminError } = await supabase
         .from('profiles')
         .select('id')
@@ -631,7 +599,6 @@ const TeacherHome = () => {
           });
         }
       }
-
       setShowUjianForm(false);
       setUjianForm({ mapel_id: '', bab_id: '', materi: '', nama_siswa: '', tanggal: '', deskripsi: '' });
       setUjianBabOptions([]);
@@ -649,12 +616,10 @@ const TeacherHome = () => {
     const fileExt = file.name.split('.').pop();
     const fileName = `${Date.now()}.${fileExt}`;
     const filePath = `${authUid}/${fileName}`;
-
     const { error } = await supabase.storage
       .from('materi')
       .upload(filePath, file, { cacheControl: '3600', upsert: false });
     if (error) throw error;
-
     const { data: urlData } = supabase.storage
       .from('materi')
       .getPublicUrl(filePath);
@@ -677,7 +642,6 @@ const TeacherHome = () => {
       } else if (!materiForm.mapel_id) {
         throw new Error('Pilih atau tambahkan mapel.');
       }
-
       let babId = materiForm.bab_id;
       if (materiForm.bab_id === 'new' && materiForm.bab_nama) {
         const { data: newBab, error: babError } = await supabase
@@ -689,11 +653,9 @@ const TeacherHome = () => {
       } else if (!materiForm.bab_id) {
         throw new Error('Pilih atau tambahkan bab.');
       }
-
       let fileUrl = null;
       let fileTipe = null;
       let fileNama = '';
-
       if (materiForm.file) {
         fileUrl = await uploadMateriFile(materiForm.file, guru.profile_id);
         fileTipe = materiForm.file.type.startsWith('image/') ? 'image' : 'pdf';
@@ -705,7 +667,6 @@ const TeacherHome = () => {
       } else {
         throw new Error('Pilih file atau masukkan link.');
       }
-
       const { error: fileError } = await supabase
         .from('materi_file')
         .insert({
@@ -718,7 +679,6 @@ const TeacherHome = () => {
           url: fileUrl,
         });
       if (fileError) throw fileError;
-
       setShowMateriForm(false);
       setMateriForm({ mapel_id: '', mapel_nama: '', bab_id: '', bab_nama: '', file: null, link: '' });
       await refreshMateriArsip(guru.profile_id);
@@ -732,27 +692,31 @@ const TeacherHome = () => {
 
   // ========== RENDER ==========
   const cardStyle = { background: C.white, borderRadius: '16px', border: `1.5px solid ${C.border}`, padding: isMobile ? '1rem' : '1.5rem' };
-  const linkBtn = { background: 'none', border: 'none', color: C.gold, fontWeight: '600', cursor: 'pointer' };
+  const linkBtn = { background: 'none', border: 'none', color: C.gold, fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit' };
   const modalOverlayStyle = {
     position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
     display: 'flex', alignItems: isMobile ? 'flex-end' : 'center', justifyContent: 'center', zIndex: 60,
   };
   const modalContentStyle = {
-    background: C.white, borderRadius: isMobile ? '16px 16px 0 0' : '16px', padding: '1.5rem',
+    background: C.white, borderRadius: isMobile ? '16px 16px 0 0' : '16px', padding: isMobile ? '1.25rem' : '1.5rem',
     width: isMobile ? '100%' : '500px', maxWidth: isMobile ? '100%' : '90vw',
     display: 'flex', flexDirection: 'column', gap: '0.5rem',
+    maxHeight: '90vh', overflowY: 'auto',
   };
   const buttonBatal = {
     background: 'none', border: `1px solid ${C.border}`, borderRadius: '8px',
-    padding: '8px 16px', cursor: 'pointer'
+    padding: isMobile ? '12px 20px' : '8px 16px', cursor: 'pointer', fontFamily: 'inherit',
+    fontSize: isMobile ? '16px' : '0.9rem',
   };
   const buttonKirim = {
     background: C.gold, color: C.white, border: 'none', borderRadius: '8px',
-    padding: '8px 16px', cursor: 'pointer'
+    padding: isMobile ? '12px 20px' : '8px 16px', cursor: 'pointer', fontFamily: 'inherit',
+    fontSize: isMobile ? '16px' : '0.9rem',
   };
   const buttonSecondary = {
     background: C.cream, color: C.dark, border: `1px solid ${C.border}`, borderRadius: '8px',
-    padding: '6px 14px', cursor: 'pointer', fontSize: '0.8rem'
+    padding: isMobile ? '10px 16px' : '6px 14px', cursor: 'pointer', fontSize: isMobile ? '0.95rem' : '0.8rem',
+    fontFamily: 'inherit',
   };
 
   const jadwalTetap = jadwalList.filter(j => !j.is_temporary);
@@ -801,12 +765,44 @@ const TeacherHome = () => {
       }}>
         {/* Kiri: Jadwal Mengajar Minggu Ini - row 1 / 3 (desktop only) */}
         <div style={{ ...cardStyle, gridRow: isMobile ? 'auto' : '1 / 3' }}>
-          <h3 style={{ margin: '0 0 1rem 0', color: C.dark }}>Jadwal Mengajar Minggu Ini</h3>
+          <h3 style={{ margin: '0 0 1rem 0', color: C.dark, fontSize: isMobile ? '1.1rem' : '1.17rem' }}>Jadwal Mengajar Minggu Ini</h3>
           {loading ? (
             <p style={{ color: C.gray, fontSize: '0.9rem' }}>Memuat jadwal...</p>
           ) : slots.length === 0 ? (
             <p style={{ color: C.gray, fontSize: '0.9rem' }}>Belum ada jadwal tetap.</p>
+          ) : isMobile ? (
+            // ===== TAMPILAN KARTU UNTUK MOBILE =====
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              {slots.map((slot, idx) => (
+                <div key={idx} style={{ border: `1px solid ${C.border}`, borderRadius: '12px', padding: '0.75rem' }}>
+                  <div style={{ fontWeight: 'bold', fontSize: '0.9rem', marginBottom: '0.4rem' }}>
+                    {formatJam(slot.jam_mulai)} - {formatJam(slot.jam_selesai)}
+                  </div>
+                  {HARI_LIST.map(hari => {
+                    const cell = getCell(hari, slot);
+                    if (!cell) return null;
+                    const badge = badgeForJenis(cell.jenis);
+                    let displayName = '-';
+                    if (cell.siswa_id) {
+                      displayName = studentNameMap[cell.siswa_id] || cell.siswa_id;
+                    } else if (Array.isArray(cell.siswa_ids) && cell.siswa_ids.length > 0) {
+                      displayName = cell.siswa_ids.map(id => studentNameMap[id] || id).join(', ');
+                    }
+                    return (
+                      <div key={hari} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: `1px solid ${C.border}`, fontSize: '0.85rem' }}>
+                        <span style={{ fontWeight: 500 }}>{hari}</span>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '6px', textAlign: 'right' }}>
+                          <span>{displayName}</span>
+                          <span style={{ fontSize: '0.7rem', border: `1px solid ${badge.color}`, borderRadius: '4px', padding: '0 4px', color: badge.color }}>{badge.letter}</span>
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
           ) : (
+            // ===== TAMPILAN TABEL UNTUK DESKTOP =====
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
                 <thead>
@@ -827,6 +823,12 @@ const TeacherHome = () => {
                         const cell = getCell(hari, slot);
                         if (!cell) return <td key={hari} style={{ padding: '8px' }} />;
                         const badge = badgeForJenis(cell.jenis);
+                        let displayName = '-';
+                        if (cell.siswa_id) {
+                          displayName = studentNameMap[cell.siswa_id] || cell.siswa_id;
+                        } else if (Array.isArray(cell.siswa_ids) && cell.siswa_ids.length > 0) {
+                          displayName = cell.siswa_ids.map(id => studentNameMap[id] || id).join(', ');
+                        }
                         return (
                           <td
                             key={hari}
@@ -835,18 +837,7 @@ const TeacherHome = () => {
                             title="Klik untuk ajukan perubahan jadwal ini"
                           >
                             <div style={{ color: badge.color, fontWeight: 600, fontSize: '0.8rem' }}>
-                              {(() => {
-                                if (cell.siswa_id) {
-                                  return studentNameMap[cell.siswa_id] || cell.siswa_id;
-                                } else if (Array.isArray(cell.siswa_ids) && cell.siswa_ids.length > 0) {
-                                  const names = cell.siswa_ids
-                                    .map(id => studentNameMap[id] || id)
-                                    .join(', ');
-                                  return names;
-                                } else {
-                                  return '-';
-                                }
-                              })()}
+                              {displayName}
                               <span style={{ fontSize: '0.7rem', border: `1px solid ${badge.color}`, borderRadius: '4px', padding: '0 4px', marginLeft: '4px' }}>
                                 {badge.letter}
                               </span>
@@ -871,14 +862,14 @@ const TeacherHome = () => {
               ))}
             </div>
           )}
-          <button style={{ ...linkBtn, marginTop: '1rem' }} onClick={() => openForm(jadwalList[0]?.id || '')}>
+          <button style={{ ...linkBtn, marginTop: '1rem', padding: '10px 16px', fontSize: isMobile ? '1rem' : '0.9rem' }} onClick={() => openForm(jadwalList[0]?.id || '')}>
             + Ajukan Perubahan Jadwal
           </button>
         </div>
 
-        {/* Kanan Atas: Penilaian/Tugas Terdekat - baris 1 (tombol tambah dihapus) */}
+        {/* Kanan Atas: Penilaian/Tugas Terdekat */}
         <div style={cardStyle}>
-          <h3 style={{ margin: '0 0 1rem 0', color: C.dark }}>Penilaian/Tugas Terdekat (dari Siswa)</h3>
+          <h3 style={{ margin: '0 0 1rem 0', color: C.dark, fontSize: isMobile ? '1.1rem' : '1.17rem' }}>Penilaian/Tugas Terdekat (dari Siswa)</h3>
           {loading ? (
             <p style={{ fontSize: '0.85rem', color: C.gray }}>Memuat...</p>
           ) : ujianTerdekatList.length === 0 ? (
@@ -888,7 +879,7 @@ const TeacherHome = () => {
               <div key={item.id} style={{ padding: '0.75rem 0', borderBottom: idx < ujianTerdekatList.length - 1 ? `1px solid ${C.border}` : 'none' }}>
                 <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'flex-start', gap: isMobile ? '0.25rem' : 0 }}>
                   <div>
-                    <div style={{ fontWeight: '600', color: C.dark }}>{item.materi}</div>
+                    <div style={{ fontWeight: '600', color: C.dark, fontSize: isMobile ? '1rem' : '0.9rem' }}>{item.materi}</div>
                     <div style={{ fontSize: '0.85rem', color: C.gray }}>
                       {item.id_mapel?.nama}{item.id_bab?.nama ? ` - ${item.id_bab.nama}` : ''}
                     </div>
@@ -908,9 +899,9 @@ const TeacherHome = () => {
           )}
         </div>
 
-        {/* Kanan Bawah: Pengajuan Perubahan Jadwal - baris 2 */}
+        {/* Kanan Bawah: Pengajuan Perubahan Jadwal */}
         <div style={cardStyle}>
-          <h3 style={{ margin: '0 0 1rem 0', color: C.dark }}>Pengajuan Perubahan Jadwal</h3>
+          <h3 style={{ margin: '0 0 1rem 0', color: C.dark, fontSize: isMobile ? '1.1rem' : '1.17rem' }}>Pengajuan Perubahan Jadwal</h3>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1rem' }}>
             <div>
               <div style={{ fontSize: '0.85rem', fontWeight: 600, color: C.dark, marginBottom: '0.5rem' }}>
@@ -929,14 +920,14 @@ const TeacherHome = () => {
                         <div style={{ fontSize: '0.78rem', color: C.dark, marginBottom: '0.3rem' }}>Yakin ingin menolak pengajuan ini?</div>
                         <div style={{ display: 'flex', gap: '0.5rem' }}>
                           <button
-                            style={{ ...linkBtn, color: C.red, fontSize: '0.8rem', opacity: respondingId === p.id ? 0.6 : 1 }}
+                            style={{ ...linkBtn, color: C.red, fontSize: '0.8rem', opacity: respondingId === p.id ? 0.6 : 1, padding: '8px 12px' }}
                             onClick={() => respondPengajuan(p, false)}
                             disabled={respondingId === p.id}
                           >
                             {respondingId === p.id ? 'Memproses...' : 'Ya, Tolak'}
                           </button>
                           <button
-                            style={{ ...linkBtn, color: C.gray, fontSize: '0.8rem' }}
+                            style={{ ...linkBtn, color: C.gray, fontSize: '0.8rem', padding: '8px 12px' }}
                             onClick={() => setConfirmTolakId(null)}
                             disabled={respondingId === p.id}
                           >
@@ -947,14 +938,14 @@ const TeacherHome = () => {
                     ) : (
                       <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.4rem' }}>
                         <button
-                          style={{ ...linkBtn, color: C.green, fontSize: '0.8rem', opacity: respondingId === p.id ? 0.6 : 1 }}
+                          style={{ ...linkBtn, color: C.green, fontSize: '0.8rem', opacity: respondingId === p.id ? 0.6 : 1, padding: '8px 12px' }}
                           onClick={() => respondPengajuan(p, true)}
                           disabled={respondingId === p.id}
                         >
                           {respondingId === p.id ? 'Memproses...' : 'Setujui'}
                         </button>
                         <button
-                          style={{ ...linkBtn, color: C.red, fontSize: '0.8rem', opacity: respondingId === p.id ? 0.6 : 1 }}
+                          style={{ ...linkBtn, color: C.red, fontSize: '0.8rem', opacity: respondingId === p.id ? 0.6 : 1, padding: '8px 12px' }}
                           onClick={() => setConfirmTolakId(p.id)}
                           disabled={respondingId === p.id}
                         >
@@ -1003,13 +994,13 @@ const TeacherHome = () => {
         </p>
       </div>
 
-      {/* Materi Request - full width */}
+      {/* Materi Request */}
       <div style={cardStyle}>
         <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'center', gap: isMobile ? '0.5rem' : 0, marginBottom: '1rem' }}>
           <h3 style={{ margin: 0, color: C.dark, fontSize: isMobile ? '1rem' : '1.17rem' }}>
             Materi Request ({materiRequestList.filter(m => m.status !== 'selesai' && m.status !== 'ditolak').length})
           </h3>
-          <button style={linkBtn} onClick={() => setShowMateriForm(true)}>+ Tambah Materi</button>
+          <button style={{ ...linkBtn, fontSize: isMobile ? '1rem' : '0.9rem', padding: '8px 0' }} onClick={() => setShowMateriForm(true)}>+ Tambah Materi</button>
         </div>
         {loading ? (
           <p style={{ fontSize: '0.85rem', color: C.gray }}>Memuat...</p>
@@ -1020,14 +1011,14 @@ const TeacherHome = () => {
             <div key={item.id} style={{ padding: '0.75rem 0', borderBottom: idx < materiRequestList.length - 1 ? `1px solid ${C.border}` : 'none' }}>
               <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: isMobile ? '0.6rem' : 0 }}>
                 <div>
-                  <div style={{ fontWeight: '600', color: C.dark }}>{item.judul_materi}</div>
+                  <div style={{ fontWeight: '600', color: C.dark, fontSize: isMobile ? '1rem' : '0.9rem' }}>{item.judul_materi}</div>
                   <div style={{ fontSize: '0.85rem', color: C.gray }}>{item.siswa_nama || 'Siswa'}{item.kelas ? ` - ${item.kelas}` : ''}</div>
                   {item.deskripsi && (
                     <div style={{ fontSize: '0.78rem', color: C.gray, fontStyle: 'italic' }}>{item.deskripsi}</div>
                   )}
                   <div style={{ fontSize: '0.75rem', color: C.gray }}>{waktuLalu(item.created_at)}</div>
                 </div>
-                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
                   {item.status === 'selesai' ? (
                     <span style={{ fontSize: '0.72rem', fontWeight: 600, padding: '2px 8px', borderRadius: '999px', background: C.greenBg, color: C.green, whiteSpace: 'nowrap' }}>Selesai</span>
                   ) : item.status === 'ditolak' ? (
@@ -1076,7 +1067,7 @@ const TeacherHome = () => {
                     onChange={(e) => setMateriCatatan(e.target.value)}
                     rows={2}
                     placeholder={materiRespondAksi === 'selesai' ? 'Contoh: Materi sudah diunggah di bab terkait.' : 'Contoh: Materi ini belum sesuai kurikulum saat ini.'}
-                    style={{ padding: '8px', borderRadius: '8px', border: `1px solid ${C.border}`, fontSize: '0.85rem', resize: 'vertical', fontFamily: 'inherit' }}
+                    style={{ padding: '8px', borderRadius: '8px', border: `1px solid ${C.border}`, fontSize: isMobile ? '16px' : '0.85rem', resize: 'vertical', fontFamily: 'inherit' }}
                   />
                   <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
                     <button onClick={cancelMateriRespond} style={buttonBatal} disabled={materiResponding}>Batal</button>
@@ -1102,16 +1093,16 @@ const TeacherHome = () => {
       {/* Modal Kirim Materi dari Arsip */}
       {showKirimMateri && (
         <div style={modalOverlayStyle}>
-          <div style={{ ...modalContentStyle, maxHeight: '90vh', overflowY: 'auto' }}>
-            <h3 style={{ margin: '0 0 1rem 0', color: C.dark }}>Kirim Materi dari Arsip</h3>
+          <div style={{ ...modalContentStyle }}>
+            <h3 style={{ margin: '0 0 1rem 0', color: C.dark, fontSize: isMobile ? '1.2rem' : '1.17rem' }}>Kirim Materi dari Arsip</h3>
             <p style={{ fontSize: '0.85rem', color: C.gray, margin: '-0.5rem 0 0.5rem 0' }}>
               Pilih materi yang sudah pernah Anda unggah untuk dikirim ke siswa.
             </p>
-            <label style={{ fontSize: '0.85rem', color: C.gray }}>Pilih Materi</label>
+            <label style={{ fontSize: isMobile ? '0.95rem' : '0.85rem', color: C.gray }}>Pilih Materi</label>
             <select
               value={selectedMateriId}
               onChange={(e) => setSelectedMateriId(e.target.value)}
-              style={{ padding: '8px', borderRadius: '8px', border: `1px solid ${C.border}` }}
+              style={{ padding: isMobile ? '12px' : '8px', borderRadius: '8px', border: `1px solid ${C.border}`, fontSize: isMobile ? '16px' : '0.9rem' }}
             >
               <option value="">-- Pilih Materi --</option>
               {materiArsip.length === 0 && <option value="" disabled>Belum ada materi di arsip.</option>}
@@ -1121,33 +1112,31 @@ const TeacherHome = () => {
                 </option>
               ))}
             </select>
-            <label style={{ fontSize: '0.85rem', color: C.gray, marginTop: '0.5rem' }}>Catatan (opsional)</label>
+            <label style={{ fontSize: isMobile ? '0.95rem' : '0.85rem', color: C.gray, marginTop: '0.5rem' }}>Catatan (opsional)</label>
             <textarea
               value={kirimMateriNote}
               onChange={(e) => setKirimMateriNote(e.target.value)}
               rows={2}
               placeholder="Tambahkan catatan untuk siswa"
-              style={{ padding: '8px', borderRadius: '8px', border: `1px solid ${C.border}`, resize: 'vertical', fontFamily: 'inherit' }}
+              style={{ padding: '8px', borderRadius: '8px', border: `1px solid ${C.border}`, resize: 'vertical', fontFamily: 'inherit', fontSize: isMobile ? '16px' : '0.85rem' }}
             />
             <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem', justifyContent: 'flex-end' }}>
               <button onClick={() => setShowKirimMateri(false)} style={buttonBatal}>Batal</button>
-              <button onClick={submitKirimMateri} style={{ ...buttonKirim, background: C.green }}>
-                Kirim
-              </button>
+              <button onClick={submitKirimMateri} style={{ ...buttonKirim, background: C.green }}>Kirim</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Modal Form Penilaian/Tugas Terdekat (tetap ada untuk guru, tapi tidak dipanggil dari card) */}
+      {/* Modal Form Penilaian/Tugas */}
       {showUjianForm && (
         <div style={modalOverlayStyle}>
-          <div style={{ ...modalContentStyle, maxHeight: '90vh', overflowY: 'auto' }}>
-            <h3>Tambah Jadwal Penilaian/Tugas</h3>
+          <div style={{ ...modalContentStyle }}>
+            <h3 style={{ margin: '0 0 1rem 0', fontSize: isMobile ? '1.2rem' : '1.17rem' }}>Tambah Jadwal Penilaian/Tugas</h3>
             <p style={{ fontSize: '0.85rem', color: C.gray, marginTop: '-0.5rem' }}>
               Jadwal akan langsung aktif dan admin akan menerima notifikasi sebagai informasi.
             </p>
-            <label style={{ fontSize: '0.85rem', color: C.gray }}>Mapel</label>
+            <label style={{ fontSize: isMobile ? '0.95rem' : '0.85rem', color: C.gray }}>Mapel</label>
             <select
               value={ujianForm.mapel_id}
               onChange={(e) => {
@@ -1155,72 +1144,70 @@ const TeacherHome = () => {
                 setUjianForm({ ...ujianForm, mapel_id: val, bab_id: '' });
                 loadUjianBab(val);
               }}
-              style={{ padding: '8px', borderRadius: '8px', border: `1px solid ${C.border}` }}
+              style={{ padding: isMobile ? '12px' : '8px', borderRadius: '8px', border: `1px solid ${C.border}`, fontSize: isMobile ? '16px' : '0.9rem' }}
             >
               <option value="">-- Pilih Mapel --</option>
               {mapelOptions.map(m => <option key={m.id} value={m.id}>{m.nama}</option>)}
             </select>
 
-            <label style={{ fontSize: '0.85rem', color: C.gray }}>Bab</label>
+            <label style={{ fontSize: isMobile ? '0.95rem' : '0.85rem', color: C.gray }}>Bab</label>
             <select
               value={ujianForm.bab_id}
               onChange={(e) => setUjianForm({ ...ujianForm, bab_id: e.target.value })}
-              style={{ padding: '8px', borderRadius: '8px', border: `1px solid ${C.border}` }}
+              style={{ padding: isMobile ? '12px' : '8px', borderRadius: '8px', border: `1px solid ${C.border}`, fontSize: isMobile ? '16px' : '0.9rem' }}
               disabled={!ujianForm.mapel_id}
             >
               <option value="">-- Pilih Bab --</option>
               {ujianBabOptions.map(b => <option key={b.id} value={b.id}>{b.nama}</option>)}
             </select>
 
-            <label style={{ fontSize: '0.85rem', color: C.gray }}>Materi</label>
+            <label style={{ fontSize: isMobile ? '0.95rem' : '0.85rem', color: C.gray }}>Materi</label>
             <input
               type="text"
               placeholder="Contoh: Bilangan Pecahan"
               value={ujianForm.materi}
               onChange={(e) => setUjianForm({ ...ujianForm, materi: e.target.value })}
-              style={{ padding: '8px', borderRadius: '8px', border: `1px solid ${C.border}` }}
+              style={{ padding: isMobile ? '12px' : '8px', borderRadius: '8px', border: `1px solid ${C.border}`, fontSize: isMobile ? '16px' : '0.9rem' }}
             />
 
-            <label style={{ fontSize: '0.85rem', color: C.gray }}>Nama Siswa (opsional, kosongkan jika untuk semua siswa)</label>
+            <label style={{ fontSize: isMobile ? '0.95rem' : '0.85rem', color: C.gray }}>Nama Siswa (opsional)</label>
             <input
               type="text"
               placeholder="Nama siswa"
               value={ujianForm.nama_siswa}
               onChange={(e) => setUjianForm({ ...ujianForm, nama_siswa: e.target.value })}
-              style={{ padding: '8px', borderRadius: '8px', border: `1px solid ${C.border}` }}
+              style={{ padding: isMobile ? '12px' : '8px', borderRadius: '8px', border: `1px solid ${C.border}`, fontSize: isMobile ? '16px' : '0.9rem' }}
             />
 
-            <label style={{ fontSize: '0.85rem', color: C.gray }}>Tanggal</label>
+            <label style={{ fontSize: isMobile ? '0.95rem' : '0.85rem', color: C.gray }}>Tanggal</label>
             <input
               type="date"
               value={ujianForm.tanggal}
               onChange={(e) => setUjianForm({ ...ujianForm, tanggal: e.target.value })}
-              style={{ padding: '8px', borderRadius: '8px', border: `1px solid ${C.border}` }}
+              style={{ padding: isMobile ? '12px' : '8px', borderRadius: '8px', border: `1px solid ${C.border}`, fontSize: isMobile ? '16px' : '0.9rem' }}
             />
 
-            <label style={{ fontSize: '0.85rem', color: C.gray }}>Deskripsi (opsional)</label>
+            <label style={{ fontSize: isMobile ? '0.95rem' : '0.85rem', color: C.gray }}>Deskripsi (opsional)</label>
             <textarea
               value={ujianForm.deskripsi}
               onChange={(e) => setUjianForm({ ...ujianForm, deskripsi: e.target.value })}
               rows={2}
-              style={{ padding: '8px', borderRadius: '8px', border: `1px solid ${C.border}`, resize: 'vertical' }}
+              style={{ padding: '8px', borderRadius: '8px', border: `1px solid ${C.border}`, resize: 'vertical', fontSize: isMobile ? '16px' : '0.85rem' }}
             />
             <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem', justifyContent: 'flex-end' }}>
               <button onClick={() => { setShowUjianForm(false); setUjianBabOptions([]); }} style={buttonBatal}>Batal</button>
-              <button onClick={submitUjian} disabled={submittingUjian} style={{ ...buttonKirim, opacity: submittingUjian ? 0.6 : 1 }}>
-                {submittingUjian ? 'Mengirim...' : 'Simpan'}
-              </button>
+              <button onClick={submitUjian} disabled={submittingUjian} style={{ ...buttonKirim, opacity: submittingUjian ? 0.6 : 1 }}>{submittingUjian ? 'Mengirim...' : 'Simpan'}</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Modal Form Materi (untuk tambah materi baru) */}
+      {/* Modal Form Materi */}
       {showMateriForm && (
         <div style={modalOverlayStyle}>
-          <div style={{ ...modalContentStyle, maxHeight: '90vh', overflowY: 'auto' }}>
-            <h3>Tambah Materi yang Diajarkan</h3>
-            <label style={{ fontSize: '0.85rem', color: C.gray }}>Pilih Mapel</label>
+          <div style={{ ...modalContentStyle }}>
+            <h3 style={{ margin: '0 0 1rem 0', fontSize: isMobile ? '1.2rem' : '1.17rem' }}>Tambah Materi yang Diajarkan</h3>
+            <label style={{ fontSize: isMobile ? '0.95rem' : '0.85rem', color: C.gray }}>Pilih Mapel</label>
             <select
               value={materiForm.mapel_id}
               onChange={(e) => {
@@ -1229,7 +1216,7 @@ const TeacherHome = () => {
                 if (val && val !== 'new') loadBab(val);
                 else setBabOptions([]);
               }}
-              style={{ padding: '8px', borderRadius: '8px', border: `1px solid ${C.border}` }}
+              style={{ padding: isMobile ? '12px' : '8px', borderRadius: '8px', border: `1px solid ${C.border}`, fontSize: isMobile ? '16px' : '0.9rem' }}
             >
               <option value="">-- Pilih --</option>
               {mapelOptions.map(m => <option key={m.id} value={m.id}>{m.nama}</option>)}
@@ -1241,15 +1228,15 @@ const TeacherHome = () => {
                 placeholder="Nama Mapel Baru"
                 value={materiForm.mapel_nama}
                 onChange={(e) => setMateriForm({ ...materiForm, mapel_nama: e.target.value })}
-                style={{ padding: '8px', borderRadius: '8px', border: `1px solid ${C.border}` }}
+                style={{ padding: isMobile ? '12px' : '8px', borderRadius: '8px', border: `1px solid ${C.border}`, fontSize: isMobile ? '16px' : '0.9rem' }}
               />
             )}
 
-            <label style={{ fontSize: '0.85rem', color: C.gray }}>Pilih Bab</label>
+            <label style={{ fontSize: isMobile ? '0.95rem' : '0.85rem', color: C.gray }}>Pilih Bab</label>
             <select
               value={materiForm.bab_id}
               onChange={(e) => setMateriForm({ ...materiForm, bab_id: e.target.value })}
-              style={{ padding: '8px', borderRadius: '8px', border: `1px solid ${C.border}` }}
+              style={{ padding: isMobile ? '12px' : '8px', borderRadius: '8px', border: `1px solid ${C.border}`, fontSize: isMobile ? '16px' : '0.9rem' }}
               disabled={!materiForm.mapel_id || materiForm.mapel_id === 'new'}
             >
               <option value="">-- Pilih --</option>
@@ -1262,32 +1249,30 @@ const TeacherHome = () => {
                 placeholder="Nama Bab Baru"
                 value={materiForm.bab_nama}
                 onChange={(e) => setMateriForm({ ...materiForm, bab_nama: e.target.value })}
-                style={{ padding: '8px', borderRadius: '8px', border: `1px solid ${C.border}` }}
+                style={{ padding: isMobile ? '12px' : '8px', borderRadius: '8px', border: `1px solid ${C.border}`, fontSize: isMobile ? '16px' : '0.9rem' }}
               />
             )}
 
-            <label style={{ fontSize: '0.85rem', color: C.gray }}>File Materi (PDF/Gambar)</label>
+            <label style={{ fontSize: isMobile ? '0.95rem' : '0.85rem', color: C.gray }}>File Materi (PDF/Gambar)</label>
             <input
               type="file"
               accept=".pdf,image/*"
               onChange={(e) => setMateriForm({ ...materiForm, file: e.target.files[0], link: '' })}
-              style={{ padding: '4px' }}
+              style={{ padding: '4px', fontSize: isMobile ? '16px' : '0.9rem' }}
             />
             <div style={{ margin: '0.5rem 0', textAlign: 'center', color: C.gray }}>atau</div>
-            <label style={{ fontSize: '0.85rem', color: C.gray }}>Link Video YouTube</label>
+            <label style={{ fontSize: isMobile ? '0.95rem' : '0.85rem', color: C.gray }}>Link Video YouTube</label>
             <input
               type="url"
               placeholder="https://youtube.com/..."
               value={materiForm.link}
               onChange={(e) => setMateriForm({ ...materiForm, link: e.target.value, file: null })}
-              style={{ padding: '8px', borderRadius: '8px', border: `1px solid ${C.border}` }}
+              style={{ padding: isMobile ? '12px' : '8px', borderRadius: '8px', border: `1px solid ${C.border}`, fontSize: isMobile ? '16px' : '0.9rem' }}
             />
 
             <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem', justifyContent: 'flex-end' }}>
               <button onClick={() => setShowMateriForm(false)} style={buttonBatal}>Batal</button>
-              <button onClick={submitMateri} disabled={submittingMateri} style={{ ...buttonKirim, opacity: submittingMateri ? 0.6 : 1 }}>
-                {submittingMateri ? 'Menyimpan...' : 'Simpan'}
-              </button>
+              <button onClick={submitMateri} disabled={submittingMateri} style={{ ...buttonKirim, opacity: submittingMateri ? 0.6 : 1 }}>{submittingMateri ? 'Menyimpan...' : 'Simpan'}</button>
             </div>
           </div>
         </div>
@@ -1297,12 +1282,12 @@ const TeacherHome = () => {
       {showForm && (
         <div style={modalOverlayStyle}>
           <div style={modalContentStyle}>
-            <h3 style={{ margin: '0 0 1rem 0', color: C.dark }}>Ajukan Perubahan Jadwal</h3>
-            <label style={{ fontSize: '0.85rem', color: C.gray }}>Pilih Jadwal</label>
+            <h3 style={{ margin: '0 0 1rem 0', color: C.dark, fontSize: isMobile ? '1.2rem' : '1.17rem' }}>Ajukan Perubahan Jadwal</h3>
+            <label style={{ fontSize: isMobile ? '0.95rem' : '0.85rem', color: C.gray }}>Pilih Jadwal</label>
             <select
               value={selectedJadwalId}
               onChange={(e) => openForm(e.target.value)}
-              style={{ width: '100%', padding: '8px', marginBottom: '0.75rem', borderRadius: '8px', border: `1px solid ${C.border}` }}
+              style={{ width: '100%', padding: isMobile ? '12px' : '8px', marginBottom: '0.75rem', borderRadius: '8px', border: `1px solid ${C.border}`, fontSize: isMobile ? '16px' : '0.9rem' }}
             >
               <option value="">-- Pilih --</option>
               {jadwalList.map(j => (
@@ -1311,35 +1296,35 @@ const TeacherHome = () => {
                 </option>
               ))}
             </select>
-            <label style={{ fontSize: '0.85rem', color: C.gray }}>Hari Baru</label>
+            <label style={{ fontSize: isMobile ? '0.95rem' : '0.85rem', color: C.gray }}>Hari Baru</label>
             <select
               value={formData.hari_baru}
               onChange={(e) => setFormData({ ...formData, hari_baru: e.target.value })}
-              style={{ width: '100%', padding: '8px', marginBottom: '0.75rem', borderRadius: '8px', border: `1px solid ${C.border}` }}
+              style={{ width: '100%', padding: isMobile ? '12px' : '8px', marginBottom: '0.75rem', borderRadius: '8px', border: `1px solid ${C.border}`, fontSize: isMobile ? '16px' : '0.9rem' }}
             >
               {HARI_LIST.map(h => <option key={h} value={h}>{h}</option>)}
             </select>
             <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem' }}>
               <div style={{ flex: 1 }}>
-                <label style={{ fontSize: '0.85rem', color: C.gray }}>Jam Mulai</label>
+                <label style={{ fontSize: isMobile ? '0.95rem' : '0.85rem', color: C.gray }}>Jam Mulai</label>
                 <input
                   type="time"
                   value={formData.jam_mulai_baru}
                   onChange={(e) => setFormData({ ...formData, jam_mulai_baru: e.target.value })}
-                  style={{ width: '100%', padding: '8px', borderRadius: '8px', border: `1px solid ${C.border}` }}
+                  style={{ width: '100%', padding: isMobile ? '12px' : '8px', borderRadius: '8px', border: `1px solid ${C.border}`, fontSize: isMobile ? '16px' : '0.9rem' }}
                 />
               </div>
               <div style={{ flex: 1 }}>
-                <label style={{ fontSize: '0.85rem', color: C.gray }}>Jam Selesai</label>
+                <label style={{ fontSize: isMobile ? '0.95rem' : '0.85rem', color: C.gray }}>Jam Selesai</label>
                 <input
                   type="time"
                   value={formData.jam_selesai_baru}
                   onChange={(e) => setFormData({ ...formData, jam_selesai_baru: e.target.value })}
-                  style={{ width: '100%', padding: '8px', borderRadius: '8px', border: `1px solid ${C.border}` }}
+                  style={{ width: '100%', padding: isMobile ? '12px' : '8px', borderRadius: '8px', border: `1px solid ${C.border}`, fontSize: isMobile ? '16px' : '0.9rem' }}
                 />
               </div>
             </div>
-            <label style={{ fontSize: '0.85rem', color: C.gray, display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.75rem' }}>
+            <label style={{ fontSize: isMobile ? '0.95rem' : '0.85rem', color: C.gray, display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.75rem' }}>
               <input
                 type="checkbox"
                 checked={formData.is_temporary_baru}
@@ -1349,27 +1334,25 @@ const TeacherHome = () => {
             </label>
             {formData.is_temporary_baru && (
               <div style={{ marginBottom: '0.75rem' }}>
-                <label style={{ fontSize: '0.85rem', color: C.gray }}>Tanggal</label>
+                <label style={{ fontSize: isMobile ? '0.95rem' : '0.85rem', color: C.gray }}>Tanggal</label>
                 <input
                   type="date"
                   value={formData.tanggal_temporary_baru}
                   onChange={(e) => setFormData({ ...formData, tanggal_temporary_baru: e.target.value })}
-                  style={{ width: '100%', padding: '8px', borderRadius: '8px', border: `1px solid ${C.border}` }}
+                  style={{ width: '100%', padding: isMobile ? '12px' : '8px', borderRadius: '8px', border: `1px solid ${C.border}`, fontSize: isMobile ? '16px' : '0.9rem' }}
                 />
               </div>
             )}
-            <label style={{ fontSize: '0.85rem', color: C.gray }}>Alasan</label>
+            <label style={{ fontSize: isMobile ? '0.95rem' : '0.85rem', color: C.gray }}>Alasan</label>
             <textarea
               value={formData.alasan}
               onChange={(e) => setFormData({ ...formData, alasan: e.target.value })}
               rows={3}
-              style={{ width: '100%', padding: '8px', marginBottom: '1rem', borderRadius: '8px', border: `1px solid ${C.border}`, resize: 'vertical' }}
+              style={{ width: '100%', padding: '8px', marginBottom: '1rem', borderRadius: '8px', border: `1px solid ${C.border}`, resize: 'vertical', fontSize: isMobile ? '16px' : '0.85rem' }}
             />
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
               <button onClick={() => setShowForm(false)} style={buttonBatal}>Batal</button>
-              <button onClick={submitPengajuan} disabled={submitting} style={{ ...buttonKirim, opacity: submitting ? 0.6 : 1 }}>
-                {submitting ? 'Mengirim...' : 'Kirim Pengajuan'}
-              </button>
+              <button onClick={submitPengajuan} disabled={submitting} style={{ ...buttonKirim, opacity: submitting ? 0.6 : 1 }}>{submitting ? 'Mengirim...' : 'Kirim Pengajuan'}</button>
             </div>
           </div>
         </div>

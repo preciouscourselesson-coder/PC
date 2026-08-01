@@ -1445,6 +1445,282 @@ function Dashboard({
 }
 
 /** Tampilan editor soal — sama seperti sebelumnya, tanpa field tenggat waktu di Detail Tugas */
+/**
+ * Panel Penilaian: menampilkan siswa yang ditugaskan (homework_assignments)
+ * beserta status pengerjaannya dan jawaban yang dikirim.
+ *
+ * PENTING — mengikuti skema `homework_submissions` yang SUNGGUHAN dipakai
+ * oleh StudentHomework.js (bukan asumsi awal saya):
+ *   homework_submissions (id, homework_id, student_id, answers jsonb,
+ *                          score numeric, max_score numeric, submitted_at)
+ * `answers` adalah OBJEK, bukan array: { [question_id]: string[] } — setiap
+ * key adalah homework_questions.id, valuenya array jawaban blank sejajar
+ * urutan `blanks` pada soal tsb. Skor sudah dihitung otomatis oleh siswa
+ * saat submit (lihat computeInteractiveScore di StudentHomework.js); guru
+ * hanya bisa menimpa nilai akhir secara manual di sini kalau perlu.
+ *
+ * PENTING JUGA — tabel ini butuh policy SELECT & UPDATE untuk guru/admin.
+ * Policy yang ada di StudentHomework.js ("siswa kelola submission sendiri")
+ * cuma mengizinkan `auth.uid() = student_id`, jadi guru tidak bisa melihat
+ * apapun sampai policy tambahan dibuat — lihat migrasi SQL terpisah.
+ */
+function GradingPanel({ homeworkId, questions }) {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [rows, setRows] = useState([]); // { studentId, name, assignedAt, submission }
+  const [savingId, setSavingId] = useState(null);
+  const [expandedId, setExpandedId] = useState(null);
+  const [scoreDrafts, setScoreDrafts] = useState({}); // studentId -> string
+
+  const load = useCallback(async () => {
+    if (!homeworkId) return;
+    setLoading(true);
+    setError("");
+    try {
+      const { data: assignRows, error: assignErr } = await supabase
+        .from("homework_assignments")
+        .select("student_id, assigned_at")
+        .eq("homework_id", homeworkId);
+      if (assignErr) throw assignErr;
+
+      const studentIds = [
+        ...new Set((assignRows || []).map((r) => r.student_id)),
+      ];
+      let profilesById = new Map();
+      if (studentIds.length > 0) {
+        const { data: profilesData, error: profilesErr } = await supabase
+          .from("profiles")
+          .select("id, full_name")
+          .in("id", studentIds);
+        if (profilesErr) throw profilesErr;
+        profilesById = new Map((profilesData || []).map((p) => [p.id, p]));
+      }
+
+      // Kolom mengikuti skema sungguhan di StudentHomework.js: score,
+      // max_score, submitted_at — TIDAK ada graded_at.
+      const { data: subRows, error: subErr } = await supabase
+        .from("homework_submissions")
+        .select("student_id, answers, score, max_score, submitted_at")
+        .eq("homework_id", homeworkId);
+      if (subErr) {
+        // Kalau ini gagal dengan pesan permission/RLS, artinya policy
+        // SELECT untuk guru/admin belum ditambahkan ke tabel ini.
+        throw subErr;
+      }
+      const subByStudent = new Map(
+        (subRows || []).map((r) => [r.student_id, r])
+      );
+
+      const merged = (assignRows || [])
+        .map((r) => ({
+          studentId: r.student_id,
+          name:
+            profilesById.get(r.student_id)?.full_name ||
+            "Siswa tidak ditemukan",
+          assignedAt: r.assigned_at,
+          submission: subByStudent.get(r.student_id) || null,
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name, "id"));
+
+      setRows(merged);
+      setScoreDrafts(
+        Object.fromEntries(
+          merged
+            .filter((r) => r.submission)
+            .map((r) => [r.studentId, r.submission.score ?? ""])
+        )
+      );
+    } catch (err) {
+      console.error("Gagal memuat data penilaian:", err);
+      setError(err.message || "Gagal memuat data penilaian.");
+    } finally {
+      setLoading(false);
+    }
+  }, [homeworkId]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const handleSaveScore = async (studentId, submission) => {
+    if (!submission) return;
+    const value = scoreDrafts[studentId];
+    setSavingId(studentId);
+    try {
+      // Hanya kolom `score` yang ditimpa guru — `max_score` &
+      // `submitted_at` tetap milik data asli siswa, tidak disentuh.
+      const { error } = await supabase
+        .from("homework_submissions")
+        .update({ score: value === "" ? null : Number(value) })
+        .eq("homework_id", homeworkId)
+        .eq("student_id", studentId);
+      if (error) throw error;
+      await load();
+    } catch (err) {
+      console.error("Gagal menyimpan nilai:", err);
+      setError(err.message || "Gagal menyimpan nilai.");
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  if (!homeworkId) {
+    return (
+      <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-400">
+        Simpan draf atau publikasikan tugas terlebih dahulu untuk melihat
+        penilaian.
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white p-8 text-sm text-slate-400">
+        <Loader2 size={16} className="animate-spin" />
+        Memuat data penilaian…
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-600">
+        Gagal memuat data penilaian: {error}
+        <br />
+        Kalau pesannya terkait permission/RLS, tambahkan policy SELECT untuk
+        guru/admin di tabel <code>homework_submissions</code> (lihat migrasi
+        SQL terpisah).
+      </div>
+    );
+  }
+
+  if (rows.length === 0) {
+    return (
+      <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-400">
+        Belum ada siswa yang ditugaskan. Bagikan tugas ini terlebih dahulu
+        lewat tombol "Bagikan ke Siswa".
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {rows.map((r) => {
+        const status = r.submission ? "Sudah mengerjakan" : "Belum mengerjakan";
+        const statusColor = r.submission
+          ? "bg-emerald-50 text-emerald-700"
+          : "bg-slate-100 text-slate-500";
+
+        return (
+          <div
+            key={r.studentId}
+            className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="text-sm font-semibold text-slate-800">
+                  {r.name}
+                </p>
+                <span
+                  className={`mt-1 inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${statusColor}`}
+                >
+                  {status}
+                  {r.submission &&
+                    ` · Nilai: ${r.submission.score ?? 0}/${r.submission.max_score ?? 0}`}
+                </span>
+              </div>
+
+              {r.submission && (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() =>
+                      setExpandedId(
+                        expandedId === r.studentId ? null : r.studentId
+                      )
+                    }
+                    className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50"
+                  >
+                    {expandedId === r.studentId
+                      ? "Sembunyikan Jawaban"
+                      : "Lihat Jawaban"}
+                  </button>
+                  <input
+                    type="number"
+                    min={0}
+                    placeholder="Nilai"
+                    value={scoreDrafts[r.studentId] ?? ""}
+                    onChange={(e) =>
+                      setScoreDrafts((prev) => ({
+                        ...prev,
+                        [r.studentId]: e.target.value,
+                      }))
+                    }
+                    className="w-24 rounded-lg border border-slate-300 px-2 py-1.5 text-sm text-slate-800 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-100"
+                  />
+                  <button
+                    onClick={() => handleSaveScore(r.studentId, r.submission)}
+                    disabled={savingId === r.studentId}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {savingId === r.studentId ? (
+                      <Loader2 size={14} className="animate-spin" />
+                    ) : (
+                      <Save size={14} />
+                    )}
+                    Simpan
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {expandedId === r.studentId && r.submission && (
+              <div className="mt-3 space-y-3 border-t border-slate-100 pt-3">
+                {questions.map((q, i) => {
+                  // `answers` adalah objek { [question_id]: string[] },
+                  // sesuai skema yang ditulis StudentHomework.js.
+                  const given = r.submission.answers?.[q.id] || [];
+                  return (
+                    <div key={q.id} className="rounded-lg bg-slate-50 p-3">
+                      <p className="mb-1 text-xs font-medium text-slate-500">
+                        Soal {i + 1}
+                      </p>
+                      <p className="mb-2 text-sm text-slate-700">
+                        {q.questionText || q.question_text}
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {(q.blanks || []).map((key, bi) => {
+                          const val = given[bi] ?? "-";
+                          const correct =
+                            String(val).trim().toLowerCase() ===
+                            String(key).trim().toLowerCase();
+                          return (
+                            <span
+                              key={bi}
+                              className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                                correct
+                                  ? "bg-emerald-50 text-emerald-700"
+                                  : "bg-red-50 text-red-600"
+                              }`}
+                              title={`Kunci: ${key}`}
+                            >
+                              {val}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+
 function HomeworkEditor({ initialHomework, onBack, onSaved }) {
   const [homework, setHomework] = useState(initialHomework);
 
@@ -1511,6 +1787,10 @@ function HomeworkEditor({ initialHomework, onBack, onSaved }) {
   const [assignMessage, setAssignMessage] = useState("");
   const [updatingDueDate, setUpdatingDueDate] = useState(false);
   const [dueDateMessage, setDueDateMessage] = useState("");
+
+  // Tab aktif: "setup" (detail tugas), "soal" (lembar soal), atau
+  // "penilaian" (siswa yang mengerjakan + input nilai).
+  const [activeTab, setActiveTab] = useState("setup");
 
   const totalPoints = useMemo(
     () => homework.questions.reduce((sum, q) => sum + (Number(q.points) || 0), 0),
@@ -1798,7 +2078,44 @@ function HomeworkEditor({ initialHomework, onBack, onSaved }) {
           </div>
         </div>
 
-        {/* Metadata */}
+        {/* Navigasi Tab */}
+        <div className="mb-6 flex gap-2 rounded-xl border border-slate-200 bg-white p-1.5 shadow-sm">
+          {[
+            { key: "setup", label: "Detail Tugas", icon: PenLine },
+            { key: "soal", label: "Lembar Soal", icon: ListChecks },
+            { key: "penilaian", label: "Penilaian", icon: Users },
+          ].map((tab) => {
+            const Icon = tab.icon;
+            const active = activeTab === tab.key;
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setActiveTab(tab.key)}
+                className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition ${
+                  active
+                    ? "bg-teal-600 text-white shadow-sm"
+                    : "text-slate-500 hover:bg-slate-50"
+                }`}
+              >
+                <Icon size={15} />
+                {tab.label}
+                {tab.key === "soal" && (
+                  <span
+                    className={`ml-1 rounded-full px-1.5 text-xs ${
+                      active ? "bg-teal-500" : "bg-slate-100 text-slate-500"
+                    }`}
+                  >
+                    {homework.questions.length}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Tab: Detail Tugas */}
+        {activeTab === "setup" && (
         <div className="mb-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold text-slate-700">
             <PenLine size={16} />
@@ -1889,17 +2206,10 @@ function HomeworkEditor({ initialHomework, onBack, onSaved }) {
             </div>
           </div>
         </div>
+        )}
 
-        {/* Pembatas visual antara Detail Tugas dan Lembar Soal */}
-        <div className="my-8 flex items-center gap-3">
-          <div className="h-px flex-1 bg-slate-200" />
-          <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-            Lembar Soal
-          </span>
-          <div className="h-px flex-1 bg-slate-200" />
-        </div>
-
-        {/* Panel Lembar Soal */}
+        {/* Tab: Lembar Soal */}
+        {activeTab === "soal" && (
         <div className="rounded-xl border border-slate-200 bg-slate-100/60 p-5">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-700">
@@ -1933,6 +2243,18 @@ function HomeworkEditor({ initialHomework, onBack, onSaved }) {
             )}
           </div>
         </div>
+        )}
+
+        {/* Tab: Penilaian */}
+        {activeTab === "penilaian" && (
+          <div className="rounded-xl border border-slate-200 bg-slate-100/60 p-5">
+            <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold text-slate-700">
+              <Users size={16} />
+              Siswa yang Mengerjakan
+            </h2>
+            <GradingPanel homeworkId={homework.id} questions={homework.questions} />
+          </div>
+        )}
 
         {/* Aksi bawah */}
         <div className="sticky bottom-4 mt-6 flex flex-col gap-2 rounded-xl border border-slate-200 bg-white p-4 shadow-lg sm:flex-row sm:items-center sm:justify-between">

@@ -18,7 +18,6 @@ const C = {
   border: '#e6e2d8',
 };
 
-// Palet gelap & elegan khusus untuk kartu form input pertemuan
 const D = {
   bg: '#12141c',
   bgSoft: '#181b26',
@@ -33,6 +32,20 @@ const D = {
   red: '#e0574f',
   blue: '#4f8fdb',
   danger: '#e0574f',
+};
+
+const MOBILE_BREAKPOINT = 768;
+
+const useIsMobile = () => {
+  const [isMobile, setIsMobile] = useState(
+    typeof window !== 'undefined' ? window.innerWidth <= MOBILE_BREAKPOINT : false
+  );
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth <= MOBILE_BREAKPOINT);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  return isMobile;
 };
 
 const formatFileSize = (bytes) => {
@@ -84,31 +97,15 @@ const statusStyle = (status) => {
 const BUCKET = 'materi';
 const TABLE = 'sesi_pembelajaran';
 
-const MOBILE_BREAKPOINT = 768;
-
-// Hook kecil untuk deteksi ukuran layar (mobile vs desktop)
-const useIsMobile = () => {
-  const [isMobile, setIsMobile] = useState(
-    typeof window !== 'undefined' ? window.innerWidth <= MOBILE_BREAKPOINT : false
-  );
-  useEffect(() => {
-    const onResize = () => setIsMobile(window.innerWidth <= MOBILE_BREAKPOINT);
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, []);
-  return isMobile;
-};
-
 const TeacherAbsensiMateri = () => {
   const isMobile = useIsMobile();
-  const [guruId, setGuruId] = useState(null); // auth.uid() / profiles.id — dipakai untuk sesi_pembelajaran.guru_id
-  const [guruTableId, setGuruTableId] = useState(null); // guru.id — dipakai untuk filter jadwal_les.guru_id
+  const [guruId, setGuruId] = useState(null);
+  const [guruTableId, setGuruTableId] = useState(null);
 
   const [students, setStudents] = useState([]);
   const [loadingStudents, setLoadingStudents] = useState(true);
   const [studentsError, setStudentsError] = useState('');
 
-  // Jadwal les milik guru ini, dipakai untuk auto-isi Kelas saat siswa dipilih (info saja, tidak disimpan)
   const [jadwalLes, setJadwalLes] = useState([]);
   const [loadingJadwal, setLoadingJadwal] = useState(true);
   const [kelasTampil, setKelasTampil] = useState('');
@@ -117,12 +114,11 @@ const TeacherAbsensiMateri = () => {
   const [loadingEntries, setLoadingEntries] = useState(true);
   const [entriesError, setEntriesError] = useState('');
 
-  // Form state
   const [siswa, setSiswa] = useState('');
   const [tanggal, setTanggal] = useState('');
   const [materi, setMateri] = useState('');
   const [catatan, setCatatan] = useState('');
-  const [buktiFiles, setBuktiFiles] = useState([]); // { file, name, type, size }
+  const [buktiFiles, setBuktiFiles] = useState([]);
   const [errors, setErrors] = useState({});
   const [justAdded, setJustAdded] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -130,20 +126,17 @@ const TeacherAbsensiMateri = () => {
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef(null);
 
-  // Filter state
   const [filterSiswa, setFilterSiswa] = useState('Semua Siswa');
   const [filterBulan, setFilterBulan] = useState('Semua Bulan');
   const [search, setSearch] = useState('');
   const [openMenuId, setOpenMenuId] = useState(null);
 
-  // Ambil guru yang sedang login
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
       setGuruId(data?.user?.id || null);
     });
   }, []);
 
-  // Cari guru.id lewat profile_id (pola wajib: jadwal_les.guru_id -> guru.id, BUKAN profiles.id langsung)
   useEffect(() => {
     if (!guruId) return;
     const loadGuruTableId = async () => {
@@ -157,7 +150,6 @@ const TeacherAbsensiMateri = () => {
     loadGuruTableId();
   }, [guruId]);
 
-  // Ambil jadwal les milik guru ini — sumber data untuk auto-isi Kelas saat siswa dipilih
   useEffect(() => {
     if (!guruTableId) return;
     const loadJadwal = async () => {
@@ -172,7 +164,6 @@ const TeacherAbsensiMateri = () => {
     loadJadwal();
   }, [guruTableId]);
 
-  // Kumpulkan kelas unik (dari jadwal_les.kelas) untuk siswa yang sedang dipilih di form
   const getKelasOptionsForSiswa = useCallback(
     (siswaId) => {
       if (!siswaId) return [];
@@ -188,17 +179,15 @@ const TeacherAbsensiMateri = () => {
 
   const kelasOptionsForSiswa = getKelasOptionsForSiswa(siswa);
 
-  // Auto-isi Kelas tiap kali siswa terpilih berubah (atau data jadwal selesai dimuat)
+  // Perbaikan: tambahkan dependency kelasOptionsForSiswa
   useEffect(() => {
     if (kelasOptionsForSiswa.length > 0) {
       setKelasTampil((prev) => (kelasOptionsForSiswa.includes(prev) ? prev : kelasOptionsForSiswa[0]));
     } else {
       setKelasTampil('');
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [siswa, jadwalLes]);
+  }, [kelasOptionsForSiswa]);
 
-  // Ambil daftar siswa dari tabel profiles
   useEffect(() => {
     const loadStudents = async () => {
       setLoadingStudents(true);
@@ -219,7 +208,6 @@ const TeacherAbsensiMateri = () => {
     loadStudents();
   }, []);
 
-  // Ambil riwayat sesi pembelajaran, join ke nama siswa
   const loadEntries = useCallback(async () => {
     setLoadingEntries(true);
     setEntriesError('');
@@ -293,9 +281,6 @@ const TeacherAbsensiMateri = () => {
     const urls = [];
     for (const item of buktiFiles) {
       const safeName = item.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-      // Folder pertama harus UUID milik user yang login, sesuai policy
-      // folder-based RLS umum di Supabase Storage:
-      // (storage.foldername(name))[1] = auth.uid()
       const path = `${guruId}/${Date.now()}-${safeName}`;
       const { error: uploadError } = await supabase.storage.from(BUCKET).upload(path, item.file);
       if (uploadError) throw uploadError;
@@ -364,12 +349,13 @@ const TeacherAbsensiMateri = () => {
     return true;
   });
 
+  // ======================== STYLE FUNCTIONS ========================
   const inputStyle = (hasError) => ({
     width: '100%',
-    padding: '10px 12px',
+    padding: isMobile ? '12px 14px' : '10px 12px',
     borderRadius: '10px',
     border: `1.5px solid ${hasError ? C.red : C.border}`,
-    fontSize: '0.9rem',
+    fontSize: isMobile ? '16px' : '0.9rem',
     color: C.dark,
     fontFamily: 'inherit',
     background: C.white,
@@ -379,7 +365,7 @@ const TeacherAbsensiMateri = () => {
 
   const labelStyle = {
     display: 'block',
-    fontSize: '0.8rem',
+    fontSize: isMobile ? '0.9rem' : '0.8rem',
     fontWeight: 600,
     color: C.gray,
     marginBottom: '6px',
@@ -387,10 +373,10 @@ const TeacherAbsensiMateri = () => {
 
   const darkInputStyle = (hasError) => ({
     width: '100%',
-    padding: '10px 12px',
+    padding: isMobile ? '12px 14px' : '10px 12px',
     borderRadius: '9px',
     border: `1.5px solid ${hasError ? D.danger : D.fieldBorder}`,
-    fontSize: '0.9rem',
+    fontSize: isMobile ? '16px' : '0.9rem',
     color: D.text,
     fontFamily: 'inherit',
     background: D.field,
@@ -400,7 +386,7 @@ const TeacherAbsensiMateri = () => {
 
   const darkLabelStyle = {
     display: 'block',
-    fontSize: '0.78rem',
+    fontSize: isMobile ? '0.9rem' : '0.78rem',
     fontWeight: 600,
     color: D.textMuted,
     marginBottom: '6px',
@@ -418,7 +404,6 @@ const TeacherAbsensiMateri = () => {
           boxShadow: '0 12px 32px rgba(0,0,0,0.28)',
         }}
       >
-        {/* Header bar */}
         <div
           style={{
             padding: isMobile ? '0.9rem 1.1rem' : '1.1rem 1.75rem',
@@ -430,10 +415,10 @@ const TeacherAbsensiMateri = () => {
             flexWrap: 'wrap',
           }}
         >
-          <span style={{ color: D.gold, fontWeight: 800, fontSize: '1rem', letterSpacing: '0.03em' }}>
+          <span style={{ color: D.gold, fontWeight: 800, fontSize: isMobile ? '1rem' : '1rem', letterSpacing: '0.03em' }}>
             INPUT GURU
           </span>
-          <span style={{ color: D.textMuted, fontSize: '0.85rem', fontWeight: 500 }}>
+          <span style={{ color: D.textMuted, fontSize: isMobile ? '0.9rem' : '0.85rem', fontWeight: 500 }}>
             (Tambah Laporan Pembelajaran)
           </span>
         </div>
@@ -539,17 +524,18 @@ const TeacherAbsensiMateri = () => {
                   border: `1.5px dashed ${isDragging ? D.gold : D.fieldBorder}`,
                   background: isDragging ? D.goldSoft : D.field,
                   borderRadius: '12px',
-                  padding: '1.75rem 1rem',
+                  padding: isMobile ? '1.5rem 1rem' : '1.75rem 1rem',
                   textAlign: 'center',
                   cursor: 'pointer',
                   transition: 'all 0.15s ease',
+                  minHeight: isMobile ? '120px' : 'auto',
                 }}
               >
-                <div style={{ fontSize: '1.6rem', color: D.gold, marginBottom: '6px' }}>⬆</div>
-                <div style={{ color: D.text, fontSize: '0.88rem', fontWeight: 500 }}>
+                <div style={{ fontSize: isMobile ? '2rem' : '1.6rem', color: D.gold, marginBottom: '6px' }}>⬆</div>
+                <div style={{ color: D.text, fontSize: isMobile ? '1rem' : '0.88rem', fontWeight: 500 }}>
                   Drag &amp; Drop file di sini
                 </div>
-                <div style={{ color: D.textFaint, fontSize: '0.78rem', marginTop: '2px' }}>
+                <div style={{ color: D.textFaint, fontSize: isMobile ? '0.9rem' : '0.78rem', marginTop: '2px' }}>
                   atau klik untuk memilih file
                 </div>
               </div>
@@ -603,7 +589,7 @@ const TeacherAbsensiMateri = () => {
                       <button
                         onClick={() => removeFile(idx)}
                         aria-label="Hapus file"
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: D.textMuted, fontSize: '1rem', padding: '4px' }}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: D.textMuted, fontSize: '1.2rem', padding: '6px', minHeight: '44px', minWidth: '44px' }}
                       >
                         ×
                       </button>
@@ -637,21 +623,44 @@ const TeacherAbsensiMateri = () => {
             marginTop: '1.5rem',
           }}>
             {justAdded && (
-              <span style={{ color: '#7fbf9e', fontSize: '0.85rem', fontWeight: 600, textAlign: isMobile ? 'center' : 'left' }}>
+              <span style={{ color: '#7fbf9e', fontSize: isMobile ? '1rem' : '0.85rem', fontWeight: 600, textAlign: isMobile ? 'center' : 'left' }}>
                 ✓ Pertemuan berhasil dicatat
               </span>
             )}
             <button
               onClick={resetForm}
               disabled={saving}
-              style={{ background: 'none', border: `1.5px solid ${D.fieldBorder}`, padding: '10px 20px', borderRadius: '10px', cursor: 'pointer', color: D.textMuted, fontWeight: '500' }}
+              style={{
+                background: 'none',
+                border: `1.5px solid ${D.fieldBorder}`,
+                padding: isMobile ? '12px 24px' : '10px 20px',
+                borderRadius: '10px',
+                cursor: saving ? 'not-allowed' : 'pointer',
+                color: D.textMuted,
+                fontWeight: '500',
+                fontSize: isMobile ? '16px' : '0.9rem',
+                minHeight: isMobile ? '48px' : 'auto',
+                fontFamily: 'inherit',
+              }}
             >
               Batal
             </button>
             <button
               onClick={handleSubmit}
               disabled={saving}
-              style={{ background: D.gold, border: 'none', padding: '10px 26px', borderRadius: '10px', cursor: saving ? 'default' : 'pointer', color: '#241d0d', fontWeight: '700', opacity: saving ? 0.7 : 1 }}
+              style={{
+                background: D.gold,
+                border: 'none',
+                padding: isMobile ? '12px 28px' : '10px 26px',
+                borderRadius: '10px',
+                cursor: saving ? 'default' : 'pointer',
+                color: '#241d0d',
+                fontWeight: '700',
+                opacity: saving ? 0.7 : 1,
+                fontSize: isMobile ? '16px' : '0.9rem',
+                minHeight: isMobile ? '48px' : 'auto',
+                fontFamily: 'inherit',
+              }}
             >
               {saving ? 'Menyimpan...' : 'Simpan'}
             </button>
@@ -662,7 +671,7 @@ const TeacherAbsensiMateri = () => {
       {/* Tabel Riwayat */}
       <div style={{ background: C.white, borderRadius: '16px', border: `1.5px solid ${C.border}`, padding: isMobile ? '1.1rem' : '1.75rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1.25rem' }}>
-          <h2 style={{ fontSize: isMobile ? '1rem' : '1.15rem', fontWeight: '700', color: C.dark, margin: 0 }}>Riwayat Absensi &amp; Materi</h2>
+          <h2 style={{ fontSize: isMobile ? '1.1rem' : '1.15rem', fontWeight: '700', color: C.dark, margin: 0 }}>Riwayat Absensi &amp; Materi</h2>
           <span style={{ fontSize: '0.8rem', color: C.gray }}>
             {filteredEntries.length} dari {entries.length} pertemuan
           </span>
@@ -671,8 +680,8 @@ const TeacherAbsensiMateri = () => {
         {/* Filters */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem', marginBottom: '1.25rem' }}>
           <div>
-            <label style={{ ...labelStyle, fontSize: '0.72rem' }}>Nama Siswa</label>
-            <select value={filterSiswa} onChange={(e) => setFilterSiswa(e.target.value)} style={{ ...inputStyle(false), cursor: 'pointer', fontSize: '0.85rem' }}>
+            <label style={{ ...labelStyle, fontSize: isMobile ? '0.85rem' : '0.72rem' }}>Nama Siswa</label>
+            <select value={filterSiswa} onChange={(e) => setFilterSiswa(e.target.value)} style={{ ...inputStyle(false), cursor: 'pointer', fontSize: isMobile ? '16px' : '0.85rem' }}>
               <option>Semua Siswa</option>
               {students.map((s) => (
                 <option key={s.id} value={s.full_name}>{s.full_name}</option>
@@ -680,21 +689,21 @@ const TeacherAbsensiMateri = () => {
             </select>
           </div>
           <div>
-            <label style={{ ...labelStyle, fontSize: '0.72rem' }}>Bulan</label>
-            <select value={filterBulan} onChange={(e) => setFilterBulan(e.target.value)} style={{ ...inputStyle(false), cursor: 'pointer', fontSize: '0.85rem' }}>
+            <label style={{ ...labelStyle, fontSize: isMobile ? '0.85rem' : '0.72rem' }}>Bulan</label>
+            <select value={filterBulan} onChange={(e) => setFilterBulan(e.target.value)} style={{ ...inputStyle(false), cursor: 'pointer', fontSize: isMobile ? '16px' : '0.85rem' }}>
               {bulanOptions.map((b) => (
                 <option key={b} value={b}>{b}</option>
               ))}
             </select>
           </div>
           <div>
-            <label style={{ ...labelStyle, fontSize: '0.72rem' }}>Cari</label>
+            <label style={{ ...labelStyle, fontSize: isMobile ? '0.85rem' : '0.72rem' }}>Cari</label>
             <input
               type="text"
               placeholder="Cari materi atau catatan..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              style={{ ...inputStyle(false), fontSize: '0.85rem' }}
+              style={{ ...inputStyle(false), fontSize: isMobile ? '16px' : '0.85rem' }}
             />
           </div>
         </div>
@@ -749,7 +758,7 @@ const TeacherAbsensiMateri = () => {
                     </div>
                     <button
                       onClick={() => setOpenMenuId(openMenuId === item.id ? null : item.id)}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.gray, fontSize: '1.1rem', padding: '0 4px', flexShrink: 0 }}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.gray, fontSize: '1.2rem', padding: '6px', minHeight: '44px', minWidth: '44px', flexShrink: 0 }}
                     >
                       ⋮
                     </button>
@@ -761,12 +770,12 @@ const TeacherAbsensiMateri = () => {
                           boxShadow: '0 4px 12px rgba(0,0,0,0.08)', zIndex: 10, minWidth: '110px',
                         }}
                       >
-                        <button style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer', color: C.dark, fontSize: '0.82rem' }}>
+                        <button style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', color: C.dark, fontSize: '0.9rem' }}>
                           Edit
                         </button>
                         <button
                           onClick={() => handleDelete(item.id)}
-                          style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer', color: C.red, fontSize: '0.82rem' }}
+                          style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', color: C.red, fontSize: '0.9rem' }}
                         >
                           Hapus
                         </button>
@@ -774,7 +783,7 @@ const TeacherAbsensiMateri = () => {
                     )}
                   </div>
 
-                  <div style={{ fontSize: '0.85rem', fontWeight: 500, color: C.dark }}>{item.judul_materi}</div>
+                  <div style={{ fontSize: '0.9rem', fontWeight: 500, color: C.dark }}>{item.judul_materi}</div>
                   {item.catatan && (
                     <div style={{ fontSize: '0.8rem', color: C.gray }}>{item.catatan}</div>
                   )}
@@ -793,9 +802,9 @@ const TeacherAbsensiMateri = () => {
                             rel="noreferrer"
                             title={fileNameFromUrl(url)}
                             style={{
-                              width: '24px', height: '24px', borderRadius: '6px',
+                              width: '32px', height: '32px', borderRadius: '6px',
                               background: fileTypeFromUrl(url) === 'pdf' ? '#e0574f' : '#3f7ea6',
-                              color: '#fff', fontSize: '0.55rem', fontWeight: 700,
+                              color: '#fff', fontSize: '0.6rem', fontWeight: 700,
                               display: 'inline-flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none',
                             }}
                           >
@@ -876,8 +885,8 @@ const TeacherAbsensiMateri = () => {
                               rel="noreferrer"
                               title={fileNameFromUrl(url)}
                               style={{
-                                width: '22px',
-                                height: '22px',
+                                width: '28px',
+                                height: '28px',
                                 borderRadius: '6px',
                                 background: fileTypeFromUrl(url) === 'pdf' ? '#e0574f' : '#3f7ea6',
                                 color: '#fff',
@@ -913,7 +922,7 @@ const TeacherAbsensiMateri = () => {
                     <td style={{ padding: '10px', position: 'relative' }}>
                       <button
                         onClick={() => setOpenMenuId(openMenuId === item.id ? null : item.id)}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.gray, fontSize: '1.1rem', padding: '0 6px' }}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.gray, fontSize: '1.2rem', padding: '6px', minHeight: '44px', minWidth: '44px' }}
                       >
                         ⋮
                       </button>
@@ -932,13 +941,13 @@ const TeacherAbsensiMateri = () => {
                           }}
                         >
                           <button
-                            style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer', color: C.dark, fontSize: '0.82rem' }}
+                            style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', color: C.dark, fontSize: '0.9rem' }}
                           >
                             Edit
                           </button>
                           <button
                             onClick={() => handleDelete(item.id)}
-                            style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer', color: C.red, fontSize: '0.82rem' }}
+                            style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', color: C.red, fontSize: '0.9rem' }}
                           >
                             Hapus
                           </button>
