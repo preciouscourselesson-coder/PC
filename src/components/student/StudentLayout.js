@@ -1,3 +1,4 @@
+// src/components/student/StudentLayout.js
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { supabase } from '../../supabaseClient';
@@ -20,7 +21,16 @@ const navItems = [
   { label: 'Absensi',      path: '/siswa/absensi',   icon: '📖' },
   { label: 'Materi',       path: '/siswa/materi',    icon: '📚' },
   { label: 'Tugas',        path: '/siswa/tugas',     icon: '📝' },
-  { label: 'Arsip Soal',   path: '/siswa/arsip', icon: '📂' },
+  { label: 'Arsip Soal',   path: '/siswa/arsip',     icon: '📂' },
+];
+
+// Bottom nav items (5 menu utama + Lainnya)
+const bottomNavItems = [
+  { label: 'Home',    path: '/siswa',          icon: '🏠' },
+  { label: 'Absensi', path: '/siswa/absensi',  icon: '📖' },
+  { label: 'Arsip',   path: '/siswa/arsip',    icon: '📂' },
+  { label: 'Tugas',   path: '/siswa/tugas',    icon: '📝' },
+  { label: 'Lainnya', path: '#',               icon: '☰' },
 ];
 
 // ─── Hook: deteksi layar mobile ───────────────────────────────────────────────
@@ -48,8 +58,8 @@ const useIsMobile = () => {
   return isMobile;
 };
 
-// ─── Sidebar (desktop/tablet) ─────────────────────────────────────────────────
-const Sidebar = () => {
+// ─── Sidebar (desktop) ────────────────────────────────────────────────────────
+const DesktopSidebar = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -61,12 +71,10 @@ const Sidebar = () => {
       position: 'sticky', top: 0, height: '100vh',
       boxSizing: 'border-box', padding: '1.5rem 0'
     }}>
-      {/* Logo */}
       <div style={{ padding: '0 1.2rem', marginBottom: '2rem' }}>
         <img src={logo} alt="Precious Course" style={{ height: '48px' }} />
       </div>
 
-      {/* Nav Items */}
       <nav style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px', padding: '0 0.8rem' }}>
         {navItems.map(item => {
           const active = location.pathname === item.path;
@@ -91,30 +99,118 @@ const Sidebar = () => {
         })}
       </nav>
 
-      {/* Spacer kosong */}
       <div style={{ flex: 1 }} />
     </div>
   );
 };
 
-// ─── Bottom Nav (mobile) ───────────────────────────────────────────────────────
-const BottomNav = () => {
+// ─── Mobile Sidebar (drawer) ────────────────────────────────────────────────
+const MobileSidebar = ({ user, open, onClose }) => {
   const navigate = useNavigate();
   const location = useLocation();
+  const handleLogout = async () => { await supabase.auth.signOut(); navigate('/login'); };
+
+  const handleNavigate = (path) => {
+    navigate(path);
+    onClose();
+  };
+
+  return (
+    <>
+      {open && (
+        <div
+          onClick={onClose}
+          style={{
+            position: 'fixed', inset: 0,
+            background: 'rgba(0,0,0,0.35)',
+            zIndex: 150,
+          }}
+        />
+      )}
+      <div style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '220px',
+        height: '100vh',
+        background: C.white,
+        borderRight: `1.5px solid ${C.border}`,
+        zIndex: 200,
+        transform: open ? 'translateX(0)' : 'translateX(-100%)',
+        transition: 'transform 0.25s ease',
+        display: 'flex',
+        flexDirection: 'column',
+        boxSizing: 'border-box',
+        padding: '1.5rem 0',
+      }}>
+        <div style={{ padding: '0 1.2rem', marginBottom: '2rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <img src={logo} alt="Precious Course" style={{ height: '40px' }} />
+          <button onClick={onClose} style={{ border: 'none', background: 'none', fontSize: '1.3rem', cursor: 'pointer', color: C.gray, padding: '4px' }}>✕</button>
+        </div>
+        <nav style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px', padding: '0 0.8rem', overflowY: 'auto' }}>
+          {navItems.map(item => {
+            const active = location.pathname === item.path;
+            return (
+              <button key={item.path} onClick={() => handleNavigate(item.path)} style={{
+                display: 'flex', alignItems: 'center', gap: '10px',
+                padding: '14px 14px', borderRadius: '12px', border: 'none',
+                background: active ? C.goldBg : 'transparent',
+                color: active ? C.gold : C.gray,
+                fontWeight: active ? 'bold' : 'normal',
+                fontSize: '1rem', cursor: 'pointer',
+                fontFamily: 'inherit', textAlign: 'left',
+                width: '100%', minHeight: '48px'
+              }}>
+                <span style={{ fontSize: '1.1rem' }}>{item.icon}</span>
+                {item.label}
+              </button>
+            );
+          })}
+        </nav>
+        <div style={{ padding: '0 0.8rem' }}>
+          <button onClick={handleLogout} style={{
+            display: 'flex', alignItems: 'center', gap: '10px',
+            padding: '14px 14px', borderRadius: '12px', border: 'none',
+            background: 'transparent', color: '#e74c3c',
+            fontSize: '1rem', cursor: 'pointer', fontFamily: 'inherit',
+            textAlign: 'left', width: '100%', minHeight: '48px'
+          }}
+          onMouseEnter={e => e.currentTarget.style.background = '#fff0f0'}
+          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+          >
+            <span style={{ fontSize: '1.1rem' }}>🚪</span> Keluar
+          </button>
+        </div>
+      </div>
+    </>
+  );
+};
+
+// ─── Bottom Nav (mobile) ──────────────────────────────────────────────────────
+const BottomNav = ({ onMenuClick }) => {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const handleNav = (path) => {
+    if (path === '#') {
+      onMenuClick();
+      return;
+    }
+    navigate(path);
+  };
 
   return (
     <nav style={{
       position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 60,
       background: C.white, borderTop: `1.5px solid ${C.border}`,
       display: 'flex', alignItems: 'stretch', justifyContent: 'space-between',
-      overflowX: 'auto', WebkitOverflowScrolling: 'touch',
       paddingBottom: 'env(safe-area-inset-bottom, 0px)',
       boxShadow: '0 -4px 16px rgba(0,0,0,0.06)'
     }}>
-      {navItems.map(item => {
+      {bottomNavItems.map(item => {
         const active = location.pathname === item.path;
         return (
-          <button key={item.path} onClick={() => navigate(item.path)} style={{
+          <button key={item.label} onClick={() => handleNav(item.path)} style={{
             flex: '1 0 auto', minWidth: '58px',
             display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
             gap: '2px', padding: '8px 4px 6px', border: 'none',
@@ -133,30 +229,27 @@ const BottomNav = () => {
 };
 
 // ─── Topbar ───────────────────────────────────────────────────────────────────
-const Topbar = ({ user, isMobile }) => {
+const Topbar = ({ user, isMobile, onMenuClick }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const [dropOpen, setDropOpen] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState(null);
 
-  // Ambil nama dari full_name (disimpan saat register)
   const nama    = user?.full_name || user?.nama || 'Siswa';
   const initial = nama[0]?.toUpperCase() || 'S';
 
-  // Judul halaman otomatis dari path
   const pageTitles = {
     '/siswa':            'Home',
     '/siswa/updates':    'Updates',
     '/siswa/absensi':    'Absensi',
     '/siswa/materi':     'Materi',
     '/siswa/tugas':      'Tugas',
-    '/siswa/arsip': 'Arsip Soal',
+    '/siswa/arsip':      'Arsip Soal',
     '/siswa/pesan':      'Pesan',
     '/siswa/bantuan':    'Bantuan',
   };
   const pageTitle = pageTitles[location.pathname] || 'Dashboard';
 
-  // Ambil foto profil dari storage
   const loadAvatar = useCallback(async () => {
     const { data: userData } = await supabase.auth.getUser();
     const uid = userData?.user?.id;
@@ -184,13 +277,8 @@ const Topbar = ({ user, isMobile }) => {
 
   useEffect(() => {
     loadAvatar();
-
-    // Listen event dari StudentProfile saat foto/nama diperbarui
-    const handleAvatarUpdate = () => {
-      loadAvatar();
-    };
+    const handleAvatarUpdate = () => { loadAvatar(); };
     window.addEventListener('avatar-updated', handleAvatarUpdate);
-
     return () => {
       window.removeEventListener('avatar-updated', handleAvatarUpdate);
     };
@@ -208,14 +296,17 @@ const Topbar = ({ user, isMobile }) => {
       padding: isMobile ? '0 1rem' : '0 2rem', position: 'sticky', top: 0, zIndex: 50, flexShrink: 0
     }}>
       {isMobile ? (
-        <img src={logo} alt="Precious Course" style={{ height: '30px' }} />
+        <button onClick={onMenuClick} style={{ border: 'none', background: 'none', fontSize: '1.4rem', cursor: 'pointer', color: C.dark, padding: '8px', minHeight: '44px', minWidth: '44px' }}>
+          ☰
+        </button>
       ) : (
         <span style={{ fontWeight: 'bold', color: C.dark, fontSize: '1.05rem' }}>{pageTitle}</span>
       )}
+      {isMobile && (
+        <img src={logo} alt="Precious Course" style={{ height: '30px' }} />
+      )}
 
-      {/* Bagian tengah/kanan: Message + User info */}
       <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '0.5rem' : '1.5rem' }}>
-        {/* Tombol Message */}
         <button
           onClick={() => navigate('/siswa/pesan')}
           aria-label="Pesan"
@@ -233,7 +324,6 @@ const Topbar = ({ user, isMobile }) => {
           {!isMobile && ' Pesan'}
         </button>
 
-        {/* User info (avatar + nama + dropdown) */}
         <div style={{ position: 'relative' }}>
           <button onClick={() => setDropOpen(!dropOpen)} style={{
             display: 'flex', alignItems: 'center', gap: isMobile ? '4px' : '10px',
@@ -296,6 +386,7 @@ const StudentLayout = () => {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const isMobile = useIsMobile();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     const getUser = async () => {
@@ -311,17 +402,21 @@ const StudentLayout = () => {
     return () => listener.subscription.unsubscribe();
   }, [navigate]);
 
+  // Tutup sidebar saat layar berubah ke desktop
+  useEffect(() => {
+    if (!isMobile) setSidebarOpen(false);
+  }, [isMobile]);
+
   return (
     <div style={{
       display: 'flex', minHeight: '100vh', background: C.cream, fontFamily: 'inherit',
       flexDirection: isMobile ? 'column' : 'row'
     }}>
-      {/* Sidebar hanya tampil di desktop/tablet */}
-      {!isMobile && <Sidebar />}
+      {!isMobile && <DesktopSidebar />}
+      {isMobile && <MobileSidebar user={user} open={sidebarOpen} onClose={() => setSidebarOpen(false)} />}
 
-      {/* Konten */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-        <Topbar user={user} isMobile={isMobile} />
+        <Topbar user={user} isMobile={isMobile} onMenuClick={() => setSidebarOpen(true)} />
         <main style={{
           flex: 1,
           padding: isMobile ? '1rem' : '2rem',
@@ -333,8 +428,7 @@ const StudentLayout = () => {
         </main>
       </div>
 
-      {/* Bottom nav hanya tampil di mobile */}
-      {isMobile && <BottomNav />}
+      {isMobile && <BottomNav onMenuClick={() => setSidebarOpen(true)} />}
     </div>
   );
 };

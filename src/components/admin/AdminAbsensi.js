@@ -1,5 +1,7 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+// src/components/admin/AdminAbsensi.js
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '../../supabaseClient';
+import logo from '../../Resource/PC_Horisontal.png';
 
 const C = {
   gold: '#b4964b',
@@ -24,8 +26,7 @@ const TABLE = 'sesi_pembelajaran';
 const GURU_TABLE = 'guru';
 const MOBILE_BREAKPOINT = 768;
 
-// ---------- Helpers (selaras dengan TeacherAbsensiMateri.js) ----------
-
+// ---------- Helpers ----------
 const initials = (name = '') =>
   name
     .split(' ')
@@ -47,6 +48,13 @@ const formatTanggalDisplay = (isoDate) => {
   return `${d}/${m}/${y}`;
 };
 
+const formatTanggalIndo = (isoDate) => {
+  if (!isoDate) return '-';
+  const [y, m, d] = isoDate.split('-');
+  const bulan = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+  return `${parseInt(d, 10)} ${bulan[parseInt(m, 10) - 1]} ${y}`;
+};
+
 const bulanFromIso = (isoDate) => {
   if (!isoDate) return '';
   const bulanNama = [
@@ -66,7 +74,7 @@ const statusStyle = (status) => {
   return { bg: C.amberBg, fg: C.amber };
 };
 
-// Hook kecil untuk deteksi ukuran layar (mobile vs desktop)
+// Hook deteksi layar mobile
 const useIsMobile = () => {
   const [isMobile, setIsMobile] = useState(
     typeof window !== 'undefined' ? window.innerWidth <= MOBILE_BREAKPOINT : false
@@ -79,8 +87,7 @@ const useIsMobile = () => {
   return isMobile;
 };
 
-// ---------- Komponen kecil ----------
-
+// ---------- Komponen stat card ----------
 const StatCard = ({ label, value, fg, bg }) => (
   <div
     style={{
@@ -120,6 +127,7 @@ const MiniStatusBar = ({ counts }) => {
   );
 };
 
+// ---------- Komponen utama ----------
 const AdminAbsensi = () => {
   const isMobile = useIsMobile();
 
@@ -127,8 +135,8 @@ const AdminAbsensi = () => {
   const [loadingEntries, setLoadingEntries] = useState(true);
   const [entriesError, setEntriesError] = useState('');
 
-  const [guruList, setGuruList] = useState([]); // [{id (=profiles.id), full_name}]
-  const [studentList, setStudentList] = useState([]); // [{id, full_name}]
+  const [guruList, setGuruList] = useState([]);
+  const [studentList, setStudentList] = useState([]);
   const [loadingMasters, setLoadingMasters] = useState(true);
 
   const [filterGuru, setFilterGuru] = useState('Semua Guru');
@@ -138,9 +146,23 @@ const AdminAbsensi = () => {
   const [search, setSearch] = useState('');
   const [openMenuId, setOpenMenuId] = useState(null);
   const [updatingId, setUpdatingId] = useState(null);
-  const [rekapTab, setRekapTab] = useState('guru'); // 'guru' | 'siswa'
+  const [rekapTab, setRekapTab] = useState('guru');
 
-  // Ambil daftar guru (lewat tabel guru -> profiles, konsisten dgn pola jadwal_les)
+  // ----- State untuk edit tanggal -----
+  const [showEditDateModal, setShowEditDateModal] = useState(false);
+  const [editDateId, setEditDateId] = useState(null);
+  const [editDateValue, setEditDateValue] = useState('');
+
+  // ----- State untuk rekap siswa -----
+  const [showRekapModal, setShowRekapModal] = useState(false);
+  const [rekapSiswaId, setRekapSiswaId] = useState('');
+  const [rekapBulan, setRekapBulan] = useState('');
+  const [rekapData, setRekapData] = useState([]);
+  const [loadingRekap, setLoadingRekap] = useState(false);
+  const [siswaName, setSiswaName] = useState('');
+  const rekapRef = useRef();
+
+  // Ambil daftar guru & siswa
   useEffect(() => {
     const loadMasters = async () => {
       setLoadingMasters(true);
@@ -160,7 +182,7 @@ const AdminAbsensi = () => {
     loadMasters();
   }, []);
 
-  // Ambil seluruh sesi pembelajaran, join nama siswa & nama guru
+  // Ambil seluruh sesi pembelajaran
   const loadEntries = useCallback(async () => {
     setLoadingEntries(true);
     setEntriesError('');
@@ -183,8 +205,7 @@ const AdminAbsensi = () => {
     loadEntries();
   }, [loadEntries]);
 
-  // ---------- Rekap per guru & per siswa ----------
-
+  // Rekap per guru
   const rekapPerGuru = useMemo(() => {
     const map = new Map();
     guruList.forEach((g) => map.set(g.id, { id: g.id, nama: g.full_name, total: 0, Menunggu: 0, Disetujui: 0, Ditolak: 0 }));
@@ -215,8 +236,6 @@ const AdminAbsensi = () => {
     return Array.from(map.values()).sort((a, b) => b.total - a.total);
   }, [entries, studentList]);
 
-  // ---------- Statistik ringkas ----------
-
   const totalPertemuan = entries.length;
   const totalMenunggu = entries.filter((e) => e.status === 'Menunggu').length;
   const totalDisetujui = entries.filter((e) => e.status === 'Disetujui').length;
@@ -226,8 +245,7 @@ const AdminAbsensi = () => {
 
   const bulanOptions = ['Semua Bulan', ...Array.from(new Set(entries.map((e) => bulanFromIso(e.tanggal)))).filter(Boolean)];
 
-  // ---------- Filter tabel detail ----------
-
+  // Filter untuk tabel detail
   const filteredEntries = entries.filter((e) => {
     const namaSiswa = e.siswa?.full_name || '';
     const namaGuru = e.guruProfile?.full_name || '';
@@ -249,7 +267,6 @@ const AdminAbsensi = () => {
   });
 
   // ---------- Aksi admin: ubah status ----------
-
   const handleUpdateStatus = async (id, newStatus) => {
     setOpenMenuId(null);
     setUpdatingId(id);
@@ -261,6 +278,177 @@ const AdminAbsensi = () => {
       window.alert('Gagal mengubah status: ' + error.message);
     }
     setUpdatingId(null);
+  };
+
+  // ---------- Aksi: edit tanggal ----------
+  const openEditDateModal = (id, currentDate) => {
+    setEditDateId(id);
+    setEditDateValue(currentDate);
+    setShowEditDateModal(true);
+    setOpenMenuId(null);
+  };
+
+  const handleUpdateDate = async () => {
+    if (!editDateId || !editDateValue) return;
+    setUpdatingId(editDateId);
+    const prevEntries = entries;
+    setEntries((prev) => prev.map((e) => (e.id === editDateId ? { ...e, tanggal: editDateValue } : e)));
+    const { error } = await supabase.from(TABLE).update({ tanggal: editDateValue }).eq('id', editDateId);
+    if (error) {
+      setEntries(prevEntries);
+      alert('Gagal update tanggal: ' + error.message);
+    }
+    setUpdatingId(null);
+    setShowEditDateModal(false);
+    setEditDateId(null);
+    setEditDateValue('');
+  };
+
+  // ---------- Rekap siswa dengan pengelompokan per guru ----------
+  const loadRekap = async () => {
+    if (!rekapSiswaId || !rekapBulan) {
+      alert('Pilih siswa dan bulan terlebih dahulu.');
+      return;
+    }
+    setLoadingRekap(true);
+    const [year, month] = rekapBulan.split('-');
+    const startDate = `${year}-${month}-01`;
+    const endDate = `${year}-${month}-${new Date(year, month, 0).getDate()}`;
+    const { data, error } = await supabase
+      .from(TABLE)
+      .select(`
+        tanggal, judul_materi, catatan, status,
+        guru_id,
+        guruProfile:profiles!sesi_pembelajaran_guru_id_fkey(full_name)
+      `)
+      .eq('siswa_id', rekapSiswaId)
+      .gte('tanggal', startDate)
+      .lte('tanggal', endDate)
+      .order('tanggal', { ascending: true });
+
+    if (error) {
+      alert('Gagal mengambil rekap: ' + error.message);
+    } else {
+      setRekapData(data || []);
+      const siswa = studentList.find(s => s.id === rekapSiswaId);
+      setSiswaName(siswa?.full_name || 'Siswa');
+      setShowRekapModal(true);
+    }
+    setLoadingRekap(false);
+  };
+
+  // Kelompokkan data rekap berdasarkan guru (guru_id)
+  const groupedByGuru = useMemo(() => {
+    const groups = {};
+    rekapData.forEach(item => {
+      const key = item.guru_id || 'unknown';
+      if (!groups[key]) {
+        groups[key] = {
+          guru_id: key,
+          guru_name: item.guruProfile?.full_name || 'Guru tidak diketahui',
+          items: []
+        };
+      }
+      groups[key].items.push(item);
+    });
+    // Urutkan berdasarkan nama guru
+    return Object.values(groups).sort((a, b) => a.guru_name.localeCompare(b.guru_name));
+  }, [rekapData]);
+
+  // ---------- Download PDF dengan pengelompokan per guru ----------
+  const handleDownloadPDF = () => {
+    const printContent = document.getElementById('rekap-print');
+    if (!printContent) return;
+    const originalTitle = document.title;
+    document.title = `Rekap ${siswaName} ${rekapBulan}`;
+    const printWindow = window.open('', '_blank', 'width=900,height=700');
+    if (!printWindow) {
+      alert('Mohon izinkan popup untuk mencetak PDF.');
+      return;
+    }
+    const styles = `
+      body { font-family: 'Times New Roman', Times, serif; margin: 40px; color: #171411; }
+      .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #b4964b; padding-bottom: 15px; }
+      .logo { max-height: 60px; }
+      .title { font-size: 24px; font-weight: bold; color: #b4964b; margin: 10px 0 0; }
+      .subtitle { font-size: 16px; color: #726d66; margin: 4px 0 0; }
+      .info { margin: 15px 0 20px; font-size: 14px; }
+      .info span { font-weight: bold; }
+      .guru-section { margin-bottom: 30px; }
+      .guru-header { font-size: 18px; font-weight: bold; color: #2d6a4f; margin-bottom: 10px; border-bottom: 1px solid #b4964b; padding-bottom: 5px; }
+      table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 5px; }
+      th { background: #f7f6f0; padding: 8px 8px; border: 1px solid #e6e2d8; text-align: left; }
+      td { padding: 6px 8px; border: 1px solid #e6e2d8; vertical-align: top; }
+      .status { padding: 2px 10px; border-radius: 12px; font-weight: 600; font-size: 11px; display: inline-block; }
+      .status-disetujui { background: #e4efe9; color: #2d6a4f; }
+      .status-ditolak { background: #fbeceb; color: #b0413e; }
+      .status-menunggu { background: #fdf6ec; color: #a3760f; }
+      .footer { margin-top: 30px; text-align: center; font-size: 12px; color: #a8a29a; border-top: 1px solid #e6e2d8; padding-top: 15px; }
+      .total-row { background: #f7f6f0; font-weight: bold; }
+      .sub-total { font-weight: bold; margin-top: 8px; text-align: right; }
+    `;
+
+    let guruTablesHtml = '';
+    groupedByGuru.forEach(group => {
+      const items = group.items;
+      guruTablesHtml += `
+        <div class="guru-section">
+          <div class="guru-header">👨‍🏫 ${group.guru_name}</div>
+          <table>
+            <thead>
+              <tr><th>No.</th><th>Tanggal</th><th>Materi</th><th>Catatan</th><th>Status</th></tr>
+            </thead>
+            <tbody>
+              ${items.map((item, idx) => {
+                const statusClass = `status-${item.status.toLowerCase()}`;
+                return `
+                  <tr>
+                    <td>${idx+1}</td>
+                    <td>${formatTanggalIndo(item.tanggal)}</td>
+                    <td>${item.judul_materi}</td>
+                    <td>${item.catatan || '-'}</td>
+                    <td><span class="status ${statusClass}">${item.status}</span></td>
+                  </tr>
+                `;
+              }).join('')}
+              <tr class="total-row">
+                <td colspan="5" style="text-align:right;">Total dengan ${group.guru_name}: ${items.length} pertemuan</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      `;
+    });
+
+    const totalAll = rekapData.length;
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head><meta charset="UTF-8"><title>Rekap ${siswaName} ${rekapBulan}</title><style>${styles}</style></head>
+      <body>
+        <div class="header">
+          <img src="${logo}" alt="Precious Course" class="logo" />
+          <div class="title">LAPORAN REKAP PERTEMUAN</div>
+          <div class="subtitle">Precious Course — Monitoring Belajar Siswa</div>
+        </div>
+        <div class="info">
+          <div><span>Nama Siswa:</span> ${siswaName}</div>
+          <div><span>Periode:</span> ${bulanFromIso(rekapBulan+'-01')}</div>
+          <div><span>Total Pertemuan:</span> ${totalAll} sesi</div>
+        </div>
+        ${guruTablesHtml}
+        <div class="footer">
+          Laporan ini dibuat secara otomatis oleh sistem Precious Course.<br />
+          ${new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
+        </div>
+      </body>
+      </html>
+    `;
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+    document.title = originalTitle;
   };
 
   const selectStyle = {
@@ -444,6 +632,13 @@ const AdminAbsensi = () => {
           style={{ ...selectStyle, cursor: 'text', flex: '1 1 220px', minWidth: '200px' }}
         />
 
+        <button
+          onClick={() => setShowRekapModal(true)}
+          style={{ ...selectStyle, background: C.gold, color: C.white, fontWeight: 'bold', border: 'none' }}
+        >
+          📊 Rekap Siswa
+        </button>
+
         {(filterGuru !== 'Semua Guru' || filterSiswa !== 'Semua Siswa' || filterBulan !== 'Semua Bulan' || filterStatus !== 'Semua Status' || search) && (
           <button
             onClick={() => {
@@ -463,6 +658,7 @@ const AdminAbsensi = () => {
       {/* Tabel / kartu detail pertemuan */}
       <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: '14px', overflow: 'hidden' }}>
         {isMobile ? (
+          // --- Tampilan mobile (kartu) ---
           <div style={{ padding: '0.75rem' }}>
             {loadingEntries && <div style={{ padding: '2rem', textAlign: 'center', color: C.grayLight }}>Memuat data...</div>}
             {!loadingEntries && filteredEntries.length === 0 && (
@@ -535,6 +731,7 @@ const AdminAbsensi = () => {
             })}
           </div>
         ) : (
+          // --- Tampilan desktop (tabel) ---
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
               <thead>
@@ -544,6 +741,7 @@ const AdminAbsensi = () => {
                   <th style={{ padding: '10px', textAlign: 'left', borderBottom: `1px solid ${C.border}` }}>Guru</th>
                   <th style={{ padding: '10px', textAlign: 'left', borderBottom: `1px solid ${C.border}` }}>Siswa</th>
                   <th style={{ padding: '10px', textAlign: 'left', borderBottom: `1px solid ${C.border}` }}>Judul Materi Ajar</th>
+                  <th style={{ padding: '10px', textAlign: 'left', borderBottom: `1px solid ${C.border}` }}>Catatan</th>
                   <th style={{ padding: '10px', textAlign: 'left', borderBottom: `1px solid ${C.border}` }}>Bukti</th>
                   <th style={{ padding: '10px', textAlign: 'left', borderBottom: `1px solid ${C.border}` }}>Status</th>
                   <th style={{ padding: '10px', textAlign: 'left', borderBottom: `1px solid ${C.border}` }}>Aksi</th>
@@ -552,7 +750,7 @@ const AdminAbsensi = () => {
               <tbody>
                 {loadingEntries && (
                   <tr>
-                    <td colSpan={8} style={{ padding: '2rem', textAlign: 'center', color: C.grayLight }}>Memuat data pertemuan...</td>
+                    <td colSpan={9} style={{ padding: '2rem', textAlign: 'center', color: C.grayLight }}>Memuat data pertemuan...</td>
                   </tr>
                 )}
                 {!loadingEntries && filteredEntries.map((item, idx) => {
@@ -594,6 +792,9 @@ const AdminAbsensi = () => {
                         </div>
                       </td>
                       <td style={{ padding: '10px', fontWeight: '500', minWidth: '160px' }}>{item.judul_materi}</td>
+                      <td style={{ padding: '10px', maxWidth: '220px', color: C.gray, wordBreak: 'break-word' }}>
+                        {item.catatan || '-'}
+                      </td>
                       <td style={{ padding: '10px' }}>
                         {(!item.bukti_urls || item.bukti_urls.length === 0) ? (
                           <span style={{ color: C.grayLight }}>-</span>
@@ -666,6 +867,12 @@ const AdminAbsensi = () => {
                             >
                               Set ke Menunggu
                             </button>
+                            <button
+                              onClick={() => openEditDateModal(item.id, item.tanggal)}
+                              style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer', color: C.blue, fontSize: '0.82rem' }}
+                            >
+                              Edit Tanggal
+                            </button>
                           </div>
                         )}
                       </td>
@@ -674,7 +881,7 @@ const AdminAbsensi = () => {
                 })}
                 {!loadingEntries && filteredEntries.length === 0 && (
                   <tr>
-                    <td colSpan={8} style={{ padding: '2rem', textAlign: 'center', color: C.grayLight }}>
+                    <td colSpan={9} style={{ padding: '2rem', textAlign: 'center', color: C.grayLight }}>
                       Belum ada pertemuan yang cocok dengan filter ini.
                     </td>
                   </tr>
@@ -684,6 +891,259 @@ const AdminAbsensi = () => {
           </div>
         )}
       </div>
+
+      {/* ===== MODAL EDIT TANGGAL ===== */}
+      {showEditDateModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.45)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 200,
+            padding: '1rem',
+          }}
+        >
+          <div
+            style={{
+              background: C.white,
+              borderRadius: '16px',
+              padding: '1.75rem',
+              maxWidth: '400px',
+              width: '100%',
+              boxShadow: '0 12px 32px rgba(0,0,0,0.2)',
+            }}
+          >
+            <h3 style={{ margin: '0 0 0.5rem', fontSize: '1.1rem', color: C.dark }}>Edit Tanggal Pertemuan</h3>
+            <p style={{ margin: '0 0 1rem', fontSize: '0.85rem', color: C.gray }}>
+              Ubah tanggal pertemuan menjadi:
+            </p>
+            <input
+              type="date"
+              value={editDateValue}
+              onChange={(e) => setEditDateValue(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                borderRadius: '10px',
+                border: `1.5px solid ${C.border}`,
+                fontSize: '0.9rem',
+                marginBottom: '1.5rem',
+                fontFamily: 'inherit',
+              }}
+            />
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => {
+                  setShowEditDateModal(false);
+                  setEditDateId(null);
+                  setEditDateValue('');
+                }}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  border: `1.5px solid ${C.border}`,
+                  background: 'none',
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                  fontSize: '0.85rem',
+                  color: C.gray,
+                }}
+              >
+                Batal
+              </button>
+              <button
+                onClick={handleUpdateDate}
+                disabled={updatingId === editDateId}
+                style={{
+                  padding: '8px 20px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: C.gold,
+                  color: C.white,
+                  fontWeight: 'bold',
+                  cursor: updatingId === editDateId ? 'default' : 'pointer',
+                  opacity: updatingId === editDateId ? 0.6 : 1,
+                  fontFamily: 'inherit',
+                  fontSize: '0.85rem',
+                }}
+              >
+                {updatingId === editDateId ? 'Menyimpan...' : 'Simpan'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== MODAL REKAP SISWA (dikelompokkan per guru) ===== */}
+      {showRekapModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.45)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 200,
+            padding: '1rem',
+          }}
+        >
+          <div
+            style={{
+              background: C.white,
+              borderRadius: '16px',
+              padding: '1.75rem',
+              maxWidth: '850px',
+              width: '100%',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              boxShadow: '0 12px 32px rgba(0,0,0,0.2)',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <h3 style={{ margin: 0, fontSize: '1.1rem', color: C.dark }}>📊 Rekap Pertemuan Siswa</h3>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button
+                  onClick={handleDownloadPDF}
+                  disabled={rekapData.length === 0}
+                  style={{
+                    padding: '6px 14px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    background: C.green,
+                    color: C.white,
+                    fontWeight: 'bold',
+                    cursor: rekapData.length === 0 ? 'default' : 'pointer',
+                    opacity: rekapData.length === 0 ? 0.5 : 1,
+                    fontFamily: 'inherit',
+                    fontSize: '0.8rem',
+                  }}
+                >
+                  📄 PDF
+                </button>
+                <button
+                  onClick={() => {
+                    setShowRekapModal(false);
+                    setRekapData([]);
+                  }}
+                  style={{ background: 'none', border: 'none', fontSize: '1.3rem', cursor: 'pointer', color: C.gray }}
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
+              <select
+                value={rekapSiswaId}
+                onChange={(e) => setRekapSiswaId(e.target.value)}
+                style={selectStyle}
+              >
+                <option value="">-- Pilih Siswa --</option>
+                {studentList.map((s) => (
+                  <option key={s.id} value={s.id}>{s.full_name}</option>
+                ))}
+              </select>
+
+              <input
+                type="month"
+                value={rekapBulan}
+                onChange={(e) => setRekapBulan(e.target.value)}
+                style={{ ...selectStyle, cursor: 'text' }}
+              />
+
+              <button
+                onClick={loadRekap}
+                disabled={loadingRekap}
+                style={{
+                  padding: '9px 20px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: C.gold,
+                  color: C.white,
+                  fontWeight: 'bold',
+                  cursor: loadingRekap ? 'default' : 'pointer',
+                  opacity: loadingRekap ? 0.6 : 1,
+                  fontFamily: 'inherit',
+                  fontSize: '0.85rem',
+                }}
+              >
+                {loadingRekap ? 'Memuat...' : 'Tampilkan'}
+              </button>
+            </div>
+
+            {rekapData.length === 0 && !loadingRekap && (
+              <div style={{ textAlign: 'center', color: C.grayLight, padding: '1.5rem 0' }}>
+                Belum ada data untuk siswa dan bulan ini.
+              </div>
+            )}
+
+            {rekapData.length > 0 && (
+              <div id="rekap-print" ref={rekapRef}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem', borderBottom: `2px solid ${C.gold}`, paddingBottom: '0.5rem' }}>
+                  <img src={logo} alt="Precious Course" style={{ height: '40px' }} />
+                  <div>
+                    <div style={{ fontWeight: 'bold', fontSize: '1.1rem', color: C.dark }}>Rekap Pertemuan</div>
+                    <div style={{ fontSize: '0.8rem', color: C.gray }}>{siswaName} — {bulanFromIso(rekapBulan+'-01')}</div>
+                  </div>
+                </div>
+
+                {/* Kelompokkan per guru */}
+                {groupedByGuru.map((group, idx) => (
+                  <div key={idx} style={{ marginBottom: '1.5rem' }}>
+                    <div style={{ fontWeight: 'bold', fontSize: '1rem', color: C.goldDark, borderBottom: `1px solid ${C.gold}`, paddingBottom: '4px', marginBottom: '8px' }}>
+                      👨‍🏫 {group.guru_name}
+                    </div>
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                        <thead>
+                          <tr style={{ background: C.cream }}>
+                            <th style={{ padding: '6px 8px', borderBottom: `1px solid ${C.border}`, textAlign: 'left' }}>No.</th>
+                            <th style={{ padding: '6px 8px', borderBottom: `1px solid ${C.border}`, textAlign: 'left' }}>Tanggal</th>
+                            <th style={{ padding: '6px 8px', borderBottom: `1px solid ${C.border}`, textAlign: 'left' }}>Materi</th>
+                            <th style={{ padding: '6px 8px', borderBottom: `1px solid ${C.border}`, textAlign: 'left' }}>Catatan</th>
+                            <th style={{ padding: '6px 8px', borderBottom: `1px solid ${C.border}`, textAlign: 'left' }}>Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {group.items.map((item, idx2) => {
+                            const st = statusStyle(item.status);
+                            return (
+                              <tr key={idx2} style={{ borderBottom: `1px solid ${C.border}` }}>
+                                <td style={{ padding: '6px 8px' }}>{idx2 + 1}</td>
+                                <td style={{ padding: '6px 8px' }}>{formatTanggalDisplay(item.tanggal)}</td>
+                                <td style={{ padding: '6px 8px', fontWeight: 500 }}>{item.judul_materi}</td>
+                                <td style={{ padding: '6px 8px', color: C.gray }}>{item.catatan || '-'}</td>
+                                <td style={{ padding: '6px 8px' }}>
+                                  <span style={{ background: st.bg, color: st.fg, padding: '2px 10px', borderRadius: '999px', fontSize: '0.7rem', fontWeight: 600 }}>
+                                    {item.status}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                          <tr style={{ background: C.cream }}>
+                            <td colSpan={5} style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 'bold' }}>
+                              Total dengan {group.guru_name}: {group.items.length} pertemuan
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ))}
+
+                <div style={{ marginTop: '1rem', fontSize: '0.7rem', color: C.grayLight, textAlign: 'center', borderTop: `1px solid ${C.border}`, paddingTop: '0.5rem' }}>
+                  Total seluruh pertemuan: {rekapData.length} • Dicetak dari Precious Course • {new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

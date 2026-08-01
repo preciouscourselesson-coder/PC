@@ -1,3 +1,9 @@
+// TeacherHome.js
+// Perbaikan:
+// 1. Tampilan mobile: urutkan berdasarkan hari Senin–Minggu, lalu di dalamnya tampilkan slot jam
+// 2. Pengajuan yang sudah disetujui admin (disetujui_admin) tidak ditampilkan
+// 3. Status 'disetujui_menunggu_admin' tetap muncul, yang 'disetujui_admin' disembunyikan
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../../supabaseClient';
 
@@ -234,8 +240,9 @@ const TeacherHome = () => {
         .order('created_at', { ascending: false });
       if (pengajuanError) throw pengajuanError;
       const all = pengajuanData || [];
-      setPengajuanMasuk(all.filter(p => p.diajukan_oleh === 'siswa' && p.status === 'menunggu_persetujuan'));
-      setPengajuanSaya(all.filter(p => p.diajukan_oleh === 'guru'));
+      // 🔥 Hanya tampilkan pengajuan yang belum disetujui admin
+      setPengajuanMasuk(all.filter(p => p.diajukan_oleh === 'siswa' && p.status !== 'disetujui_admin' && p.status !== 'ditolak_admin'));
+      setPengajuanSaya(all.filter(p => p.diajukan_oleh === 'guru' && p.status !== 'disetujui_admin' && p.status !== 'ditolak_admin'));
 
       const { data: materiData, error: materiError } = await supabase
         .from('materi_request')
@@ -763,7 +770,7 @@ const TeacherHome = () => {
         marginBottom: isMobile ? '1rem' : '1.5rem',
         alignItems: 'start',
       }}>
-        {/* Kiri: Jadwal Mengajar Minggu Ini - row 1 / 3 (desktop only) */}
+        {/* Kiri: Jadwal Mengajar Minggu Ini */}
         <div style={{ ...cardStyle, gridRow: isMobile ? 'auto' : '1 / 3' }}>
           <h3 style={{ margin: '0 0 1rem 0', color: C.dark, fontSize: isMobile ? '1.1rem' : '1.17rem' }}>Jadwal Mengajar Minggu Ini</h3>
           {loading ? (
@@ -771,38 +778,49 @@ const TeacherHome = () => {
           ) : slots.length === 0 ? (
             <p style={{ color: C.gray, fontSize: '0.9rem' }}>Belum ada jadwal tetap.</p>
           ) : isMobile ? (
-            // ===== TAMPILAN KARTU UNTUK MOBILE =====
+            // ===== TAMPILAN MOBILE: URUTKAN BERDASARKAN HARI =====
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              {slots.map((slot, idx) => (
-                <div key={idx} style={{ border: `1px solid ${C.border}`, borderRadius: '12px', padding: '0.75rem' }}>
-                  <div style={{ fontWeight: 'bold', fontSize: '0.9rem', marginBottom: '0.4rem' }}>
-                    {formatJam(slot.jam_mulai)} - {formatJam(slot.jam_selesai)}
+              {HARI_LIST.map(hari => {
+                // Cari slot yang memiliki jadwal di hari ini
+                const daySlots = slots.filter(slot => getCell(hari, slot));
+                if (daySlots.length === 0) {
+                  return (
+                    <div key={hari} style={{ border: `1px solid ${C.border}`, borderRadius: '12px', padding: '0.75rem', background: C.cream }}>
+                      <div style={{ fontWeight: 'bold', fontSize: '0.9rem', marginBottom: '0.2rem' }}>{hari}</div>
+                      <div style={{ fontSize: '0.8rem', color: C.gray }}>Tidak ada jadwal</div>
+                    </div>
+                  );
+                }
+                return (
+                  <div key={hari} style={{ border: `1px solid ${C.border}`, borderRadius: '12px', padding: '0.75rem' }}>
+                    <div style={{ fontWeight: 'bold', fontSize: '0.9rem', marginBottom: '0.4rem' }}>{hari}</div>
+                    {daySlots.map(slot => {
+                      const cell = getCell(hari, slot);
+                      const badge = badgeForJenis(cell.jenis);
+                      let displayName = '-';
+                      if (cell.siswa_id) {
+                        displayName = studentNameMap[cell.siswa_id] || cell.siswa_id;
+                      } else if (Array.isArray(cell.siswa_ids) && cell.siswa_ids.length > 0) {
+                        displayName = cell.siswa_ids.map(id => studentNameMap[id] || id).join(', ');
+                      }
+                      return (
+                        <div key={slot.jam_mulai} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: `1px solid ${C.border}`, fontSize: '0.85rem' }}>
+                          <span>{formatJam(slot.jam_mulai)} - {formatJam(slot.jam_selesai)}</span>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '6px', textAlign: 'right' }}>
+                            <span>{displayName}</span>
+                            <span style={{ fontSize: '0.7rem', border: `1px solid ${badge.color}`, borderRadius: '4px', padding: '0 4px', color: badge.color }}>
+                              {badge.letter}
+                            </span>
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
-                  {HARI_LIST.map(hari => {
-                    const cell = getCell(hari, slot);
-                    if (!cell) return null;
-                    const badge = badgeForJenis(cell.jenis);
-                    let displayName = '-';
-                    if (cell.siswa_id) {
-                      displayName = studentNameMap[cell.siswa_id] || cell.siswa_id;
-                    } else if (Array.isArray(cell.siswa_ids) && cell.siswa_ids.length > 0) {
-                      displayName = cell.siswa_ids.map(id => studentNameMap[id] || id).join(', ');
-                    }
-                    return (
-                      <div key={hari} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: `1px solid ${C.border}`, fontSize: '0.85rem' }}>
-                        <span style={{ fontWeight: 500 }}>{hari}</span>
-                        <span style={{ display: 'flex', alignItems: 'center', gap: '6px', textAlign: 'right' }}>
-                          <span>{displayName}</span>
-                          <span style={{ fontSize: '0.7rem', border: `1px solid ${badge.color}`, borderRadius: '4px', padding: '0 4px', color: badge.color }}>{badge.letter}</span>
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
-            // ===== TAMPILAN TABEL UNTUK DESKTOP =====
+            // ===== TAMPILAN TABEL DESKTOP =====
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
                 <thead>
@@ -1357,11 +1375,6 @@ const TeacherHome = () => {
           </div>
         </div>
       )}
-
-      <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginTop: '1rem' }}>
-        <button style={linkBtn}>Lihat semua jadwal</button>
-        <button style={linkBtn}>Lihat semua ujian</button>
-      </div>
     </div>
   );
 };

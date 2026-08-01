@@ -17,7 +17,6 @@ const C = {
 
 const MOBILE_BREAKPOINT = 768;
 
-// Hook kecil untuk deteksi ukuran layar (mobile vs desktop)
 const useIsMobile = () => {
   const [isMobile, setIsMobile] = useState(
     typeof window !== 'undefined' ? window.innerWidth <= MOBILE_BREAKPOINT : false
@@ -40,6 +39,14 @@ const navItems = [
   { label: 'Daftar Siswa',    path: '/guru/daftar-siswa',   icon: '👨‍🎓' },
 ];
 
+const bottomNavItems = [
+  { label: 'Home',   path: '/guru',                icon: '🏠' },
+  { label: 'Absensi',path: '/guru/absensi-materi', icon: '📖' },
+  { label: 'Bahan Ajar',path: '/guru/bahan-ajar',  icon: '📚' },
+  { label: 'Tugas',  path: '/guru/tugas',          icon: '📝' },
+  { label: 'Lainnya',path: '#',                    icon: '☰' },
+];
+
 const Sidebar = ({ user, isMobile, open, onClose }) => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -50,7 +57,6 @@ const Sidebar = ({ user, isMobile, open, onClose }) => {
     if (isMobile) onClose();
   };
 
-  // Style dasar sidebar
   const baseStyle = {
     width: '220px',
     minHeight: '100vh',
@@ -81,7 +87,6 @@ const Sidebar = ({ user, isMobile, open, onClose }) => {
 
   return (
     <>
-      {/* Overlay gelap di belakang sidebar saat mobile & terbuka */}
       {isMobile && open && (
         <div
           onClick={onClose}
@@ -170,7 +175,6 @@ const Topbar = ({ user, isMobile, onMenuClick }) => {
   };
   const pageTitle = pageTitles[location.pathname] || 'Dashboard';
 
-  // Ambil avatar dari storage
   const loadAvatar = useCallback(async () => {
     const { data: userData } = await supabase.auth.getUser();
     const uid = userData?.user?.id;
@@ -198,13 +202,8 @@ const Topbar = ({ user, isMobile, onMenuClick }) => {
 
   useEffect(() => {
     loadAvatar();
-
-    // Listen event dari TeacherProfile
-    const handleAvatarUpdate = () => {
-      loadAvatar();
-    };
+    const handleAvatarUpdate = () => { loadAvatar(); };
     window.addEventListener('avatar-updated', handleAvatarUpdate);
-
     return () => {
       window.removeEventListener('avatar-updated', handleAvatarUpdate);
     };
@@ -245,9 +244,7 @@ const Topbar = ({ user, isMobile, onMenuClick }) => {
         </span>
       </div>
 
-      {/* Bagian kanan: Pesan + User info */}
       <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '0.5rem' : '1.5rem', flexShrink: 0 }}>
-        {/* Tombol Pesan */}
         <button
           onClick={() => navigate('/guru/pesan')}
           style={{
@@ -264,7 +261,6 @@ const Topbar = ({ user, isMobile, onMenuClick }) => {
           {!isMobile && 'Pesan'}
         </button>
 
-        {/* User info (avatar + nama + dropdown) */}
         <div style={{ position: 'relative' }}>
           <button
             onClick={() => setDropOpen(!dropOpen)}
@@ -339,6 +335,67 @@ const Topbar = ({ user, isMobile, onMenuClick }) => {
   );
 };
 
+const BottomNav = ({ onMenuClick }) => {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const handleNav = (path) => {
+    if (path === '#') {
+      onMenuClick();
+      return;
+    }
+    navigate(path);
+  };
+
+  return (
+    <div style={{
+      position: 'fixed',
+      bottom: 0,
+      left: 0,
+      right: 0,
+      height: '64px',
+      background: C.white,
+      borderTop: `1.5px solid ${C.border}`,
+      display: 'flex',
+      justifyContent: 'space-around',
+      alignItems: 'center',
+      zIndex: 100,
+      padding: '0 0.25rem',
+      boxSizing: 'border-box',
+    }}>
+      {bottomNavItems.map(item => {
+        const active = location.pathname === item.path || (item.path === '/guru' && location.pathname === '/guru');
+        return (
+          <button
+            key={item.label}
+            onClick={() => handleNav(item.path)}
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flex: 1,
+              height: '100%',
+              padding: '4px 0',
+              border: 'none',
+              background: 'transparent',
+              color: active ? C.gold : C.gray,
+              fontSize: '0.65rem',
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+              transition: 'all 0.15s',
+              minWidth: '44px',
+            }}
+          >
+            <span style={{ fontSize: '1.4rem', marginBottom: '2px' }}>{item.icon}</span>
+            <span style={{ fontWeight: active ? 'bold' : 'normal' }}>{item.label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+};
+
 const TeacherLayout = () => {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
@@ -358,7 +415,6 @@ const TeacherLayout = () => {
     return () => listener.subscription.unsubscribe();
   }, [navigate]);
 
-  // Tutup sidebar otomatis kalau layar berubah jadi desktop
   useEffect(() => {
     if (!isMobile) setSidebarOpen(false);
   }, [isMobile]);
@@ -373,10 +429,16 @@ const TeacherLayout = () => {
       />
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         <Topbar user={user} isMobile={isMobile} onMenuClick={() => setSidebarOpen(true)} />
-        <main style={{ flex: 1, padding: isMobile ? '1rem' : '2rem', overflowY: 'auto', boxSizing: 'border-box' }}>
+        <main style={{
+          flex: 1,
+          padding: isMobile ? '1rem 1rem 80px 1rem' : '2rem',
+          overflowY: 'auto',
+          boxSizing: 'border-box',
+        }}>
           <Outlet />
         </main>
       </div>
+      {isMobile && <BottomNav onMenuClick={() => setSidebarOpen(true)} />}
     </div>
   );
 };
