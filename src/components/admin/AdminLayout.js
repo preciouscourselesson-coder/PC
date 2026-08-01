@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { supabase } from '../../supabaseClient';
 import logo from '../../Resource/PC_Horisontal.png';
@@ -27,11 +27,10 @@ const navItems = [
   { label: 'Dashboard',               path: '/admin',                      icon: '📊' },
   { label: 'User Baru',               path: '/admin/user-baru',            icon: '👤' },
   { label: 'Manajemen User',          path: '/admin/manajemen-user',       icon: '👥' },
-  { label: 'Konsultasi Gratis',       path: '/admin/konsultasi',           icon: '💬' },
   { label: 'Testimoni',               path: '/admin/testimoni',            icon: '⭐' },
   { label: 'Pengaturan Materi',       path: '/admin/pengaturan-materi',    icon: '📁' },
   { label: 'Paket & Siswa',           path: '/admin/paket-siswa',          icon: '📦' },
-  { label: 'Payment',                 path: '/admin/payment',              icon: '💳' }, // <-- menu baru
+  { label: 'Payment',                 path: '/admin/payment',              icon: '💳' },
   { label: 'Perubahan Jadwal',        path: '/admin/recap-perubahan-jadwal', icon: '🔄' },
   { label: 'Rekap Absensi',           path: '/admin/rekap-absensi',        icon: '📋' },
 ];
@@ -58,7 +57,7 @@ const Sidebar = ({ user }) => {
   );
 };
 
-const Topbar = ({ user, avatarUrl }) => {
+const Topbar = ({ user, avatarUrl, notifCounts }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const [dropOpen, setDropOpen] = useState(false);
@@ -75,7 +74,7 @@ const Topbar = ({ user, avatarUrl }) => {
     '/admin/pengaturan-materi': 'Pengaturan Materi',
     '/admin/pricelist': 'Pricelist',
     '/admin/paket-siswa': 'Paket & Siswa',
-    '/admin/payment': 'Payment', // tambahan
+    '/admin/payment': 'Payment',
     '/admin/recap-perubahan-jadwal': 'Perubahan Jadwal',
     '/admin/rekap-absensi': 'Rekap Absensi',
     '/admin/profil': 'Profil Admin',
@@ -87,14 +86,58 @@ const Topbar = ({ user, avatarUrl }) => {
   const goToUpdates = () => navigate('/admin/updates');
   const goToMessages = () => navigate('/admin/message');
   const goToPricelist = () => navigate('/admin/pricelist');
+  const goToKonsultasi = () => navigate('/admin/konsultasi');
+
+  const IconButton = ({ onClick, icon, badgeCount, title }) => (
+    <div style={{ position: 'relative', display: 'inline-flex' }}>
+      <button
+        onClick={onClick}
+        style={{
+          background: 'transparent',
+          border: 'none',
+          fontSize: '1.4rem',
+          cursor: 'pointer',
+          padding: '4px 8px',
+          borderRadius: '8px',
+          transition: 'background 0.2s',
+          position: 'relative'
+        }}
+        onMouseEnter={(e) => e.currentTarget.style.background = C.cream}
+        onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+        title={title}
+      >
+        {icon}
+      </button>
+      {badgeCount > 0 && (
+        <span style={{
+          position: 'absolute',
+          top: '-2px',
+          right: '-2px',
+          background: C.red,
+          color: C.white,
+          borderRadius: '50%',
+          padding: '2px 6px',
+          fontSize: '0.65rem',
+          fontWeight: 'bold',
+          lineHeight: '1',
+          minWidth: '18px',
+          textAlign: 'center',
+          border: `2px solid ${C.white}`,
+        }}>
+          {badgeCount}
+        </span>
+      )}
+    </div>
+  );
 
   return (
     <div style={{ height: '64px', background: C.white, borderBottom: `1.5px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 2rem', position: 'sticky', top: 0, zIndex: 50, flexShrink: 0 }}>
       <span style={{ fontWeight: 'bold', color: C.dark, fontSize: '1.05rem' }}>{pageTitle}</span>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-        <button onClick={goToUpdates} style={{ background: 'transparent', border: 'none', fontSize: '1.4rem', cursor: 'pointer', padding: '4px 8px', borderRadius: '8px', transition: 'background 0.2s' }} onMouseEnter={(e) => e.currentTarget.style.background = C.cream} onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'} title="Updates">🔔</button>
-        <button onClick={goToMessages} style={{ background: 'transparent', border: 'none', fontSize: '1.4rem', cursor: 'pointer', padding: '4px 8px', borderRadius: '8px', transition: 'background 0.2s' }} onMouseEnter={(e) => e.currentTarget.style.background = C.cream} onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'} title="Message">✉️</button>
-        <button onClick={goToPricelist} style={{ background: 'transparent', border: 'none', fontSize: '1.4rem', cursor: 'pointer', padding: '4px 8px', borderRadius: '8px', transition: 'background 0.2s' }} onMouseEnter={(e) => e.currentTarget.style.background = C.cream} onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'} title="Pricelist">💰</button>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+        <IconButton onClick={goToUpdates} icon="🔔" badgeCount={notifCounts?.updates || 0} title="Updates" />
+        <IconButton onClick={goToMessages} icon="✉️" badgeCount={notifCounts?.messages || 0} title="Messages" />
+        <IconButton onClick={goToKonsultasi} icon="💬" badgeCount={notifCounts?.konsultasi || 0} title="Konsultasi Gratis" />
+        <IconButton onClick={goToPricelist} icon="💰" badgeCount={0} title="Pricelist" />
         <div style={{ position: 'relative' }}>
           <button onClick={() => setDropOpen(!dropOpen)} style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
             {avatarUrl ? (
@@ -121,6 +164,41 @@ const AdminLayout = () => {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const [avatarUrl, setAvatarUrl] = useState(null);
+  const [notifCounts, setNotifCounts] = useState({ updates: 0, messages: 0, konsultasi: 0 });
+
+  // Helper aman: jika tabel tidak ada, return 0 tanpa error mengganggu
+  const fetchCount = useCallback(async (table, filter = null) => {
+    try {
+      let query = supabase.from(table).select('*', { count: 'exact', head: true });
+      if (filter) {
+        query = query.eq(filter.field, filter.value);
+      }
+      const { count, error } = await query;
+      if (error) {
+        // Tabel mungkin belum dibuat – abaikan dan return 0
+        console.warn(`Table "${table}" not found or query error:`, error.message);
+        return 0;
+      }
+      return count || 0;
+    } catch (e) {
+      console.warn(`Error fetching count from "${table}":`, e.message);
+      return 0;
+    }
+  }, []);
+
+  const fetchNotifCounts = useCallback(async () => {
+    // Query hanya untuk tabel yang sudah ada
+    const konsultasiCount = await fetchCount('konsultasi', { field: 'status', value: 'pending' });
+    // Untuk messages & updates, jika tabel belum ada, fetchCount otomatis return 0 tanpa error
+    const messagesCount = await fetchCount('messages', { field: 'is_read', value: false });
+    const updatesCount = await fetchCount('updates', { field: 'is_read', value: false });
+
+    setNotifCounts({
+      konsultasi: konsultasiCount,
+      messages: messagesCount,
+      updates: updatesCount,
+    });
+  }, [fetchCount]);
 
   useEffect(() => {
     const getUser = async () => {
@@ -128,38 +206,38 @@ const AdminLayout = () => {
       if (!session) { navigate('/login'); return; }
       const userMeta = session.user.user_metadata;
       setUser(userMeta);
-      // Ambil foto profil dari storage
       const uid = session.user.id;
       if (uid) {
         const path = `${uid}/avatar.jpg`;
         const { data: publicUrlData } = supabase.storage.from('avatars').getPublicUrl(path);
-        // Cek apakah file ada
         const { data: fileData, error: fileError } = await supabase.storage.from('avatars').list(`${uid}/`);
         if (!fileError && fileData && fileData.length > 0) {
-          // Cache-bust supaya foto baru langsung tampil, bukan versi lama dari cache browser
           setAvatarUrl(`${publicUrlData.publicUrl}?t=${Date.now()}`);
         } else {
           setAvatarUrl(null);
         }
       }
+      fetchNotifCounts();
     };
     getUser();
-    // Refresh nama & foto profil di header saat AdminProfile menyimpan perubahan
-    window.addEventListener('avatar-updated', getUser);
+
+    window.addEventListener('notif-updated', fetchNotifCounts);
+
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!session) navigate('/login');
     });
+
     return () => {
-      window.removeEventListener('avatar-updated', getUser);
+      window.removeEventListener('notif-updated', fetchNotifCounts);
       listener.subscription.unsubscribe();
     };
-  }, [navigate]);
+  }, [navigate, fetchNotifCounts]);
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: C.cream, fontFamily: 'inherit' }}>
       <Sidebar user={user} />
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-        <Topbar user={user} avatarUrl={avatarUrl} />
+        <Topbar user={user} avatarUrl={avatarUrl} notifCounts={notifCounts} />
         <main style={{ flex: 1, padding: '2rem', overflowY: 'auto' }}><Outlet /></main>
       </div>
     </div>

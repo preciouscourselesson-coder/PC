@@ -420,7 +420,7 @@ const AdminUpdates = () => {
       const { error } = await supabase.from('updates').insert(payload);
       if (error) throw error;
 
-      // Notifikasi ke siswa
+      // Notifikasi ke siswa (opsional)
       try {
         const { data: siswaProfiles, error: siswaError } = await supabase
           .from('profiles')
@@ -439,6 +439,8 @@ const AdminUpdates = () => {
 
       handleBatal();
       await loadAll();
+      // 🔔 Trigger badge di topbar
+      window.dispatchEvent(new Event('notif-updated'));
     } catch (err) {
       console.error(err);
       setErrorMsg(err.message || 'Gagal mempublikasikan update.');
@@ -469,6 +471,8 @@ const AdminUpdates = () => {
 
       setUpdates(list => list.filter(u => u.id !== id));
       setConfirmDeleteId(null);
+      // 🔔 Trigger badge di topbar
+      window.dispatchEvent(new Event('notif-updated'));
     } catch (err) {
       console.error(err);
       setErrorMsg(err.message || 'Gagal menghapus update.');
@@ -568,6 +572,8 @@ const AdminUpdates = () => {
 
       closeEditModal();
       await loadAll();
+      // 🔔 Trigger badge di topbar
+      window.dispatchEvent(new Event('notif-updated'));
     } catch (err) {
       console.error(err);
       setErrorMsg(err.message || 'Gagal menyimpan perubahan.');
@@ -607,7 +613,7 @@ const AdminUpdates = () => {
           update_id: updateId,
           profile_id: profileId,
           isi: text,
-          parent_comment_id: parentCommentId, // penting!
+          parent_comment_id: parentCommentId,
         })
         .select('*, profiles!profile_id(full_name)');
       if (error) throw error;
@@ -867,7 +873,6 @@ const AdminUpdates = () => {
                             <div style={{ fontSize: '0.85rem', color: C.dark, marginTop: '2px', wordBreak: 'break-word' }}>
                               {root.isi}
                             </div>
-                            {/* Tombol Balas (untuk admin) */}
                             <button
                               onClick={() => handleReplyToggle(root.id)}
                               style={{ ...linkBtn, fontSize: '0.75rem', marginTop: '4px' }}
@@ -933,7 +938,6 @@ const AdminUpdates = () => {
                                     <span style={{ fontWeight: 600, color: C.dark, fontSize: '0.75rem' }}>
                                       {reply.profiles?.full_name || 'Admin'}
                                     </span>
-                                    {/* Badge admin untuk balasan admin */}
                                     {reply.profile_id === profileId && <RoleBadge role="admin" />}
                                     <span style={{ fontSize: '0.6rem', color: C.grayLight }}>
                                       {formatTanggalLengkap(reply.created_at)}

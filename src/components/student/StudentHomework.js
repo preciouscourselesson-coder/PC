@@ -2,6 +2,37 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../supabaseClient';
 
+// ---------------------------------------------------------------------------
+// Update: siswa sekarang bisa mengerjakan dua jenis tugas di halaman ini.
+//
+// 1) Tugas file (skema lama, tidak berubah)
+//    penugasan_guru -> pengumpulan_tugas (upload file jawaban)
+//
+// 2) Tugas isian interaktif (skema baru, dibuat guru lewat TeacherHomework.js)
+//    homework -> homework_questions -> homework_assignments
+//    Siswa mengisi bagian [blank] pada kalimat soal langsung di halaman ini,
+//    lalu dinilai otomatis dengan mencocokkan jawaban ke `blanks` (case-
+//    insensitive, trimmed). Skema homework_* tidak menyediakan tabel untuk
+//    menyimpan jawaban siswa, jadi tabel baru berikut PERLU dibuat manual
+//    di Supabase sebelum fitur ini berfungsi:
+//
+//    create table homework_submissions (
+//      id           uuid primary key default gen_random_uuid(),
+//      homework_id  uuid not null references homework(id) on delete cascade,
+//      student_id   uuid not null references profiles(id) on delete cascade,
+//      answers      jsonb not null default '{}'::jsonb, -- { [homework_question_id]: string[] }
+//      score        numeric not null default 0,
+//      max_score    numeric not null default 0,
+//      submitted_at timestamptz not null default now(),
+//      unique (homework_id, student_id) -- supaya bisa upsert saat siswa mengerjakan ulang
+//    );
+//    alter table homework_submissions enable row level security;
+//    create policy "siswa kelola submission sendiri" on homework_submissions
+//      for all using (auth.uid() = student_id) with check (auth.uid() = student_id);
+//    -- tambahkan policy SELECT terpisah untuk guru (mis. via guru_owns_tugas())
+//    -- jika ingin nilai ini juga terlihat di sisi guru.
+// ---------------------------------------------------------------------------
+
 const C = {
   gold:    '#b4964b',
   green:   '#2d6a4f',
@@ -15,6 +46,49 @@ const C = {
   redBg:   '#fff0f0',
   orange:  '#f39c12',
   orangeBg:'#fef9e7',
+  blue:    '#3f7ea6',
+  blueBg:  'rgba(63,126,166,0.10)',
+};
+
+// ─── Helper: parsing & grading soal isian [blank] ────────────────────────────
+// Memecah teks soal menjadi bagian teks biasa dan bagian blank (mengacu pada
+// format [kata] yang sama dengan yang dipakai TeacherHomework.js). Setiap
+// bagian blank diberi nomor urut (blankIndex) supaya jawabannya bisa dipetakan
+// balik ke array `blanks` pada baris homework_questions.
+const buildQuestionParts = (text = '') => {
+  const rawParts = text.split(/(\[.+?\])/g).filter((p) => p !== '');
+  let blankIndex = 0;
+  return rawParts.map((part) => {
+    const match = part.match(/^\[(.+?)\]$/);
+    if (match) {
+      const idx = blankIndex;
+      blankIndex += 1;
+      return { type: 'blank', blankIndex: idx, key: `b${idx}` };
+    }
+    return { type: 'text', value: part };
+  });
+};
+
+// Menilai satu tugas isian: cocokkan jawaban siswa (workAnswers[question.id])
+// dengan kunci jawaban (question.blanks) secara case-insensitive & trimmed.
+// Nilai per soal proporsional terhadap jumlah blank yang benar.
+const computeInteractiveScore = (questions = [], answersMap = {}) => {
+  let score = 0;
+  let maxScore = 0;
+  questions.forEach((q) => {
+    const blanks = q.blanks || [];
+    maxScore += q.points || 0;
+    if (blanks.length === 0) return;
+    const given = answersMap[q.id] || [];
+    let correctCount = 0;
+    blanks.forEach((expected, i) => {
+      const userAnswer = String(given[i] || '').trim().toLowerCase();
+      const correctAnswer = String(expected || '').trim().toLowerCase();
+      if (userAnswer && userAnswer === correctAnswer) correctCount += 1;
+    });
+    score += (correctCount / blanks.length) * (q.points || 0);
+  });
+  return { score: Math.round(score * 100) / 100, maxScore };
 };
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
@@ -55,7 +129,8 @@ const FilterButton = ({ label, active, onClick }) => (
 );
 
 // ─── Komponen Task Card ──────────────────────────────────────────────────────
-const TaskCard = ({ task, onUpload, onView, isMobile }) => {
+const TaskCard = ({ task, onUpload, onWork, isMobile }) => {
+  const isInteractive = task.type === 'interactive';
   const isOverdue = new Date(task.deadline) < new Date() && task.status_pengumpulan !== 'Sudah';
   const isToday = new Date(task.deadline).toDateString() === new Date().toDateString();
   const isSubmitted = task.status_pengumpulan === 'Sudah';
@@ -74,12 +149,24 @@ const TaskCard = ({ task, onUpload, onView, isMobile }) => {
     >
       <div style={{ display: 'flex', flexWrap: isMobile ? 'wrap' : 'nowrap', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
         <div style={{ flex: 1 }}>
-          <h4 style={{ margin: '0 0 4px', fontSize: '1rem', fontWeight: 'bold', color: C.dark }}>
-            {task.judul}
-          </h4>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '4px' }}>
+            <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 'bold', color: C.dark }}>
+              {task.judul}
+            </h4>
+            {isInteractive && (
+              <span style={{
+                background: C.blueBg, color: C.blue, padding: '1px 10px',
+                borderRadius: '40px', fontSize: '0.68rem', fontWeight: 'bold',
+              }}>
+                ✍️ Isian Interaktif
+              </span>
+            )}
+          </div>
           <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '6px' }}>
             <span style={{ color: C.gold, fontWeight: 'bold', fontSize: '0.85rem' }}>{task.mapel}</span>
-            <span style={{ color: C.gray, fontSize: '0.8rem' }}>• {task.bab || 'Bab belum diisi'}</span>
+            {!isInteractive && (
+              <span style={{ color: C.gray, fontSize: '0.8rem' }}>• {task.bab || 'Bab belum diisi'}</span>
+            )}
             <span style={{ color: C.gray, fontSize: '0.8rem' }}>• {task.kelas || '-'}</span>
           </div>
           <p style={{ margin: '0 0 8px', color: C.gray, fontSize: '0.88rem', lineHeight: 1.5 }}>
@@ -99,7 +186,17 @@ const TaskCard = ({ task, onUpload, onView, isMobile }) => {
             <span style={{ color: C.gray, fontSize: '0.8rem' }}>
               {formatDeadline(task.deadline)}
             </span>
-            {task.file_url && (
+            {isInteractive && (
+              <span style={{ color: C.gray, fontSize: '0.8rem' }}>
+                • {(task.questions || []).length} soal
+              </span>
+            )}
+            {isInteractive && isSubmitted && task.nilai !== null && task.nilai !== undefined && (
+              <span style={{ color: C.green, fontWeight: 'bold', fontSize: '0.8rem' }}>
+                🏆 Nilai: {task.nilai}/{task.maxScore}
+              </span>
+            )}
+            {!isInteractive && task.file_url && (
               <a
                 href={task.file_url}
                 target="_blank"
@@ -123,7 +220,25 @@ const TaskCard = ({ task, onUpload, onView, isMobile }) => {
           </div>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px', flexShrink: 0 }}>
-          {isSubmitted ? (
+          {isInteractive ? (
+            <button
+              onClick={() => onWork(task)}
+              style={{
+                background: isSubmitted ? 'transparent' : C.gold,
+                border: isSubmitted ? `1.5px solid ${C.gold}` : 'none',
+                color: isSubmitted ? C.gold : C.white,
+                padding: '6px 14px',
+                borderRadius: '40px',
+                fontWeight: 'bold',
+                fontSize: '0.8rem',
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {isSubmitted ? '📄 Lihat / Kerjakan Ulang' : '✍️ Kerjakan Tugas'}
+            </button>
+          ) : isSubmitted ? (
             <span style={{
               background: '#e6f4ee',
               color: C.green,
@@ -152,7 +267,7 @@ const TaskCard = ({ task, onUpload, onView, isMobile }) => {
               📤 Upload Jawaban
             </button>
           )}
-          {task.submission_file_url && (
+          {!isInteractive && task.submission_file_url && (
             <a
               href={task.submission_file_url}
               target="_blank"
@@ -322,6 +437,139 @@ const MiniCalendar = ({ year, month, selectedDate, onSelectDate, tasksByDate, is
   );
 };
 
+// ─── Modal Kerjakan Tugas Isian Interaktif ───────────────────────────────────
+// Menampilkan setiap soal dari homework_questions dengan bagian [blank]
+// diganti input teks. Jika siswa sudah pernah mengumpulkan, input akan
+// terisi otomatis dengan jawaban terakhir sehingga bisa dikerjakan ulang.
+const InteractiveWorkModal = ({ task, answers, onAnswerChange, onSubmit, onClose, submitting, error }) => {
+  if (!task) return null;
+  const isSubmitted = task.status_pengumpulan === 'Sudah';
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem',
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: C.white, borderRadius: '20px', padding: '1.5rem',
+          maxWidth: '640px', width: '100%', maxHeight: '90vh', overflowY: 'auto',
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', marginBottom: '0.25rem' }}>
+          <div>
+            <h3 style={{ margin: 0, color: C.dark }}>{task.judul}</h3>
+            <p style={{ color: C.gray, fontSize: '0.85rem', margin: '4px 0 0' }}>
+              {task.mapel}{task.kelas ? ` • ${task.kelas}` : ''} • {(task.questions || []).length} soal
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            style={{ background: 'none', border: 'none', color: C.gray, fontSize: '1.3rem', cursor: 'pointer', lineHeight: 1 }}
+            aria-label="Tutup"
+          >
+            ×
+          </button>
+        </div>
+
+        {task.deskripsi && (
+          <p style={{ color: C.gray, fontSize: '0.85rem', lineHeight: 1.5, marginTop: '0.75rem' }}>
+            {task.deskripsi}
+          </p>
+        )}
+
+        {isSubmitted && task.nilai !== null && task.nilai !== undefined && (
+          <div style={{
+            background: '#e6f4ee', color: C.green, borderRadius: '10px',
+            padding: '0.6rem 0.9rem', fontSize: '0.85rem', fontWeight: 'bold',
+            marginTop: '0.75rem',
+          }}>
+            🏆 Nilai Anda: {task.nilai}/{task.maxScore} — Anda bisa mengerjakan ulang untuk memperbaiki jawaban.
+          </div>
+        )}
+
+        <div style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
+          {(task.questions || []).map((q, qIdx) => {
+            const parts = buildQuestionParts(q.question_text || '');
+            const qAnswers = answers[q.id] || [];
+            return (
+              <div key={q.id} style={{ border: `1.5px solid ${C.border}`, borderRadius: '14px', padding: '1rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                  <span style={{
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    width: '24px', height: '24px', borderRadius: '50%',
+                    background: C.gold, color: C.white, fontSize: '0.75rem', fontWeight: 'bold',
+                  }}>
+                    {qIdx + 1}
+                  </span>
+                  <span style={{ color: C.gray, fontSize: '0.75rem', fontWeight: 'bold' }}>
+                    {q.points} poin
+                  </span>
+                </div>
+                <p style={{ margin: 0, fontSize: '0.95rem', lineHeight: 2, color: C.dark }}>
+                  {parts.map((part, i) =>
+                    part.type === 'text' ? (
+                      <span key={i}>{part.value}</span>
+                    ) : (
+                      <input
+                        key={i}
+                        type="text"
+                        value={qAnswers[part.blankIndex] || ''}
+                        onChange={e => onAnswerChange(q.id, part.blankIndex, e.target.value)}
+                        placeholder="jawaban"
+                        disabled={submitting}
+                        style={{
+                          margin: '0 4px', minWidth: '90px', padding: '4px 8px',
+                          borderRadius: '8px', border: `1.5px solid ${C.gold}`,
+                          fontFamily: 'inherit', fontSize: '0.88rem', textAlign: 'center',
+                          background: C.cream, color: C.dark,
+                        }}
+                      />
+                    )
+                  )}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+
+        {error && (
+          <div style={{ color: C.red, fontSize: '0.82rem', marginTop: '1rem' }}>{error}</div>
+        )}
+
+        <div style={{ display: 'flex', gap: '0.6rem', marginTop: '1.2rem', justifyContent: 'flex-end' }}>
+          <button
+            onClick={onClose}
+            disabled={submitting}
+            style={{
+              padding: '8px 16px', borderRadius: '10px', border: `1.5px solid ${C.border}`,
+              background: 'transparent', color: C.gray, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+            }}
+          >
+            Tutup
+          </button>
+          <button
+            onClick={onSubmit}
+            disabled={submitting}
+            style={{
+              padding: '8px 20px', borderRadius: '10px', border: 'none',
+              background: submitting ? C.border : C.gold, color: C.white,
+              fontWeight: 700, cursor: submitting ? 'not-allowed' : 'pointer',
+              opacity: submitting ? 0.6 : 1, fontFamily: 'inherit',
+            }}
+          >
+            {submitting ? 'Mengirim...' : isSubmitted ? 'Kirim Ulang Jawaban' : 'Kirim Jawaban'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const useIsMobile = (bp = 768) => {
   const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' ? window.innerWidth < bp : false);
   useEffect(() => {
@@ -349,11 +597,17 @@ const StudentHomework = () => {
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
 
-  // State untuk upload jawaban
+  // State untuk upload jawaban (tugas file)
   const [uploadingTaskId, setUploadingTaskId] = useState(null);
   const [uploadFile, setUploadFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
+
+  // State untuk mengerjakan tugas isian interaktif (homework)
+  const [workingTask, setWorkingTask] = useState(null);
+  const [workAnswers, setWorkAnswers] = useState({});
+  const [submittingAnswers, setSubmittingAnswers] = useState(false);
+  const [workError, setWorkError] = useState('');
 
   // ── Ambil data user ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -368,14 +622,17 @@ const StudentHomework = () => {
   }, []);
 
   // ── Ambil tugas dari Supabase ─────────────────────────────────────────────
+  // Dua sumber digabung jadi satu daftar `tasks`, dibedakan lewat field `type`:
+  //   'file'        -> penugasan_guru / pengumpulan_tugas (upload jawaban)
+  //   'interactive' -> homework / homework_questions / homework_assignments
+  //                    (isian [blank] yang dikerjakan langsung di halaman ini)
   const fetchTasks = useCallback(async () => {
     if (!studentId) return;
     setLoading(true);
     setErrorMsg('');
 
     try {
-      // 1. Ambil semua tugas yang sudah dipublish (status = 'Aktif')
-      //    dan join dengan pengumpulan_tugas untuk siswa ini
+      // ─── A. Tugas file (skema lama, tidak diubah) ───────────────────────
       const { data, error } = await supabase
         .from('penugasan_guru')
         .select(`
@@ -397,7 +654,8 @@ const StudentHomework = () => {
             file_name,
             file_url,
             nilai,
-            graded_at
+            graded_at,
+            siswa_id
           )
         `)
         .eq('status', 'Aktif')
@@ -405,43 +663,106 @@ const StudentHomework = () => {
 
       if (error) throw error;
 
-      // 2. Filter hanya tugas yang memiliki pengumpulan untuk siswa ini
-      //    (karena guru sudah menugaskan ke siswa tertentu)
       const myTasks = (data || [])
-        .filter(task => {
-          const submissions = task.pengumpulan_tugas || [];
-          // Cari submission milik siswa ini
-          return submissions.some(s => s.id); // akan di-filter lebih lanjut
-        })
         .map(task => {
-          // Cari submission siswa ini (dengan join manual karena kita belum filter di query)
-          // Sebenarnya kita perlu ambil submission spesifik, tapi karena query tidak bisa filter nested,
-          // kita ambil semua lalu cari milik kita sendiri.
-          // Untuk efisiensi, sebaiknya di query dengan .eq pada nested, tapi Supabase tidak support.
-          // Jadi kita ambil semua lalu filter di JS.
           const submissions = task.pengumpulan_tugas || [];
           const mySubmission = submissions.find(s => s.siswa_id === studentId);
+          if (!mySubmission) return null; // belum ditugaskan ke siswa ini
           return {
             ...task,
-            status_pengumpulan: mySubmission?.status || 'Belum',
-            submission_id: mySubmission?.id || null,
-            submission_file_url: mySubmission?.file_url || null,
-            submission_file_name: mySubmission?.file_name || null,
-            nilai: mySubmission?.nilai || null,
-            graded_at: mySubmission?.graded_at || null,
+            type: 'file',
+            status_pengumpulan: mySubmission.status || 'Belum',
+            submission_id: mySubmission.id,
+            submission_file_url: mySubmission.file_url || null,
+            submission_file_name: mySubmission.file_name || null,
+            nilai: mySubmission.nilai || null,
+            graded_at: mySubmission.graded_at || null,
           };
-        });
+        })
+        .filter(Boolean);
 
-      // Filter hanya tugas yang memang ditugaskan ke siswa ini (ada submission record)
-      // Karena guru saat publish sudah membuat baris pengumpulan untuk siswa yang dipilih.
-      // Tapi jika siswa belum punya submission, artinya belum ditugaskan.
-      // Kita ambil tugas yang memiliki submission_id (sudah ditugaskan)
-      const assignedTasks = myTasks.filter(t => t.submission_id !== null);
+      // ─── B. Tugas isian interaktif (skema baru dari TeacherHomework.js) ──
+      const { data: hwAssignData, error: hwAssignError } = await supabase
+        .from('homework_assignments')
+        .select(`
+          id,
+          assigned_at,
+          homework:homework_id (
+            id,
+            title,
+            subject,
+            grade,
+            description,
+            due_date,
+            status,
+            homework_questions ( id, question_text, blanks, points, order_index )
+          )
+        `)
+        .eq('student_id', studentId);
 
-      setTasks(assignedTasks);
+      if (hwAssignError) throw hwAssignError;
 
-      // Ambil daftar mapel unik
-      const mapels = [...new Set(assignedTasks.map(t => t.mapel).filter(Boolean))];
+      // Hanya tugas yang benar-benar sudah dipublikasikan guru; dedup kalau
+      // ada lebih dari satu baris assignment untuk homework yang sama.
+      const homeworkMap = new Map();
+      (hwAssignData || []).forEach(a => {
+        if (a.homework && a.homework.status === 'published' && !homeworkMap.has(a.homework.id)) {
+          homeworkMap.set(a.homework.id, a.homework);
+        }
+      });
+      const homeworkIds = Array.from(homeworkMap.keys());
+
+      let submissionMap = {};
+      if (homeworkIds.length > 0) {
+        const { data: subData, error: subError } = await supabase
+          .from('homework_submissions')
+          .select('*')
+          .eq('student_id', studentId)
+          .in('homework_id', homeworkIds);
+
+        if (subError) {
+          // Tabel/policy homework_submissions kemungkinan belum dibuat di
+          // Supabase — jangan gagalkan seluruh halaman, anggap saja belum
+          // ada jawaban yang dikumpulkan (lihat catatan skema di atas).
+          console.warn('Gagal memuat submission tugas interaktif:', subError.message);
+        } else {
+          submissionMap = (subData || []).reduce((acc, s) => {
+            acc[s.homework_id] = s;
+            return acc;
+          }, {});
+        }
+      }
+
+      const interactiveTasks = Array.from(homeworkMap.values()).map(hw => {
+        const questions = (hw.homework_questions || [])
+          .slice()
+          .sort((a, b) => (a.order_index || 0) - (b.order_index || 0));
+        const maxScore = questions.reduce((sum, q) => sum + (q.points || 0), 0);
+        const submission = submissionMap[hw.id] || null;
+
+        return {
+          id: `hw_${hw.id}`,
+          homeworkId: hw.id,
+          type: 'interactive',
+          judul: hw.title,
+          mapel: hw.subject,
+          kelas: hw.grade,
+          deskripsi: hw.description,
+          deadline: hw.due_date,
+          questions,
+          maxScore,
+          status_pengumpulan: submission ? 'Sudah' : 'Belum',
+          nilai: submission ? submission.score : null,
+          submitted_at: submission ? submission.submitted_at : null,
+          answers: submission ? submission.answers : null,
+        };
+      });
+
+      const allTasks = [...myTasks, ...interactiveTasks];
+      setTasks(allTasks);
+
+      // Ambil daftar mapel unik dari kedua jenis tugas
+      const mapels = [...new Set(allTasks.map(t => t.mapel).filter(Boolean))];
       setMapelList(['Semua Mapel', ...mapels]);
 
     } catch (err) {
@@ -592,6 +913,82 @@ const StudentHomework = () => {
     }
   };
 
+  // ── Handle Kerjakan Tugas Isian Interaktif ─────────────────────────────────
+  const openWorkModal = (task) => {
+    // Siapkan array jawaban kosong (atau terisi dari submission terakhir)
+    // untuk setiap soal, sepanjang jumlah blank pada soal tersebut.
+    const initialAnswers = {};
+    (task.questions || []).forEach(q => {
+      const blanksLen = (q.blanks || []).length;
+      const existing = task.answers && task.answers[q.id];
+      initialAnswers[q.id] = Array.from({ length: blanksLen }, (_, i) => (existing && existing[i]) || '');
+    });
+    setWorkAnswers(initialAnswers);
+    setWorkError('');
+    setWorkingTask(task);
+  };
+
+  const closeWorkModal = () => {
+    setWorkingTask(null);
+    setWorkAnswers({});
+    setWorkError('');
+  };
+
+  const handleBlankChange = (questionId, blankIndex, value) => {
+    setWorkAnswers(prev => {
+      const arr = [...(prev[questionId] || [])];
+      arr[blankIndex] = value;
+      return { ...prev, [questionId]: arr };
+    });
+  };
+
+  const handleSubmitAnswers = async () => {
+    if (!workingTask) return;
+    setSubmittingAnswers(true);
+    setWorkError('');
+
+    try {
+      const { score, maxScore } = computeInteractiveScore(workingTask.questions, workAnswers);
+
+      const { data, error } = await supabase
+        .from('homework_submissions')
+        .upsert(
+          {
+            homework_id: workingTask.homeworkId,
+            student_id: studentId,
+            answers: workAnswers,
+            score,
+            max_score: maxScore,
+            submitted_at: new Date().toISOString(),
+          },
+          { onConflict: 'homework_id,student_id' }
+        )
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      const updater = t =>
+        t.id === workingTask.id
+          ? {
+              ...t,
+              status_pengumpulan: 'Sudah',
+              nilai: data.score,
+              submitted_at: data.submitted_at,
+              answers: data.answers,
+            }
+          : t;
+
+      setTasks(prev => prev.map(updater));
+      setWorkingTask(prev => (prev ? updater(prev) : prev));
+    } catch (err) {
+      console.error(err);
+      setWorkError('Gagal mengirim jawaban: ' + err.message);
+    } finally {
+      setSubmittingAnswers(false);
+    }
+  };
+
   // ── Grup tasks by date untuk kalender ─────────────────────────────────────
   const tasksByDate = tasks.reduce((acc, t) => {
     if (t.deadline) {
@@ -739,6 +1136,7 @@ const StudentHomework = () => {
                   key={task.id}
                   task={task}
                   onUpload={openUploadModal}
+                  onWork={openWorkModal}
                   isMobile={isMobile}
                 />
               ))
@@ -857,6 +1255,19 @@ const StudentHomework = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modal Kerjakan Tugas Isian Interaktif */}
+      {workingTask && (
+        <InteractiveWorkModal
+          task={workingTask}
+          answers={workAnswers}
+          onAnswerChange={handleBlankChange}
+          onSubmit={handleSubmitAnswers}
+          onClose={closeWorkModal}
+          submitting={submittingAnswers}
+          error={workError}
+        />
       )}
     </>
   );

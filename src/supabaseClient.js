@@ -1,6 +1,13 @@
 import { createClient } from '@supabase/supabase-js';
 
-const SUPABASE_URL = 'https://nqgjufvsjskdtijyfqqi.supabase.co';      
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5xZ2p1ZnZzanNrZHRpanlmcXFpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE1Nzg2MTYsImV4cCI6MjA5NzE1NDYxNn0.RwGBvEH639kQbyE0vXNDyEJ3Tfsrar-_64oj_QgPTn0';                    // ganti dengan anon key kamu
+const SUPABASE_URL = process.env.REACT_APP_SUPABASE_URL;
+const SUPABASE_KEY = process.env.REACT_APP_SUPABASE_ANON_KEY;
+
+if (!SUPABASE_URL || !SUPABASE_KEY) {
+  console.error(
+    'Supabase belum dikonfigurasi. Pastikan REACT_APP_SUPABASE_URL dan ' +
+    'REACT_APP_SUPABASE_ANON_KEY sudah diisi di file .env, lalu restart dev server.'
+  );
+}
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);

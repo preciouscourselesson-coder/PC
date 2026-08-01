@@ -29,8 +29,26 @@ const useIsMobile = () => {
   return isMobile;
 };
 
+// Badge status Aktif/Off — murni tampilan, tidak bisa diklik/diubah manual,
+// karena statusnya otomatis mengikuti ada/tidaknya jadwal aktif di jadwal_les.
+const StatusBadge = ({ aktif }) => (
+  <span
+    style={{
+      background: aktif ? 'rgba(45,106,79,0.10)' : 'rgba(179,66,63,0.10)',
+      color: aktif ? C.green : '#b3423f',
+      padding: '2px 10px',
+      borderRadius: '12px',
+      fontSize: '0.75rem',
+      whiteSpace: 'nowrap',
+      fontWeight: 600,
+    }}
+  >
+    {aktif ? 'Aktif' : 'Off'}
+  </span>
+);
+
 // Kartu siswa untuk tampilan mobile (menggantikan baris tabel)
-const StudentCard = ({ s }) => (
+const StudentCard = ({ s, onDelete }) => (
   <div
     style={{
       background: C.white,
@@ -44,9 +62,7 @@ const StudentCard = ({ s }) => (
   >
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
       <div style={{ fontWeight: '700', color: C.dark, fontSize: '1rem' }}>{s.nama}</div>
-      <span style={{ background: C.goldBg, color: C.gold, padding: '2px 10px', borderRadius: '12px', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
-        {s.status ?? 'Belum tersedia'}
-      </span>
+      <StatusBadge aktif={s.aktif} />
     </div>
 
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', rowGap: '6px', columnGap: '8px', fontSize: '0.85rem' }}>
@@ -56,15 +72,27 @@ const StudentCard = ({ s }) => (
       <div style={{ color: C.grayLight }}>Privat/Group</div>
       <div style={{ color: C.dark, textAlign: 'right' }}>{s.jenisKelas}</div>
 
-      <div style={{ color: C.grayLight }}>Jenis Paket</div>
-      <div style={{ color: C.dark, textAlign: 'right' }}>{s.paket}</div>
-
-      <div style={{ color: C.grayLight }}>Kehadiran</div>
-      <div style={{ color: C.dark, textAlign: 'right' }}>{s.kehadiran ?? 'Belum tersedia'}</div>
+      <div style={{ color: C.grayLight }}>Metode</div>
+      <div style={{ color: C.dark, textAlign: 'right' }}>{s.metode}</div>
     </div>
 
-    <div style={{ borderTop: `1px solid ${C.border}`, marginTop: '4px', paddingTop: '8px', fontSize: '0.8rem', color: C.gray, wordBreak: 'break-word' }}>
-      📧 {s.kontak}
+    <div style={{ display: 'flex', gap: '0.5rem', marginTop: '4px' }}>
+      <button
+        onClick={() => onDelete(s)}
+        style={{
+          background: 'rgba(179,66,63,0.08)',
+          border: 'none',
+          color: '#b3423f',
+          padding: '8px 14px',
+          borderRadius: '40px',
+          fontWeight: 'bold',
+          cursor: 'pointer',
+          fontSize: '0.8rem',
+          fontFamily: 'inherit',
+        }}
+      >
+        🗑️ Hapus
+      </button>
     </div>
   </div>
 );
@@ -77,7 +105,11 @@ const TeacherListStudent = () => {
   const isMobile = useIsMobile();
 
   // Ambil semua siswa yang diajar oleh guru yang sedang login,
-  // digabung dari jadwal_les (privat: siswa_id, group: siswa_ids[])
+  // digabung dari jadwal_les (privat: siswa_id, group: siswa_ids[]).
+  // Status Aktif/Off TIDAK lagi disimpan manual — melainkan diturunkan langsung
+  // dari kondisi jadwal_les milik guru ini: kalau siswa masih punya jadwal yang
+  // masih berlaku (reguler, atau jadwal sementara yang tanggalnya belum lewat),
+  // statusnya "Aktif". Kalau semua jadwalnya sudah lewat/tidak ada, "Off".
   const fetchStudents = useCallback(async () => {
     setLoading(true);
     setErrorMsg('');
@@ -111,10 +143,12 @@ const TeacherListStudent = () => {
       return;
     }
 
-    // 1b. Ambil semua jadwal les milik guru ini (pakai guru.id, bukan user.id)
+    // 1b. Ambil semua jadwal les milik guru ini (pakai guru.id, bukan user.id).
+    // is_temporary & tanggal_temporary dipakai untuk menentukan apakah jadwal
+    // ini masih "berlaku" (dipakai untuk status Aktif/Off).
     const { data: jadwalData, error: jadwalError } = await supabase
       .from('jadwal_les')
-      .select('id, kelas, jenis, tipe, siswa_id, siswa_ids')
+      .select('id, kelas, jenis, tipe, siswa_id, siswa_ids, is_temporary, tanggal_temporary')
       .eq('guru_id', guruRow.id);
 
     if (jadwalError) {
@@ -124,23 +158,50 @@ const TeacherListStudent = () => {
       return;
     }
 
+    // Jadwal reguler (is_temporary = false) dianggap selalu masih berlaku
+    // selama barisnya masih ada di jadwal_les. Jadwal sementara (is_temporary = true)
+    // hanya dianggap masih berlaku kalau tanggal_temporary >= hari ini (atau kosong).
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const isRowActive = (row) => {
+      if (!row.is_temporary) return true;
+      if (!row.tanggal_temporary) return true;
+      return row.tanggal_temporary >= todayStr;
+    };
+
     // 2. Pecah setiap baris jadwal jadi entry per-siswa (privat = 1 siswa, group = banyak siswa)
+    // Setiap entry menyimpan sumbernya (jadwalId + apakah dari kolom group)
+    // supaya nanti bisa dipakai untuk "hapus siswa dari jadwal ini", dan status
+    // aktif/off baris jadwal tsb.
     const entries = [];
     (jadwalData || []).forEach((row) => {
-      const base = { kelas: row.kelas, jenis: row.jenis || 'Private', paket: row.tipe };
+      const base = {
+        kelas: row.kelas,
+        jenis: row.jenis || 'Private', // Privat / Group
+        metode: row.tipe || '-',       // Online / Offline / Hybrid
+        aktif: isRowActive(row),
+      };
       if (row.siswa_id) {
-        entries.push({ siswaId: row.siswa_id, ...base });
+        entries.push({ siswaId: row.siswa_id, ...base, source: { jadwalId: row.id, isGroup: false } });
       }
       (row.siswa_ids || []).forEach((sid) => {
-        entries.push({ siswaId: sid, ...base });
+        entries.push({ siswaId: sid, ...base, source: { jadwalId: row.id, isGroup: true } });
       });
     });
 
-    // Dedupe kombinasi siswa + kelas + jenis + paket (hindari baris ganda kalau ada 2 jadwal hari berbeda utk kelas yg sama)
+    // Dedupe kombinasi siswa + kelas + jenis + metode (hindari baris ganda kalau ada 2 jadwal
+    // hari berbeda utk kelas yg sama), tapi tetap kumpulkan semua sumber jadwal_les yang
+    // berkontribusi ke baris ini, dan gabungkan status aktifnya (aktif kalau SALAH SATU
+    // jadwal sumbernya masih berlaku).
     const uniqueMap = new Map();
     entries.forEach((e) => {
-      const key = `${e.siswaId}-${e.kelas}-${e.jenis}-${e.paket}`;
-      if (!uniqueMap.has(key)) uniqueMap.set(key, e);
+      const key = `${e.siswaId}-${e.kelas}-${e.jenis}-${e.metode}`;
+      if (!uniqueMap.has(key)) {
+        uniqueMap.set(key, { ...e, sources: [e.source] });
+      } else {
+        const existing = uniqueMap.get(key);
+        existing.sources.push(e.source);
+        existing.aktif = existing.aktif || e.aktif;
+      }
     });
     const uniqueEntries = Array.from(uniqueMap.values());
 
@@ -152,10 +213,10 @@ const TeacherListStudent = () => {
       return;
     }
 
-    // 3. Ambil data profil (nama, email) untuk siswa-siswa tsb
+    // 3. Ambil data profil (nama) untuk siswa-siswa tsb
     const { data: profilesData, error: profilesError } = await supabase
       .from('profiles')
-      .select('id, full_name, email')
+      .select('id, full_name')
       .in('id', siswaIds);
 
     if (profilesError) {
@@ -176,10 +237,9 @@ const TeacherListStudent = () => {
         nama: profile?.full_name || 'Nama tidak ditemukan',
         kelas: e.kelas,
         jenisKelas: e.jenis, // Private / Group
-        paket: e.paket || '-',
-        kontak: profile?.email || '-', // TODO: tambahkan nomor HP kalau tersedia di tabel lain
-        kehadiran: null, // TODO: belum ada sumber data kehadiran di database
-        status: null, // TODO: belum ada sumber data status aktif/tidak les
+        metode: e.metode,    // Online / Offline / Hybrid
+        aktif: e.aktif,      // true -> "Aktif", false -> "Off"
+        sources: e.sources,  // asal baris jadwal_les, dipakai untuk fitur hapus
       };
     });
 
@@ -194,6 +254,57 @@ const TeacherListStudent = () => {
   const filteredStudents = students.filter((s) =>
     s.nama.toLowerCase().includes(search.toLowerCase())
   );
+
+  // ─── Hapus siswa dari daftar (melepas siswa dari jadwal_les guru ini,
+  // BUKAN menghapus akun siswanya) ──────────────────────────────────────
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const removeStudentFromSchedule = async (source, siswaId) => {
+    if (!source.isGroup) {
+      // Jadwal privat: kosongkan siswa_id (kolomnya memang nullable untuk kasus ini)
+      const { error } = await supabase
+        .from('jadwal_les')
+        .update({ siswa_id: null })
+        .eq('id', source.jadwalId)
+        .eq('siswa_id', siswaId);
+      if (error) throw error;
+      return;
+    }
+
+    // Jadwal group: ambil array siswa_ids terkini lalu keluarkan siswa ini
+    const { data: row, error: fetchErr } = await supabase
+      .from('jadwal_les')
+      .select('siswa_ids')
+      .eq('id', source.jadwalId)
+      .single();
+    if (fetchErr) throw fetchErr;
+
+    const updatedIds = (row?.siswa_ids || []).filter((id) => id !== siswaId);
+    const { error: updateErr } = await supabase
+      .from('jadwal_les')
+      .update({ siswa_ids: updatedIds })
+      .eq('id', source.jadwalId);
+    if (updateErr) throw updateErr;
+  };
+
+  const handleConfirmDeleteStudent = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    setErrorMsg('');
+    try {
+      for (const source of deleteTarget.sources) {
+        await removeStudentFromSchedule(source, deleteTarget.siswaId);
+      }
+      setDeleteTarget(null);
+      await fetchStudents();
+    } catch (err) {
+      console.error(err);
+      setErrorMsg('Gagal menghapus siswa dari jadwal. Coba lagi.');
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   return (
     <div style={{ maxWidth: '1200px', margin: '0 auto', fontFamily: 'inherit' }}>
@@ -237,7 +348,11 @@ const TeacherListStudent = () => {
           // Tampilan kartu untuk layar kecil
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
             {filteredStudents.map((s) => (
-              <StudentCard key={`${s.siswaId}-${s.no}`} s={s} />
+              <StudentCard
+                key={`${s.siswaId}-${s.no}`}
+                s={s}
+                onDelete={setDeleteTarget}
+              />
             ))}
           </div>
         ) : (
@@ -250,10 +365,9 @@ const TeacherListStudent = () => {
                   <th style={{ padding: '8px 10px', textAlign: 'left', borderBottom: `1px solid ${C.border}` }}>Nama Siswa</th>
                   <th style={{ padding: '8px 10px', textAlign: 'left', borderBottom: `1px solid ${C.border}` }}>Kelas</th>
                   <th style={{ padding: '8px 10px', textAlign: 'left', borderBottom: `1px solid ${C.border}` }}>Privat/Group</th>
-                  <th style={{ padding: '8px 10px', textAlign: 'left', borderBottom: `1px solid ${C.border}` }}>Jenis Paket</th>
-                  <th style={{ padding: '8px 10px', textAlign: 'left', borderBottom: `1px solid ${C.border}` }}>Kontak</th>
-                  <th style={{ padding: '8px 10px', textAlign: 'left', borderBottom: `1px solid ${C.border}` }}>Kehadiran</th>
+                  <th style={{ padding: '8px 10px', textAlign: 'left', borderBottom: `1px solid ${C.border}` }}>Online/Offline/Hybrid</th>
                   <th style={{ padding: '8px 10px', textAlign: 'left', borderBottom: `1px solid ${C.border}` }}>Status</th>
+                  <th style={{ padding: '8px 10px', textAlign: 'center', borderBottom: `1px solid ${C.border}` }}>Aksi</th>
                 </tr>
               </thead>
               <tbody>
@@ -263,15 +377,20 @@ const TeacherListStudent = () => {
                     <td style={{ padding: '8px 10px', fontWeight: '500' }}>{s.nama}</td>
                     <td style={{ padding: '8px 10px' }}>{s.kelas}</td>
                     <td style={{ padding: '8px 10px' }}>{s.jenisKelas}</td>
-                    <td style={{ padding: '8px 10px' }}>{s.paket}</td>
-                    <td style={{ padding: '8px 10px', fontSize: '0.8rem' }}>{s.kontak}</td>
-                    <td style={{ padding: '8px 10px', color: C.grayLight }}>
-                      {s.kehadiran ?? 'Belum tersedia'}
-                    </td>
+                    <td style={{ padding: '8px 10px' }}>{s.metode}</td>
                     <td style={{ padding: '8px 10px' }}>
-                      <span style={{ background: C.goldBg, color: C.gold, padding: '2px 8px', borderRadius: '12px', fontSize: '0.75rem' }}>
-                        {s.status ?? 'Belum tersedia'}
-                      </span>
+                      <StatusBadge aktif={s.aktif} />
+                    </td>
+                    <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                      <button
+                        onClick={() => setDeleteTarget(s)}
+                        style={{
+                          background: 'rgba(179,66,63,0.08)', border: 'none', color: '#b3423f', padding: '6px 14px',
+                          borderRadius: '40px', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.8rem', fontFamily: 'inherit',
+                        }}
+                      >
+                        🗑️ Hapus
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -284,6 +403,52 @@ const TeacherListStudent = () => {
           Menampilkan {filteredStudents.length} dari {students.length} siswa
         </div>
       </div>
+
+      {deleteTarget && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 200, padding: '1rem',
+          }}
+        >
+          <div style={{ background: C.white, borderRadius: '16px', padding: '1.5rem', maxWidth: '400px', width: '100%' }}>
+            <h3 style={{ margin: '0 0 0.5rem 0', color: C.dark }}>Hapus siswa dari daftar?</h3>
+            <p style={{ fontSize: '0.9rem', color: C.gray, margin: '0 0 1.25rem 0', lineHeight: 1.5 }}>
+              <strong>{deleteTarget.nama}</strong> akan dilepas dari jadwal kelas{' '}
+              <strong>{deleteTarget.kelas}</strong>. Akun siswa ini tidak akan dihapus — hanya
+              keterkaitannya dengan jadwal Anda yang dilepas.
+            </p>
+            {errorMsg && (
+              <p style={{ color: '#b3423f', fontSize: '0.8rem', margin: '0 0 0.75rem 0' }}>{errorMsg}</p>
+            )}
+            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setDeleteTarget(null)}
+                disabled={deleting}
+                style={{
+                  background: 'none', border: `1.5px solid ${C.border}`, color: C.gray,
+                  padding: '9px 18px', borderRadius: '40px', fontWeight: 'bold', cursor: deleting ? 'not-allowed' : 'pointer',
+                  fontSize: '0.85rem', fontFamily: 'inherit', opacity: deleting ? 0.6 : 1,
+                }}
+              >
+                Batal
+              </button>
+              <button
+                onClick={handleConfirmDeleteStudent}
+                disabled={deleting}
+                style={{
+                  background: '#b3423f', border: 'none', color: 'white',
+                  padding: '9px 18px', borderRadius: '40px', fontWeight: 'bold', cursor: deleting ? 'not-allowed' : 'pointer',
+                  fontSize: '0.85rem', fontFamily: 'inherit', opacity: deleting ? 0.6 : 1,
+                }}
+              >
+                {deleting ? 'Menghapus...' : 'Hapus'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

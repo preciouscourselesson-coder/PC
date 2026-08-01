@@ -34,6 +34,7 @@ import TeacherUpdates from './components/teacher/TeacherUpdates';
 import TeacherArsipMateri from './components/teacher/TeacherArsipMateri';
 import TeacherProfile from './components/teacher/TeacherProfile';
 import TeacherContent from './components/teacher/TeacherContent';
+import TeacherMessages from './components/teacher/TeacherMessages';
 
 import AdminLayout from './components/admin/AdminLayout';
 import AdminHome from './components/admin/AdminHome';
@@ -99,6 +100,7 @@ function App() {
           <Route path="arsip-materi" element={<TeacherArsipMateri />} />
           <Route path="profil" element={<TeacherProfile />} />
           <Route path="bahan-ajar" element={<TeacherContent />} />
+          <Route path="pesan" element={<TeacherMessages />} />
         </Route>
 
         {/* Rute admin: AdminLayout membungkus semua via <Outlet /> */}

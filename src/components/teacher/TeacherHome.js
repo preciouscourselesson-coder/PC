@@ -262,15 +262,7 @@ const TeacherHome = () => {
       if (tugasError) throw tugasError;
       setUjianTerdekatList(tugasData || []);
 
-      const { data: fileData, error: fileError } = await supabase
-        .from('materi_file')
-        .select(`
-          *,
-          bab_id (id, nama, mapel_id (id, nama))
-        `)
-        .eq('user_id', profileId)
-        .order('created_at', { ascending: false });
-      if (!fileError) setMateriArsip(fileData || []);
+      await refreshMateriArsip(profileId);
 
       await loadMapel();
     } catch (err) {
@@ -279,6 +271,41 @@ const TeacherHome = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // materi_file.bab_id TIDAK punya FK constraint di database (lihat dokumentasi
+  // audit skema, bagian 4.4), jadi PostgREST tidak bisa melakukan embed
+  // `bab_id (id, nama, mapel_id(...))` secara langsung — ini yang menyebabkan
+  // error PGRST200. Solusinya: ambil materi_file dan materi_bab secara
+  // terpisah, lalu gabungkan manual di JS.
+  const refreshMateriArsip = async (userId) => {
+    const { data: rows, error: fileError } = await supabase
+      .from('materi_file')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+    if (fileError) {
+      console.error(fileError);
+      return;
+    }
+
+    const list = rows || [];
+    const babIds = [...new Set(list.map(r => r.bab_id).filter(Boolean))];
+
+    let babMap = {};
+    if (babIds.length > 0) {
+      const { data: babRows, error: babError } = await supabase
+        .from('materi_bab')
+        .select('id, nama, mapel_id (id, nama)')
+        .in('id', babIds);
+      if (babError) {
+        console.error(babError);
+      } else {
+        babMap = Object.fromEntries((babRows || []).map(b => [b.id, b]));
+      }
+    }
+
+    setMateriArsip(list.map(r => ({ ...r, bab_id: r.bab_id ? (babMap[r.bab_id] || null) : null })));
   };
 
   const loadMapel = async () => {
@@ -694,15 +721,7 @@ const TeacherHome = () => {
 
       setShowMateriForm(false);
       setMateriForm({ mapel_id: '', mapel_nama: '', bab_id: '', bab_nama: '', file: null, link: '' });
-      const { data: fileData, error: refreshError } = await supabase
-        .from('materi_file')
-        .select(`
-          *,
-          bab_id (id, nama, mapel_id (id, nama))
-        `)
-        .eq('user_id', guru.profile_id)
-        .order('created_at', { ascending: false });
-      if (!refreshError) setMateriArsip(fileData || []);
+      await refreshMateriArsip(guru.profile_id);
     } catch (err) {
       console.error(err);
       setErrorMsg(err.message || 'Gagal menyimpan materi.');

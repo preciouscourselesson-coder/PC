@@ -219,6 +219,10 @@ const AdminConsulPage = () => {
         )
       );
       setDetailData(prev => ({ ...prev, ...updateData }));
+
+      // 🔔 Trigger badge di topbar untuk refresh
+      window.dispatchEvent(new Event('notif-updated'));
+
       alert('✅ Data berhasil diperbarui!');
       closeDetail();
     } catch (err) {
