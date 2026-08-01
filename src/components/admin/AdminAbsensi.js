@@ -153,6 +153,10 @@ const AdminAbsensi = () => {
   const [editDateId, setEditDateId] = useState(null);
   const [editDateValue, setEditDateValue] = useState('');
 
+  // ----- State untuk konfirmasi hapus -----
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteId, setDeleteId] = useState(null);
+
   // ----- State untuk rekap siswa -----
   const [showRekapModal, setShowRekapModal] = useState(false);
   const [rekapSiswaId, setRekapSiswaId] = useState('');
@@ -304,6 +308,28 @@ const AdminAbsensi = () => {
     setEditDateValue('');
   };
 
+  // ---------- Aksi: hapus ----------
+  const openDeleteModal = (id) => {
+    setDeleteId(id);
+    setShowDeleteModal(true);
+    setOpenMenuId(null);
+  };
+
+  const handleDelete = async () => {
+    if (!deleteId) return;
+    setUpdatingId(deleteId);
+    const prevEntries = entries;
+    setEntries((prev) => prev.filter((e) => e.id !== deleteId));
+    const { error } = await supabase.from(TABLE).delete().eq('id', deleteId);
+    if (error) {
+      setEntries(prevEntries);
+      alert('Gagal menghapus pertemuan: ' + error.message);
+    }
+    setUpdatingId(null);
+    setShowDeleteModal(false);
+    setDeleteId(null);
+  };
+
   // ---------- Rekap siswa dengan pengelompokan per guru ----------
   const loadRekap = async () => {
     if (!rekapSiswaId || !rekapBulan) {
@@ -351,7 +377,6 @@ const AdminAbsensi = () => {
       }
       groups[key].items.push(item);
     });
-    // Urutkan berdasarkan nama guru
     return Object.values(groups).sort((a, b) => a.guru_name.localeCompare(b.guru_name));
   }, [rekapData]);
 
@@ -708,24 +733,34 @@ const AdminAbsensi = () => {
                     </div>
                   )}
 
-                  {item.status === 'Menunggu' && (
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      <button
-                        disabled={updatingId === item.id}
-                        onClick={() => handleUpdateStatus(item.id, 'Disetujui')}
-                        style={{ flex: 1, padding: '8px', borderRadius: '8px', border: 'none', background: C.green, color: C.white, fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer' }}
-                      >
-                        Setujui
-                      </button>
-                      <button
-                        disabled={updatingId === item.id}
-                        onClick={() => handleUpdateStatus(item.id, 'Ditolak')}
-                        style={{ flex: 1, padding: '8px', borderRadius: '8px', border: 'none', background: C.red, color: C.white, fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer' }}
-                      >
-                        Tolak
-                      </button>
-                    </div>
-                  )}
+                  {/* Aksi mobile: Setujui/Tolak/Hapus */}
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                    {item.status === 'Menunggu' && (
+                      <>
+                        <button
+                          disabled={updatingId === item.id}
+                          onClick={() => handleUpdateStatus(item.id, 'Disetujui')}
+                          style={{ flex: 1, padding: '8px', borderRadius: '8px', border: 'none', background: C.green, color: C.white, fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer' }}
+                        >
+                          Setujui
+                        </button>
+                        <button
+                          disabled={updatingId === item.id}
+                          onClick={() => handleUpdateStatus(item.id, 'Ditolak')}
+                          style={{ flex: 1, padding: '8px', borderRadius: '8px', border: 'none', background: C.red, color: C.white, fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer' }}
+                        >
+                          Tolak
+                        </button>
+                      </>
+                    )}
+                    <button
+                      disabled={updatingId === item.id}
+                      onClick={() => openDeleteModal(item.id)}
+                      style={{ flex: item.status === 'Menunggu' ? '0.5' : 1, padding: '8px', borderRadius: '8px', border: `1.5px solid ${C.red}`, background: C.white, color: C.red, fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer' }}
+                    >
+                      Hapus
+                    </button>
+                  </div>
                 </div>
               );
             })}
@@ -844,6 +879,13 @@ const AdminAbsensi = () => {
                             >
                               ✕
                             </button>
+                            <button
+                              onClick={() => openDeleteModal(item.id)}
+                              title="Hapus"
+                              style={{ width: '28px', height: '28px', borderRadius: '7px', border: 'none', background: C.redBg, color: C.red, cursor: 'pointer', fontWeight: 700 }}
+                            >
+                              🗑
+                            </button>
                           </div>
                         ) : (
                           <button
@@ -872,6 +914,12 @@ const AdminAbsensi = () => {
                               style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer', color: C.blue, fontSize: '0.82rem' }}
                             >
                               Edit Tanggal
+                            </button>
+                            <button
+                              onClick={() => openDeleteModal(item.id)}
+                              style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer', color: C.red, fontSize: '0.82rem' }}
+                            >
+                              Hapus
                             </button>
                           </div>
                         )}
@@ -971,6 +1019,76 @@ const AdminAbsensi = () => {
                 }}
               >
                 {updatingId === editDateId ? 'Menyimpan...' : 'Simpan'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== MODAL KONFIRMASI HAPUS ===== */}
+      {showDeleteModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.45)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 200,
+            padding: '1rem',
+          }}
+        >
+          <div
+            style={{
+              background: C.white,
+              borderRadius: '16px',
+              padding: '1.75rem',
+              maxWidth: '400px',
+              width: '100%',
+              boxShadow: '0 12px 32px rgba(0,0,0,0.2)',
+            }}
+          >
+            <h3 style={{ margin: '0 0 0.5rem', fontSize: '1.1rem', color: C.dark }}>Hapus Pertemuan</h3>
+            <p style={{ margin: '0 0 1rem', fontSize: '0.85rem', color: C.gray }}>
+              Yakin ingin menghapus pertemuan ini? Tindakan ini tidak dapat dibatalkan.
+            </p>
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => {
+                  setShowDeleteModal(false);
+                  setDeleteId(null);
+                }}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  border: `1.5px solid ${C.border}`,
+                  background: 'none',
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                  fontSize: '0.85rem',
+                  color: C.gray,
+                }}
+              >
+                Batal
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={updatingId === deleteId}
+                style={{
+                  padding: '8px 20px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: C.red,
+                  color: C.white,
+                  fontWeight: 'bold',
+                  cursor: updatingId === deleteId ? 'default' : 'pointer',
+                  opacity: updatingId === deleteId ? 0.6 : 1,
+                  fontFamily: 'inherit',
+                  fontSize: '0.85rem',
+                }}
+              >
+                {updatingId === deleteId ? 'Menghapus...' : 'Ya, Hapus'}
               </button>
             </div>
           </div>
