@@ -24,12 +24,12 @@ const navItems = [
   { label: 'Arsip Soal',   path: '/siswa/arsip',     icon: '📂' },
 ];
 
-// Bottom nav items (5 menu utama + Lainnya)
+// Bottom nav: Home, Absensi, Tugas, Materi, dan Lainnya (☰)
 const bottomNavItems = [
   { label: 'Home',    path: '/siswa',          icon: '🏠' },
   { label: 'Absensi', path: '/siswa/absensi',  icon: '📖' },
-  { label: 'Arsip',   path: '/siswa/arsip',    icon: '📂' },
   { label: 'Tugas',   path: '/siswa/tugas',    icon: '📝' },
+  { label: 'Materi',  path: '/siswa/materi',   icon: '📚' },
   { label: 'Lainnya', path: '#',               icon: '☰' },
 ];
 
@@ -193,7 +193,7 @@ const BottomNav = ({ onMenuClick }) => {
 
   const handleNav = (path) => {
     if (path === '#') {
-      onMenuClick();
+      onMenuClick(); // buka sidebar
       return;
     }
     navigate(path);
@@ -295,17 +295,15 @@ const Topbar = ({ user, isMobile, onMenuClick }) => {
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       padding: isMobile ? '0 1rem' : '0 2rem', position: 'sticky', top: 0, zIndex: 50, flexShrink: 0
     }}>
-      {isMobile ? (
-        <button onClick={onMenuClick} style={{ border: 'none', background: 'none', fontSize: '1.4rem', cursor: 'pointer', color: C.dark, padding: '8px', minHeight: '44px', minWidth: '44px' }}>
-          ☰
-        </button>
-      ) : (
-        <span style={{ fontWeight: 'bold', color: C.dark, fontSize: '1.05rem' }}>{pageTitle}</span>
-      )}
-      {isMobile && (
-        <img src={logo} alt="Precious Course" style={{ height: '30px' }} />
-      )}
+      {/* Kiri: judul halaman (tanpa hamburger) */}
+      <span style={{
+        fontWeight: 'bold', color: C.dark, fontSize: isMobile ? '0.95rem' : '1.05rem',
+        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+      }}>
+        {pageTitle}
+      </span>
 
+      {/* Kanan: ikon pesan + avatar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '0.5rem' : '1.5rem' }}>
         <button
           onClick={() => navigate('/siswa/pesan')}

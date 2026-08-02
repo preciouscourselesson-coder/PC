@@ -21,6 +21,8 @@ import {
   Folder,
   ArrowLeft,
   FileText,
+  Image as ImageIcon,
+  Music,
 } from "lucide-react";
 import { supabase } from "../../supabaseClient";
 
@@ -31,8 +33,8 @@ import { supabase } from "../../supabaseClient";
 // homework            (id, title, subject, grade, description, due_date,
 //                       status, share_code, folder_id, teacher_id,
 //                       created_at, updated_at)
-// homework_questions  (id, homework_id, question_text, blanks jsonb, points,
-//                       order_index, created_at)
+// homework_questions  (id, homework_id, question_text, image_url, audio_url,
+//                       blanks jsonb, points, order_index, created_at)
 // homework_assignments(id, homework_id, student_id, assigned_at)
 // homework_folders    (id, name, teacher_id, created_at)
 //
@@ -41,6 +43,29 @@ import { supabase } from "../../supabaseClient";
 // `due_date` sudah ada di skema lama, namun sekarang sengaja dibiarkan
 // kosong sampai tugas dibagikan ke siswa (lihat ShareModal) — tidak lagi
 // diminta saat tugas pertama kali dibuat.
+//
+// Catatan migrasi tambahan — dukungan gambar pada soal: tambahkan kolom
+// `image_url` (text, nullable) pada `homework_questions` jika belum ada:
+//   alter table homework_questions add column if not exists image_url text;
+// Gambar disimpan di Supabase Storage bucket bernama "homework-images".
+// Buat bucket ini (public) lalu tambahkan policy insert/select untuk guru
+// pemilik tugas, mis.:
+//   insert into storage.buckets (id, name, public) values ('homework-images', 'homework-images', true);
+//   create policy "guru unggah gambar soal" on storage.objects
+//     for insert with check (bucket_id = 'homework-images' and auth.uid()::text = (storage.foldername(name))[1]);
+//   create policy "publik lihat gambar soal" on storage.objects
+//     for select using (bucket_id = 'homework-images');
+//
+// Catatan migrasi tambahan — dukungan audio pada soal: tambahkan kolom
+// `audio_url` (text, nullable) pada `homework_questions` jika belum ada:
+//   alter table homework_questions add column if not exists audio_url text;
+// Audio disimpan di Supabase Storage bucket terpisah bernama "homework-audio"
+// (public), dengan policy serupa gambar di atas, mis.:
+//   insert into storage.buckets (id, name, public) values ('homework-audio', 'homework-audio', true);
+//   create policy "guru unggah audio soal" on storage.objects
+//     for insert with check (bucket_id = 'homework-audio' and auth.uid()::text = (storage.foldername(name))[1]);
+//   create policy "publik dengar audio soal" on storage.objects
+//     for select using (bucket_id = 'homework-audio');
 //
 // PENTING — folder kini dibaca/ditulis langsung ke tabel `homework_folders`
 // (bukan lagi state lokal). Berdasarkan audit skema per 1 Agustus 2026,
@@ -179,6 +204,8 @@ function createEmptyQuestion() {
   return {
     id: generateId(),
     questionText: "",
+    imageUrl: null,
+    audioUrl: null,
     blanks: [],
     points: 10,
   };
@@ -201,11 +228,11 @@ function createEmptyHomework(overrides = {}) {
   };
 }
 
-/** Merender preview soal: teks biasa + kotak blank untuk setiap [kata] */
-function QuestionPreview({ text }) {
+/** Merender preview soal: gambar/audio (jika ada) + teks biasa + kotak blank untuk setiap [kata] */
+function QuestionPreview({ text, imageUrl, audioUrl }) {
   const parts = text.split(/(\[.+?\])/g).filter((p) => p !== "");
 
-  if (!text.trim()) {
+  if (!text.trim() && !imageUrl && !audioUrl) {
     return (
       <p className="text-sm italic text-slate-400">
         Preview akan muncul di sini setelah Anda mengetik soal…
@@ -214,28 +241,52 @@ function QuestionPreview({ text }) {
   }
 
   return (
-    <p className="text-base leading-8 text-slate-700">
-      {parts.map((part, i) => {
-        const match = part.match(/^\[(.+?)\]$/);
-        if (match) {
-          return (
-            <span
-              key={i}
-              className="mx-1 inline-block min-w-[64px] rounded-md border-b-2 border-dashed border-teal-500 bg-teal-50 px-3 py-0.5 text-center align-middle text-teal-700"
-              title={`Jawaban: ${match[1]}`}
-            >
-              &nbsp;
-            </span>
-          );
-        }
-        return <span key={i}>{part}</span>;
-      })}
-    </p>
+    <div>
+      {imageUrl && (
+        <img
+          src={imageUrl}
+          alt="Gambar soal"
+          className="mb-2 max-h-64 w-full rounded-lg border border-slate-200 object-contain"
+        />
+      )}
+      {audioUrl && (
+        <audio
+          src={audioUrl}
+          controls
+          className="mb-2 w-full"
+        />
+      )}
+      {text.trim() && (
+        <p className="text-base leading-8 text-slate-700">
+          {parts.map((part, i) => {
+            const match = part.match(/^\[(.+?)\]$/);
+            if (match) {
+              return (
+                <span
+                  key={i}
+                  className="mx-1 inline-block min-w-[64px] rounded-md border-b-2 border-dashed border-teal-500 bg-teal-50 px-3 py-0.5 text-center align-middle text-teal-700"
+                  title={`Jawaban: ${match[1]}`}
+                >
+                  &nbsp;
+                </span>
+              );
+            }
+            return <span key={i}>{part}</span>;
+          })}
+        </p>
+      )}
+    </div>
   );
 }
 
 function QuestionEditor({ question, index, onChange, onDelete }) {
   const textareaRef = useRef(null);
+  const imageInputRef = useRef(null);
+  const audioInputRef = useRef(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [imageError, setImageError] = useState("");
+  const [uploadingAudio, setUploadingAudio] = useState(false);
+  const [audioError, setAudioError] = useState("");
 
   const handleTextChange = (value) => {
     onChange(question.id, {
@@ -248,6 +299,111 @@ function QuestionEditor({ question, index, onChange, onDelete }) {
   const handlePointsChange = (value) => {
     const points = Math.max(0, Number(value) || 0);
     onChange(question.id, { ...question, points });
+  };
+
+  /**
+   * Mengunggah gambar soal ke Supabase Storage bucket "homework-images"
+   * dengan path {teacher_id}/{timestamp}_{nama_file}, lalu menyimpan public
+   * URL-nya ke field `imageUrl` pada soal. Lihat catatan skema di bagian
+   * atas file ini untuk setup bucket & policy yang dibutuhkan.
+   */
+  const handleImageChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImageError("");
+
+    if (!file.type.startsWith("image/")) {
+      setImageError("File harus berupa gambar (JPG, PNG, dsb).");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setImageError("Ukuran gambar maksimal 5MB.");
+      return;
+    }
+
+    setUploadingImage(true);
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("Sesi tidak ditemukan. Silakan login ulang.");
+
+      const safeName = file.name.replace(/\s+/g, "_");
+      const path = `${user.id}/${Date.now()}_${safeName}`;
+      const { error: uploadError } = await supabase.storage
+        .from("homework-images")
+        .upload(path, file);
+      if (uploadError) throw uploadError;
+
+      const { data: publicUrlData } = supabase.storage
+        .from("homework-images")
+        .getPublicUrl(path);
+
+      onChange(question.id, { ...question, imageUrl: publicUrlData.publicUrl });
+    } catch (err) {
+      console.error("Gagal mengunggah gambar soal:", err);
+      setImageError(err.message || "Gagal mengunggah gambar.");
+    } finally {
+      setUploadingImage(false);
+      if (imageInputRef.current) imageInputRef.current.value = "";
+    }
+  };
+
+  const handleRemoveImage = () => {
+    setImageError("");
+    onChange(question.id, { ...question, imageUrl: null });
+  };
+
+  /**
+   * Mengunggah audio soal ke Supabase Storage bucket "homework-audio" dengan
+   * pola path yang sama seperti gambar. Lihat catatan skema di bagian atas
+   * file ini untuk setup bucket & policy yang dibutuhkan.
+   */
+  const handleAudioChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setAudioError("");
+
+    if (!file.type.startsWith("audio/")) {
+      setAudioError("File harus berupa audio (MP3, WAV, dsb).");
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setAudioError("Ukuran audio maksimal 10MB.");
+      return;
+    }
+
+    setUploadingAudio(true);
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("Sesi tidak ditemukan. Silakan login ulang.");
+
+      const safeName = file.name.replace(/\s+/g, "_");
+      const path = `${user.id}/${Date.now()}_${safeName}`;
+      const { error: uploadError } = await supabase.storage
+        .from("homework-audio")
+        .upload(path, file);
+      if (uploadError) throw uploadError;
+
+      const { data: publicUrlData } = supabase.storage
+        .from("homework-audio")
+        .getPublicUrl(path);
+
+      onChange(question.id, { ...question, audioUrl: publicUrlData.publicUrl });
+    } catch (err) {
+      console.error("Gagal mengunggah audio soal:", err);
+      setAudioError(err.message || "Gagal mengunggah audio.");
+    } finally {
+      setUploadingAudio(false);
+      if (audioInputRef.current) audioInputRef.current.value = "";
+    }
+  };
+
+  const handleRemoveAudio = () => {
+    setAudioError("");
+    onChange(question.id, { ...question, audioUrl: null });
   };
 
   /** Membungkus teks yang dipilih di textarea dengan tanda kurung siku [ ] */
@@ -310,6 +466,92 @@ function QuestionEditor({ question, index, onChange, onDelete }) {
         className="w-full resize-none rounded-lg border border-slate-300 p-3 text-sm text-slate-800 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-100"
       />
 
+      {/* Gambar soal (opsional) */}
+      <div className="mt-3">
+        <input
+          ref={imageInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleImageChange}
+          className="hidden"
+        />
+        {question.imageUrl ? (
+          <div className="relative inline-block">
+            <img
+              src={question.imageUrl}
+              alt="Gambar soal"
+              className="max-h-48 rounded-lg border border-slate-200 object-contain"
+            />
+            <button
+              type="button"
+              onClick={handleRemoveImage}
+              aria-label="Hapus gambar soal"
+              className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-white text-slate-500 shadow ring-1 ring-slate-200 transition hover:bg-red-50 hover:text-red-600"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => imageInputRef.current?.click()}
+            disabled={uploadingImage}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-500 transition hover:border-teal-400 hover:bg-teal-50 hover:text-teal-600 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {uploadingImage ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <ImageIcon size={14} />
+            )}
+            {uploadingImage ? "Mengunggah…" : "Tambah Gambar"}
+          </button>
+        )}
+        {imageError && (
+          <p className="mt-1 text-xs font-medium text-red-500">{imageError}</p>
+        )}
+      </div>
+
+      {/* Audio soal (opsional) */}
+      <div className="mt-2">
+        <input
+          ref={audioInputRef}
+          type="file"
+          accept="audio/*"
+          onChange={handleAudioChange}
+          className="hidden"
+        />
+        {question.audioUrl ? (
+          <div className="flex items-center gap-2">
+            <audio src={question.audioUrl} controls className="h-9 max-w-[260px]" />
+            <button
+              type="button"
+              onClick={handleRemoveAudio}
+              aria-label="Hapus audio soal"
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white text-slate-500 shadow ring-1 ring-slate-200 transition hover:bg-red-50 hover:text-red-600"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => audioInputRef.current?.click()}
+            disabled={uploadingAudio}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-500 transition hover:border-teal-400 hover:bg-teal-50 hover:text-teal-600 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {uploadingAudio ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <Music size={14} />
+            )}
+            {uploadingAudio ? "Mengunggah…" : "Tambah Audio"}
+          </button>
+        )}
+        {audioError && (
+          <p className="mt-1 text-xs font-medium text-red-500">{audioError}</p>
+        )}
+      </div>
+
       <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
         <button
           type="button"
@@ -355,7 +597,7 @@ function QuestionEditor({ question, index, onChange, onDelete }) {
           <Eye size={13} />
           Preview Siswa
         </div>
-        <QuestionPreview text={question.questionText} />
+        <QuestionPreview text={question.questionText} imageUrl={question.imageUrl} audioUrl={question.audioUrl} />
       </div>
     </div>
   );
@@ -853,7 +1095,7 @@ function PublishedHomeworkModal({ homeworkId, onClose, onSaved }) {
                         {q.points} poin
                       </span>
                     </div>
-                    <QuestionPreview text={q.question_text} />
+                    <QuestionPreview text={q.question_text} imageUrl={q.image_url} audioUrl={q.audio_url} />
                   </div>
                 ))}
                 {questions.length === 0 && (
@@ -1684,6 +1926,20 @@ function GradingPanel({ homeworkId, questions }) {
                       <p className="mb-1 text-xs font-medium text-slate-500">
                         Soal {i + 1}
                       </p>
+                      {(q.imageUrl || q.image_url) && (
+                        <img
+                          src={q.imageUrl || q.image_url}
+                          alt="Gambar soal"
+                          className="mb-2 max-h-32 rounded-lg border border-slate-200 object-contain"
+                        />
+                      )}
+                      {(q.audioUrl || q.audio_url) && (
+                        <audio
+                          src={q.audioUrl || q.audio_url}
+                          controls
+                          className="mb-2 h-9 w-full max-w-[260px]"
+                        />
+                      )}
                       <p className="mb-2 text-sm text-slate-700">
                         {q.questionText || q.question_text}
                       </p>
@@ -1876,6 +2132,8 @@ function HomeworkEditor({ initialHomework, onBack, onSaved }) {
       const questionsPayload = homework.questions.map((q, index) => ({
         homework_id: homeworkId,
         question_text: q.questionText,
+        image_url: q.imageUrl || null,
+        audio_url: q.audioUrl || null,
         blanks: q.blanks,
         points: q.points,
         order_index: index,
@@ -2489,6 +2747,8 @@ export default function TeacherHomework() {
           (qRows || []).map((q) => ({
             id: q.id,
             questionText: q.question_text,
+            imageUrl: q.image_url || null,
+            audioUrl: q.audio_url || null,
             blanks: q.blanks || [],
             points: q.points,
           })) || [],

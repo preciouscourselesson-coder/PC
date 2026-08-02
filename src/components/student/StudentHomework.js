@@ -1,60 +1,28 @@
 // src/components/student/StudentHomework.js
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '../../supabaseClient';
 
 // ---------------------------------------------------------------------------
-// Update: siswa sekarang bisa mengerjakan dua jenis tugas di halaman ini.
-//
-// 1) Tugas file (skema lama, tidak berubah)
-//    penugasan_guru -> pengumpulan_tugas (upload file jawaban)
-//
-// 2) Tugas isian interaktif (skema baru, dibuat guru lewat TeacherHomework.js)
-//    homework -> homework_questions -> homework_assignments
-//    Siswa mengisi bagian [blank] pada kalimat soal langsung di halaman ini,
-//    lalu dinilai otomatis dengan mencocokkan jawaban ke `blanks` (case-
-//    insensitive, trimmed). Skema homework_* tidak menyediakan tabel untuk
-//    menyimpan jawaban siswa, jadi tabel baru berikut PERLU dibuat manual
-//    di Supabase sebelum fitur ini berfungsi:
-//
-//    create table homework_submissions (
-//      id           uuid primary key default gen_random_uuid(),
-//      homework_id  uuid not null references homework(id) on delete cascade,
-//      student_id   uuid not null references profiles(id) on delete cascade,
-//      answers      jsonb not null default '{}'::jsonb, -- { [homework_question_id]: string[] }
-//      score        numeric not null default 0,
-//      max_score    numeric not null default 0,
-//      submitted_at timestamptz not null default now(),
-//      unique (homework_id, student_id) -- supaya bisa upsert saat siswa mengerjakan ulang
-//    );
-//    alter table homework_submissions enable row level security;
-//    create policy "siswa kelola submission sendiri" on homework_submissions
-//      for all using (auth.uid() = student_id) with check (auth.uid() = student_id);
-//    -- tambahkan policy SELECT terpisah untuk guru (mis. via guru_owns_tugas())
-//    -- jika ingin nilai ini juga terlihat di sisi guru.
+// Warna biru sebagai tema utama
 // ---------------------------------------------------------------------------
-
 const C = {
-  gold:    '#b4964b',
-  green:   '#2d6a4f',
-  dark:    '#171411',
-  gray:    '#444242',
-  cream:   '#f7f6f0',
-  white:   '#ffffff',
-  border:  '#e0ddd6',
-  goldBg:  'rgba(180,150,75,0.10)',
-  red:     '#e74c3c',
-  redBg:   '#fff0f0',
-  orange:  '#f39c12',
-  orangeBg:'#fef9e7',
-  blue:    '#3f7ea6',
-  blueBg:  'rgba(63,126,166,0.10)',
+  primary:   '#2563eb',      // biru utama
+  primaryDark: '#1a4cbf',    // biru lebih gelap
+  primaryLight: '#dbeafe',   // biru sangat muda untuk background
+  primaryBg: 'rgba(37, 99, 235, 0.08)',
+  green:     '#2d6a4f',
+  dark:      '#171411',
+  gray:      '#444242',
+  cream:     '#f7f6f0',
+  white:     '#ffffff',
+  border:    '#e0ddd6',
+  red:       '#e74c3c',
+  redBg:     '#fff0f0',
+  orange:    '#f39c12',
+  orangeBg:  '#fef9e7',
 };
 
 // ─── Helper: parsing & grading soal isian [blank] ────────────────────────────
-// Memecah teks soal menjadi bagian teks biasa dan bagian blank (mengacu pada
-// format [kata] yang sama dengan yang dipakai TeacherHomework.js). Setiap
-// bagian blank diberi nomor urut (blankIndex) supaya jawabannya bisa dipetakan
-// balik ke array `blanks` pada baris homework_questions.
 const buildQuestionParts = (text = '') => {
   const rawParts = text.split(/(\[.+?\])/g).filter((p) => p !== '');
   let blankIndex = 0;
@@ -69,9 +37,6 @@ const buildQuestionParts = (text = '') => {
   });
 };
 
-// Menilai satu tugas isian: cocokkan jawaban siswa (workAnswers[question.id])
-// dengan kunci jawaban (question.blanks) secara case-insensitive & trimmed.
-// Nilai per soal proporsional terhadap jumlah blank yang benar.
 const computeInteractiveScore = (questions = [], answersMap = {}) => {
   let score = 0;
   let maxScore = 0;
@@ -92,43 +57,13 @@ const computeInteractiveScore = (questions = [], answersMap = {}) => {
 };
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
-const formatDate = (date) => {
-  const d = new Date(date);
-  return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
-};
-
 const formatDeadline = (iso) => {
   if (!iso) return '-';
   const d = new Date(iso);
   return `${d.getDate()} ${['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'][d.getMonth()]} ${d.getFullYear()}, ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')} WIB`;
 };
 
-const getDaysInMonth = (year, month) => new Date(year, month, 0).getDate();
-const getFirstDayOfMonth = (year, month) => new Date(year, month - 1, 1).getDay();
-
-// ─── Komponen Filter Button ──────────────────────────────────────────────────
-const FilterButton = ({ label, active, onClick }) => (
-  <button
-    onClick={onClick}
-    style={{
-      background: active ? C.gold : 'transparent',
-      color: active ? C.white : C.gray,
-      border: `1.5px solid ${active ? C.gold : C.border}`,
-      borderRadius: '40px',
-      padding: '6px 16px',
-      fontSize: '0.82rem',
-      fontWeight: active ? 'bold' : 'normal',
-      cursor: 'pointer',
-      fontFamily: 'inherit',
-      transition: 'all 0.15s',
-      whiteSpace: 'nowrap',
-    }}
-  >
-    {label}
-  </button>
-);
-
-// ─── Komponen Task Card ──────────────────────────────────────────────────────
+// ─── Komponen Task Card (dengan aksen biru) ─────────────────────────────────
 const TaskCard = ({ task, onUpload, onWork, isMobile }) => {
   const isInteractive = task.type === 'interactive';
   const isOverdue = new Date(task.deadline) < new Date() && task.status_pengumpulan !== 'Sudah';
@@ -144,7 +79,7 @@ const TaskCard = ({ task, onUpload, onWork, isMobile }) => {
       marginBottom: '1rem',
       transition: 'all 0.15s',
     }}
-    onMouseEnter={e => e.currentTarget.style.borderColor = C.gold}
+    onMouseEnter={e => e.currentTarget.style.borderColor = C.primary}
     onMouseLeave={e => e.currentTarget.style.borderColor = isOverdue ? C.red : C.border}
     >
       <div style={{ display: 'flex', flexWrap: isMobile ? 'wrap' : 'nowrap', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
@@ -155,7 +90,7 @@ const TaskCard = ({ task, onUpload, onWork, isMobile }) => {
             </h4>
             {isInteractive && (
               <span style={{
-                background: C.blueBg, color: C.blue, padding: '1px 10px',
+                background: C.primaryBg, color: C.primary, padding: '1px 10px',
                 borderRadius: '40px', fontSize: '0.68rem', fontWeight: 'bold',
               }}>
                 ✍️ Isian Interaktif
@@ -163,7 +98,7 @@ const TaskCard = ({ task, onUpload, onWork, isMobile }) => {
             )}
           </div>
           <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '6px' }}>
-            <span style={{ color: C.gold, fontWeight: 'bold', fontSize: '0.85rem' }}>{task.mapel}</span>
+            <span style={{ color: C.primary, fontWeight: 'bold', fontSize: '0.85rem' }}>{task.mapel}</span>
             {!isInteractive && (
               <span style={{ color: C.gray, fontSize: '0.8rem' }}>• {task.bab || 'Bab belum diisi'}</span>
             )}
@@ -202,8 +137,8 @@ const TaskCard = ({ task, onUpload, onWork, isMobile }) => {
                 target="_blank"
                 rel="noreferrer"
                 style={{
-                  background: C.goldBg,
-                  color: C.gold,
+                  background: C.primaryBg,
+                  color: C.primary,
                   padding: '2px 10px',
                   borderRadius: '40px',
                   fontSize: '0.7rem',
@@ -224,9 +159,9 @@ const TaskCard = ({ task, onUpload, onWork, isMobile }) => {
             <button
               onClick={() => onWork(task)}
               style={{
-                background: isSubmitted ? 'transparent' : C.gold,
-                border: isSubmitted ? `1.5px solid ${C.gold}` : 'none',
-                color: isSubmitted ? C.gold : C.white,
+                background: isSubmitted ? 'transparent' : C.primary,
+                border: isSubmitted ? `1.5px solid ${C.primary}` : 'none',
+                color: isSubmitted ? C.primary : C.white,
                 padding: '6px 14px',
                 borderRadius: '40px',
                 fontWeight: 'bold',
@@ -253,7 +188,7 @@ const TaskCard = ({ task, onUpload, onWork, isMobile }) => {
             <button
               onClick={() => onUpload(task.id)}
               style={{
-                background: C.gold,
+                background: C.primary,
                 border: 'none',
                 color: C.white,
                 padding: '6px 14px',
@@ -274,7 +209,7 @@ const TaskCard = ({ task, onUpload, onWork, isMobile }) => {
               rel="noreferrer"
               style={{
                 fontSize: '0.7rem',
-                color: C.gold,
+                color: C.primary,
                 textDecoration: 'none',
               }}
             >
@@ -287,160 +222,7 @@ const TaskCard = ({ task, onUpload, onWork, isMobile }) => {
   );
 };
 
-// ─── Kalender Mini ──────────────────────────────────────────────────────────
-const MiniCalendar = ({ year, month, selectedDate, onSelectDate, tasksByDate, isMobile }) => {
-  const daysInMonth = getDaysInMonth(year, month);
-  const firstDay = getFirstDayOfMonth(year, month);
-  const today = new Date();
-
-  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
-
-  const handlePrevMonth = () => {
-    const newMonth = month === 1 ? 12 : month - 1;
-    const newYear = month === 1 ? year - 1 : year;
-    onSelectDate(new Date(newYear, newMonth - 1, 1));
-  };
-
-  const handleNextMonth = () => {
-    const newMonth = month === 12 ? 1 : month + 1;
-    const newYear = month === 12 ? year + 1 : year;
-    onSelectDate(new Date(newYear, newMonth - 1, 1));
-  };
-
-  const isSelected = (day) => {
-    return selectedDate && selectedDate.getFullYear() === year &&
-           selectedDate.getMonth() === month - 1 &&
-           selectedDate.getDate() === day;
-  };
-
-  const isToday = (day) => {
-    return today.getFullYear() === year &&
-           today.getMonth() === month - 1 &&
-           today.getDate() === day;
-  };
-
-  const days = [];
-  for (let i = 0; i < firstDay; i++) {
-    days.push(<div key={`empty-${i}`} style={{ width: '100%', paddingBottom: '100%' }} />);
-  }
-  for (let d = 1; d <= daysInMonth; d++) {
-    const selected = isSelected(d);
-    const todayFlag = isToday(d);
-    const hasTask = tasksByDate && tasksByDate[d] && tasksByDate[d].length > 0;
-    days.push(
-      <div
-        key={d}
-        onClick={() => onSelectDate(new Date(year, month - 1, d))}
-        style={{
-          width: '100%',
-          paddingBottom: '100%',
-          position: 'relative',
-          cursor: 'pointer',
-        }}
-      >
-        <div style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          borderRadius: '50%',
-          background: selected ? C.gold : todayFlag ? C.goldBg : 'transparent',
-          color: selected ? C.white : todayFlag ? C.gold : C.dark,
-          fontWeight: selected ? 'bold' : todayFlag ? 'bold' : 'normal',
-          fontSize: '0.85rem',
-          transition: 'background 0.15s',
-          boxSizing: 'border-box',
-        }}
-        onMouseEnter={e => {
-          if (!selected) e.currentTarget.style.background = C.cream;
-        }}
-        onMouseLeave={e => {
-          if (!selected) e.currentTarget.style.background = todayFlag ? C.goldBg : 'transparent';
-        }}
-        >
-          {d}
-          {hasTask && (
-            <span style={{
-              width: '4px',
-              height: '4px',
-              borderRadius: '50%',
-              background: C.gold,
-              display: 'inline-block',
-              marginTop: '2px',
-            }} />
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div style={{
-      background: C.white,
-      border: `1.5px solid ${C.border}`,
-      borderRadius: '16px',
-      padding: '1rem 0.5rem',
-      maxWidth: isMobile ? '360px' : '280px',
-      width: '100%',
-      margin: isMobile ? '0 auto' : 0,
-    }}>
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        padding: '0 0.5rem',
-        marginBottom: '0.8rem',
-      }}>
-        <button onClick={handlePrevMonth} style={{
-          background: 'none',
-          border: 'none',
-          cursor: 'pointer',
-          fontSize: '1.2rem',
-          color: C.gray,
-          padding: '0 8px',
-        }}>‹</button>
-        <span style={{ fontWeight: 'bold', color: C.dark, fontSize: '1rem' }}>
-          {monthNames[month - 1]} {year}
-        </span>
-        <button onClick={handleNextMonth} style={{
-          background: 'none',
-          border: 'none',
-          cursor: 'pointer',
-          fontSize: '1.2rem',
-          color: C.gray,
-          padding: '0 8px',
-        }}>›</button>
-      </div>
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(7, 1fr)',
-        gap: '4px',
-        padding: '0 0.25rem',
-      }}>
-        {['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'].map(day => (
-          <div key={day} style={{
-            fontSize: '0.7rem',
-            color: C.gray,
-            fontWeight: 'bold',
-            textAlign: 'center',
-            padding: '4px 0',
-          }}>{day}</div>
-        ))}
-        {days}
-      </div>
-    </div>
-  );
-};
-
-// ─── Modal Kerjakan Tugas Isian Interaktif ───────────────────────────────────
-// Menampilkan setiap soal dari homework_questions dengan bagian [blank]
-// diganti input teks. Jika siswa sudah pernah mengumpulkan, input akan
-// terisi otomatis dengan jawaban terakhir sehingga bisa dikerjakan ulang.
+// ─── Modal Interaktif (dengan aksen biru) ──────────────────────────────────
 const InteractiveWorkModal = ({ task, answers, onAnswerChange, onSubmit, onClose, submitting, error }) => {
   if (!task) return null;
   const isSubmitted = task.status_pengumpulan === 'Sudah';
@@ -502,7 +284,7 @@ const InteractiveWorkModal = ({ task, answers, onAnswerChange, onSubmit, onClose
                   <span style={{
                     display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                     width: '24px', height: '24px', borderRadius: '50%',
-                    background: C.gold, color: C.white, fontSize: '0.75rem', fontWeight: 'bold',
+                    background: C.primary, color: C.white, fontSize: '0.75rem', fontWeight: 'bold',
                   }}>
                     {qIdx + 1}
                   </span>
@@ -524,7 +306,7 @@ const InteractiveWorkModal = ({ task, answers, onAnswerChange, onSubmit, onClose
                         disabled={submitting}
                         style={{
                           margin: '0 4px', minWidth: '90px', padding: '4px 8px',
-                          borderRadius: '8px', border: `1.5px solid ${C.gold}`,
+                          borderRadius: '8px', border: `1.5px solid ${C.primary}`,
                           fontFamily: 'inherit', fontSize: '0.88rem', textAlign: 'center',
                           background: C.cream, color: C.dark,
                         }}
@@ -557,7 +339,7 @@ const InteractiveWorkModal = ({ task, answers, onAnswerChange, onSubmit, onClose
             disabled={submitting}
             style={{
               padding: '8px 20px', borderRadius: '10px', border: 'none',
-              background: submitting ? C.border : C.gold, color: C.white,
+              background: submitting ? C.border : C.primary, color: C.white,
               fontWeight: 700, cursor: submitting ? 'not-allowed' : 'pointer',
               opacity: submitting ? 0.6 : 1, fontFamily: 'inherit',
             }}
@@ -583,38 +365,32 @@ const useIsMobile = (bp = 768) => {
 // ─── Halaman Utama ────────────────────────────────────────────────────────────
 const StudentHomework = () => {
   const isMobile = useIsMobile();
-  const [user, setUser] = useState(null);
   const [studentId, setStudentId] = useState(null);
   const [tasks, setTasks] = useState([]);
   const [filteredTasks, setFilteredTasks] = useState([]);
   const [filterStatus, setFilterStatus] = useState('Semua');
   const [filterMapel, setFilterMapel] = useState('Semua Mapel');
   const [sortBy, setSortBy] = useState('Terbaru');
-  const [selectedDate, setSelectedDate] = useState(new Date());
-  const [currentYear, setCurrentYear] = useState(selectedDate.getFullYear());
-  const [currentMonth, setCurrentMonth] = useState(selectedDate.getMonth() + 1);
   const [mapelList, setMapelList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
 
-  // State untuk upload jawaban (tugas file)
+  // State upload & interaktif
   const [uploadingTaskId, setUploadingTaskId] = useState(null);
   const [uploadFile, setUploadFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
 
-  // State untuk mengerjakan tugas isian interaktif (homework)
   const [workingTask, setWorkingTask] = useState(null);
   const [workAnswers, setWorkAnswers] = useState({});
   const [submittingAnswers, setSubmittingAnswers] = useState(false);
   const [workError, setWorkError] = useState('');
 
-  // ── Ambil data user ────────────────────────────────────────────────────────
+  // ── Ambil data user (hanya studentId) ────────────────────────────────────────
   useEffect(() => {
     const init = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
-        setUser(session.user.user_metadata);
         setStudentId(session.user.id);
       }
     };
@@ -622,17 +398,13 @@ const StudentHomework = () => {
   }, []);
 
   // ── Ambil tugas dari Supabase ─────────────────────────────────────────────
-  // Dua sumber digabung jadi satu daftar `tasks`, dibedakan lewat field `type`:
-  //   'file'        -> penugasan_guru / pengumpulan_tugas (upload jawaban)
-  //   'interactive' -> homework / homework_questions / homework_assignments
-  //                    (isian [blank] yang dikerjakan langsung di halaman ini)
   const fetchTasks = useCallback(async () => {
     if (!studentId) return;
     setLoading(true);
     setErrorMsg('');
 
     try {
-      // ─── A. Tugas file (skema lama, tidak diubah) ───────────────────────
+      // Tugas file
       const { data, error } = await supabase
         .from('penugasan_guru')
         .select(`
@@ -667,7 +439,7 @@ const StudentHomework = () => {
         .map(task => {
           const submissions = task.pengumpulan_tugas || [];
           const mySubmission = submissions.find(s => s.siswa_id === studentId);
-          if (!mySubmission) return null; // belum ditugaskan ke siswa ini
+          if (!mySubmission) return null;
           return {
             ...task,
             type: 'file',
@@ -681,7 +453,7 @@ const StudentHomework = () => {
         })
         .filter(Boolean);
 
-      // ─── B. Tugas isian interaktif (skema baru dari TeacherHomework.js) ──
+      // Tugas interaktif
       const { data: hwAssignData, error: hwAssignError } = await supabase
         .from('homework_assignments')
         .select(`
@@ -702,8 +474,6 @@ const StudentHomework = () => {
 
       if (hwAssignError) throw hwAssignError;
 
-      // Hanya tugas yang benar-benar sudah dipublikasikan guru; dedup kalau
-      // ada lebih dari satu baris assignment untuk homework yang sama.
       const homeworkMap = new Map();
       (hwAssignData || []).forEach(a => {
         if (a.homework && a.homework.status === 'published' && !homeworkMap.has(a.homework.id)) {
@@ -721,10 +491,7 @@ const StudentHomework = () => {
           .in('homework_id', homeworkIds);
 
         if (subError) {
-          // Tabel/policy homework_submissions kemungkinan belum dibuat di
-          // Supabase — jangan gagalkan seluruh halaman, anggap saja belum
-          // ada jawaban yang dikumpulkan (lihat catatan skema di atas).
-          console.warn('Gagal memuat submission tugas interaktif:', subError.message);
+          console.warn('Gagal memuat submission interaktif:', subError.message);
         } else {
           submissionMap = (subData || []).reduce((acc, s) => {
             acc[s.homework_id] = s;
@@ -761,7 +528,6 @@ const StudentHomework = () => {
       const allTasks = [...myTasks, ...interactiveTasks];
       setTasks(allTasks);
 
-      // Ambil daftar mapel unik dari kedua jenis tugas
       const mapels = [...new Set(allTasks.map(t => t.mapel).filter(Boolean))];
       setMapelList(['Semua Mapel', ...mapels]);
 
@@ -800,14 +566,6 @@ const StudentHomework = () => {
       result = result.filter(t => t.mapel === filterMapel);
     }
 
-    if (selectedDate) {
-      const dateStr = selectedDate.toISOString().split('T')[0];
-      result = result.filter(t => {
-        const taskDate = new Date(t.deadline).toISOString().split('T')[0];
-        return taskDate === dateStr;
-      });
-    }
-
     if (sortBy === 'Terbaru') {
       result.sort((a, b) => new Date(b.deadline) - new Date(a.deadline));
     } else if (sortBy === 'Terlama') {
@@ -817,13 +575,30 @@ const StudentHomework = () => {
     }
 
     setFilteredTasks(result);
-  }, [tasks, filterStatus, filterMapel, sortBy, selectedDate]);
+  }, [tasks, filterStatus, filterMapel, sortBy]);
 
   useEffect(() => {
     applyFilters();
   }, [applyFilters]);
 
-  // ── Handle Upload Jawaban ──────────────────────────────────────────────────
+  // ── Statistik untuk sidebar ──────────────────────────────────────────────
+  const stats = useMemo(() => {
+    const total = tasks.length;
+    const belum = tasks.filter(t => t.status_pengumpulan === 'Belum').length;
+    const sudah = tasks.filter(t => t.status_pengumpulan === 'Sudah').length;
+    const terlambat = tasks.filter(t => {
+      return new Date(t.deadline) < new Date() && t.status_pengumpulan !== 'Sudah';
+    }).length;
+    const mapelStats = {};
+    tasks.forEach(t => {
+      if (t.mapel) {
+        mapelStats[t.mapel] = (mapelStats[t.mapel] || 0) + 1;
+      }
+    });
+    return { total, belum, sudah, terlambat, mapelStats };
+  }, [tasks]);
+
+  // ── Handle Upload ──────────────────────────────────────────────────────────
   const openUploadModal = (taskId) => {
     setUploadingTaskId(taskId);
     setUploadFile(null);
@@ -859,13 +634,11 @@ const StudentHomework = () => {
     setErrorMsg('');
 
     try {
-      // Cari submission_id untuk tugas ini
       const task = tasks.find(t => t.id === uploadingTaskId);
       if (!task || !task.submission_id) {
         throw new Error('Data tugas tidak ditemukan.');
       }
 
-      // Upload file ke storage
       const fileName = `${studentId}/${Date.now()}_${uploadFile.name}`;
       const { error: uploadError } = await supabase.storage
         .from('tugas-siswa')
@@ -877,7 +650,6 @@ const StudentHomework = () => {
         .from('tugas-siswa')
         .getPublicUrl(fileName);
 
-      // Update pengumpulan_tugas
       const { error: updateError } = await supabase
         .from('pengumpulan_tugas')
         .update({
@@ -889,7 +661,6 @@ const StudentHomework = () => {
 
       if (updateError) throw updateError;
 
-      // Update local state
       setTasks(prev =>
         prev.map(t =>
           t.id === uploadingTaskId
@@ -913,10 +684,8 @@ const StudentHomework = () => {
     }
   };
 
-  // ── Handle Kerjakan Tugas Isian Interaktif ─────────────────────────────────
+  // ── Handle Interaktif ─────────────────────────────────────────────────────
   const openWorkModal = (task) => {
-    // Siapkan array jawaban kosong (atau terisi dari submission terakhir)
-    // untuk setiap soal, sepanjang jumlah blank pada soal tersebut.
     const initialAnswers = {};
     (task.questions || []).forEach(q => {
       const blanksLen = (q.blanks || []).length;
@@ -989,134 +758,199 @@ const StudentHomework = () => {
     }
   };
 
-  // ── Grup tasks by date untuk kalender ─────────────────────────────────────
-  const tasksByDate = tasks.reduce((acc, t) => {
-    if (t.deadline) {
-      const d = new Date(t.deadline);
-      const day = d.getDate();
-      if (!acc[day]) acc[day] = [];
-      acc[day].push(t);
-    }
-    return acc;
-  }, {});
+  // ─── SIDEBAR FILTER ──────────────────────────────────────────────────────
+  const Sidebar = () => {
+    const isActiveStatus = (status) => filterStatus === status && filterMapel === 'Semua Mapel';
 
-  const handleDateSelect = (date) => {
-    setSelectedDate(date);
-    setCurrentYear(date.getFullYear());
-    setCurrentMonth(date.getMonth() + 1);
+    const handleStatusClick = (status) => {
+      setFilterStatus(status);
+      setFilterMapel('Semua Mapel');
+    };
+
+    const handleMapelClick = (mapel) => {
+      setFilterMapel(mapel);
+      setFilterStatus('Semua');
+    };
+
+    return (
+      <div style={{
+        background: C.white,
+        border: `1.5px solid ${C.border}`,
+        borderRadius: '16px',
+        padding: '0.8rem 0',
+        width: '100%',
+        minWidth: '200px',
+      }}>
+        <div style={{ padding: '0 0.8rem' }}>
+          <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '0.9rem', color: C.dark, fontWeight: 'bold' }}>
+            📂 Filter Tugas
+          </h4>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+          <SidebarItem
+            label="Semua Tugas"
+            count={stats.total}
+            active={filterStatus === 'Semua' && filterMapel === 'Semua Mapel'}
+            onClick={() => { setFilterStatus('Semua'); setFilterMapel('Semua Mapel'); }}
+          />
+          <SidebarItem
+            label="Belum Dikumpulkan"
+            count={stats.belum}
+            active={isActiveStatus('Belum Dikumpulkan')}
+            onClick={() => handleStatusClick('Belum Dikumpulkan')}
+          />
+          <SidebarItem
+            label="Sudah Dikumpulkan"
+            count={stats.sudah}
+            active={isActiveStatus('Sudah Dikumpulkan')}
+            onClick={() => handleStatusClick('Sudah Dikumpulkan')}
+          />
+          <SidebarItem
+            label="Terlambat"
+            count={stats.terlambat}
+            active={isActiveStatus('Terlambat')}
+            onClick={() => handleStatusClick('Terlambat')}
+          />
+          <hr style={{ border: 'none', borderTop: `1px solid ${C.border}`, margin: '0.6rem 0.8rem' }} />
+          <div style={{ padding: '0 0.8rem', marginBottom: '0.3rem' }}>
+            <span style={{ fontSize: '0.75rem', color: C.gray, fontWeight: 'bold' }}>MATA PELAJARAN</span>
+          </div>
+          {mapelList.map(m => {
+            if (m === 'Semua Mapel') return null;
+            return (
+              <SidebarItem
+                key={m}
+                label={m}
+                count={stats.mapelStats[m] || 0}
+                active={filterMapel === m && filterStatus === 'Semua'}
+                onClick={() => handleMapelClick(m)}
+              />
+            );
+          })}
+        </div>
+      </div>
+    );
   };
 
-  const namaDepan = user?.full_name?.split(' ')[0] || 'Siswa';
-  const selectedDateStr = selectedDate ? formatDate(selectedDate) : '';
+  const SidebarItem = ({ label, count, active, onClick }) => (
+    <div
+      onClick={onClick}
+      style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: '0.5rem 0.8rem',
+        borderRadius: '8px',
+        cursor: 'pointer',
+        background: active ? C.primaryBg : 'transparent',
+        color: active ? C.primary : C.dark,
+        fontWeight: active ? 'bold' : 'normal',
+        transition: 'background 0.15s',
+      }}
+      onMouseEnter={e => {
+        if (!active) e.currentTarget.style.background = C.primaryLight;
+      }}
+      onMouseLeave={e => {
+        if (!active) e.currentTarget.style.background = 'transparent';
+      }}
+    >
+      <span style={{ fontSize: '0.85rem' }}>{label}</span>
+      <span style={{
+        background: active ? C.primary : C.border,
+        color: active ? C.white : C.gray,
+        padding: '1px 10px',
+        borderRadius: '40px',
+        fontSize: '0.7rem',
+        fontWeight: 'bold',
+      }}>{count}</span>
+    </div>
+  );
 
+  // ─── RENDER UTAMA ──────────────────────────────────────────────────────────
   return (
     <>
-      <div style={{ maxWidth: '960px', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-        <div>
-          <h2 style={{ margin: '0 0 4px', fontSize: isMobile ? '1.25rem' : '1.6rem', fontWeight: 'bold', color: C.dark }}>
-            Hi, {namaDepan}! 😊
-          </h2>
-          <p style={{ margin: '0 0 4px', color: C.gray, fontSize: '1rem' }}>
-            Semangat mengerjakan tugas hari ini!
-          </p>
-          <p style={{ margin: 0, color: C.gray, fontSize: '0.88rem' }}>
-            {tasks.length} tugas dari guru yang perlu dikerjakan.
-          </p>
+      <div style={{
+        maxWidth: '1200px',
+        margin: '0 auto',
+        padding: '1rem',
+      }}>
+        {/* HEADER dengan latar biru */}
+        <div style={{
+          background: C.primary,
+          padding: '1.2rem 2rem',
+          borderRadius: '16px 16px 0 0',
+          marginBottom: '1.5rem',
+        }}>
+          <h1 style={{ margin: 0, color: C.white, fontSize: isMobile ? '1.5rem' : '2rem', fontWeight: 'bold' }}>
+            Tugas Saya
+          </h1>
         </div>
 
         {errorMsg && (
-          <div style={{ background: C.redBg, color: C.red, padding: '0.75rem 1rem', borderRadius: '10px', fontSize: '0.88rem' }}>
+          <div style={{ background: C.redBg, color: C.red, padding: '0.75rem 1rem', borderRadius: '10px', fontSize: '0.88rem', marginBottom: '1rem' }}>
             {errorMsg}
           </div>
         )}
 
         <div style={{
           display: 'flex',
-          flexWrap: 'wrap',
-          gap: '10px',
-          alignItems: 'center',
-          padding: '0.8rem 0',
+          flexDirection: isMobile ? 'column' : 'row',
+          gap: '1.5rem',
         }}>
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', overflowX: isMobile ? 'auto' : 'visible', WebkitOverflowScrolling: 'touch', paddingBottom: isMobile ? '2px' : 0 }}>
-            {['Semua', 'Belum Dikumpulkan', 'Sudah Dikumpulkan', 'Terlambat'].map(status => (
-              <FilterButton
-                key={status}
-                label={status}
-                active={filterStatus === status}
-                onClick={() => setFilterStatus(status)}
-              />
-            ))}
+          {/* Sidebar */}
+          <div style={{ flex: '0 0 240px', minWidth: isMobile ? '100%' : '200px' }}>
+            <Sidebar />
           </div>
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginLeft: isMobile ? 0 : 'auto' }}>
-            <select
-              value={filterMapel}
-              onChange={e => setFilterMapel(e.target.value)}
-              style={{
-                padding: '6px 12px',
-                borderRadius: '40px',
-                border: `1.5px solid ${C.border}`,
-                fontSize: '0.82rem',
-                fontFamily: 'inherit',
-                background: C.white,
-                color: C.dark,
-                outline: 'none',
-                cursor: 'pointer',
-              }}
-            >
-              {mapelList.map(m => (
-                <option key={m} value={m}>{m}</option>
-              ))}
-            </select>
-            <select
-              value={sortBy}
-              onChange={e => setSortBy(e.target.value)}
-              style={{
-                padding: '6px 12px',
-                borderRadius: '40px',
-                border: `1.5px solid ${C.border}`,
-                fontSize: '0.82rem',
-                fontFamily: 'inherit',
-                background: C.white,
-                color: C.dark,
-                outline: 'none',
-                cursor: 'pointer',
-              }}
-            >
-              <option value="Terbaru">Urutkan: Terbaru</option>
-              <option value="Terlama">Urutkan: Terlama</option>
-              <option value="A-Z">Urutkan: A-Z</option>
-            </select>
-          </div>
-        </div>
 
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: isMobile ? '1fr' : '280px 1fr',
-          gap: isMobile ? '1rem' : '1.5rem',
-          alignItems: 'start',
-        }}>
-          <MiniCalendar
-            year={currentYear}
-            month={currentMonth}
-            selectedDate={selectedDate}
-            onSelectDate={handleDateSelect}
-            tasksByDate={tasksByDate}
-            isMobile={isMobile}
-          />
-
-          <div>
+          {/* Konten Utama */}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            {/* Kontrol Sortir */}
             <div style={{
-              background: C.white,
-              border: `1.5px solid ${C.border}`,
-              borderRadius: '16px',
-              padding: '1.2rem 1.5rem',
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: '10px',
+              alignItems: 'center',
               marginBottom: '1rem',
             }}>
-              <h4 style={{ margin: 0, color: C.dark, fontSize: '0.95rem' }}>
-                {filteredTasks.length} tugas untuk tanggal {selectedDateStr}
-              </h4>
+              <select
+                value={sortBy}
+                onChange={e => setSortBy(e.target.value)}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: '40px',
+                  border: `1.5px solid ${C.border}`,
+                  fontSize: '0.82rem',
+                  fontFamily: 'inherit',
+                  background: C.white,
+                  color: C.dark,
+                  outline: 'none',
+                  cursor: 'pointer',
+                }}
+              >
+                <option value="Terbaru">Urutkan: Terbaru</option>
+                <option value="Terlama">Urutkan: Terlama</option>
+                <option value="A-Z">Urutkan: A-Z</option>
+              </select>
+              {(filterStatus !== 'Semua' || filterMapel !== 'Semua Mapel') && (
+                <button
+                  onClick={() => { setFilterStatus('Semua'); setFilterMapel('Semua Mapel'); }}
+                  style={{
+                    padding: '4px 12px',
+                    borderRadius: '40px',
+                    border: `1px solid ${C.primary}`,
+                    background: 'transparent',
+                    color: C.primary,
+                    fontSize: '0.75rem',
+                    cursor: 'pointer',
+                    fontFamily: 'inherit',
+                  }}
+                >
+                  Reset Filter
+                </button>
+              )}
             </div>
 
+            {/* Daftar Tugas */}
             {loading ? (
               <div style={{ textAlign: 'center', padding: '2rem', color: C.gray }}>Memuat tugas...</div>
             ) : filteredTasks.length === 0 ? (
@@ -1128,7 +962,7 @@ const StudentHomework = () => {
                 textAlign: 'center',
                 color: C.gray,
               }}>
-                Tidak ada tugas untuk tanggal ini.
+                Tidak ada tugas.
               </div>
             ) : (
               filteredTasks.map(task => (
@@ -1141,12 +975,12 @@ const StudentHomework = () => {
                 />
               ))
             )}
+
+            <p style={{ textAlign: 'center', color: C.gray, fontSize: '0.78rem', marginTop: '1.5rem' }}>
+              © 2026 Precious Course. All rights reserved.
+            </p>
           </div>
         </div>
-
-        <p style={{ textAlign: 'center', color: C.gray, fontSize: '0.78rem', marginTop: '0.5rem' }}>
-          © 2026 Precious Course. All rights reserved.
-        </p>
       </div>
 
       {/* Modal Upload Jawaban */}
@@ -1243,7 +1077,7 @@ const StudentHomework = () => {
                   padding: '8px 20px',
                   borderRadius: '10px',
                   border: 'none',
-                  background: !uploadFile || uploading ? C.border : C.gold,
+                  background: !uploadFile || uploading ? C.border : C.primary,
                   color: C.white,
                   fontWeight: '700',
                   cursor: !uploadFile || uploading ? 'not-allowed' : 'pointer',

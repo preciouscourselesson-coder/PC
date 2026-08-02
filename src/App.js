@@ -33,7 +33,6 @@ import TeacherListStudent from './components/teacher/TeacherListStudent';
 import TeacherUpdates from './components/teacher/TeacherUpdates';
 import TeacherArsipMateri from './components/teacher/TeacherArsipMateri';
 import TeacherProfile from './components/teacher/TeacherProfile';
-import TeacherContent from './components/teacher/TeacherContent';
 import TeacherMessages from './components/teacher/TeacherMessages';
 
 import AdminLayout from './components/admin/AdminLayout';
@@ -99,7 +98,6 @@ function App() {
           <Route path="updates" element={<TeacherUpdates />} />
           <Route path="arsip-materi" element={<TeacherArsipMateri />} />
           <Route path="profil" element={<TeacherProfile />} />
-          <Route path="bahan-ajar" element={<TeacherContent />} />
           <Route path="pesan" element={<TeacherMessages />} />
         </Route>
 

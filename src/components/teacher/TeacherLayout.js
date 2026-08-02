@@ -33,17 +33,17 @@ const navItems = [
   { label: 'Home',            path: '/guru',                icon: '🏠' },
   { label: 'Updates',         path: '/guru/updates',        icon: '🔔' },
   { label: 'Absensi & Materi',path: '/guru/absensi-materi', icon: '📖' },
-  { label: 'Bahan Ajar',      path: '/guru/bahan-ajar',     icon: '📚' },
   { label: 'Arsip Materi',    path: '/guru/arsip-materi',   icon: '🗄️' },
   { label: 'Tugas',           path: '/guru/tugas',          icon: '📝' },
   { label: 'Daftar Siswa',    path: '/guru/daftar-siswa',   icon: '👨‍🎓' },
 ];
 
+// Bottom nav: Home, Absensi, Tugas, Arsip, dan Lainnya (☰)
 const bottomNavItems = [
   { label: 'Home',   path: '/guru',                icon: '🏠' },
   { label: 'Absensi',path: '/guru/absensi-materi', icon: '📖' },
-  { label: 'Bahan Ajar',path: '/guru/bahan-ajar',  icon: '📚' },
   { label: 'Tugas',  path: '/guru/tugas',          icon: '📝' },
+  { label: 'Arsip',  path: '/guru/arsip-materi',   icon: '🗄️' },
   { label: 'Lainnya',path: '#',                    icon: '☰' },
 ];
 
@@ -166,7 +166,6 @@ const Topbar = ({ user, isMobile, onMenuClick }) => {
     '/guru': 'Home',
     '/guru/updates': 'Updates',
     '/guru/absensi-materi': 'Absensi & Materi',
-    '/guru/bahan-ajar': 'Bahan Ajar',
     '/guru/arsip-materi': 'Arsip Materi',
     '/guru/tugas': 'Tugas',
     '/guru/daftar-siswa': 'Daftar Siswa',
@@ -226,16 +225,8 @@ const Topbar = ({ user, isMobile, onMenuClick }) => {
       flexShrink: 0,
       gap: '0.75rem',
     }}>
+      {/* Tanpa tombol hamburger di kiri, hanya judul halaman */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0 }}>
-        {isMobile && (
-          <button
-            onClick={onMenuClick}
-            aria-label="Buka menu"
-            style={{ border: 'none', background: 'none', fontSize: '1.4rem', cursor: 'pointer', color: C.dark, lineHeight: 1, padding: '8px', minHeight: '44px', minWidth: '44px' }}
-          >
-            ☰
-          </button>
-        )}
         <span style={{
           fontWeight: 'bold', color: C.dark, fontSize: isMobile ? '0.95rem' : '1.05rem',
           whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
@@ -335,13 +326,14 @@ const Topbar = ({ user, isMobile, onMenuClick }) => {
   );
 };
 
+// BottomNav dengan tombol "Lainnya" yang membuka sidebar
 const BottomNav = ({ onMenuClick }) => {
   const navigate = useNavigate();
   const location = useLocation();
 
   const handleNav = (path) => {
     if (path === '#') {
-      onMenuClick();
+      onMenuClick(); // buka sidebar
       return;
     }
     navigate(path);
