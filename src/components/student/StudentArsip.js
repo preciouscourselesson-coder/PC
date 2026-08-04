@@ -25,6 +25,8 @@ const TABLE = 'bank_soal_siswa';
 const BUCKET = 'bank-soal';
 const MAX_SIZE_MB = 10;
 const jenisOptions = ['Ulangan', 'Penugasan'];
+// Ukuran minimum target sentuh yang nyaman di layar HP (rekomendasi Apple/Google: ~44px)
+const TOUCH_TARGET = 44;
 
 const jenisStyle = (jenis) =>
   jenis === 'Ulangan' ? { bg: C.blueBg, fg: C.blue } : { bg: C.amberBg, fg: C.amber };
@@ -61,6 +63,80 @@ const useIsMobile = (bp = 768) => {
     return () => window.removeEventListener('resize', onResize);
   }, [bp]);
   return isMobile;
+};
+
+// ─── Kartu riwayat untuk tampilan mobile ─────────────────────────────────────
+// Tabel 6 kolom tidak nyaman dibaca/di-scroll di layar sempit. Di HP, satu
+// baris data ditampilkan sebagai kartu vertikal yang lebih mudah dibaca.
+const EntryCardMobile = ({ item, onDelete, deleting }) => {
+  const js = jenisStyle(item.jenis);
+  const ftype = fileTypeFromUrl(item.file_url);
+
+  return (
+    <div style={{
+      background: C.white, border: `1.5px solid ${C.border}`, borderRadius: '14px',
+      padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.6rem'
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontWeight: 700, fontSize: '0.95rem', color: C.dark, wordBreak: 'break-word' }}>
+            {item.judul}
+          </div>
+          <div style={{ fontSize: '0.78rem', color: C.gray, marginTop: '2px' }}>
+            {formatTanggalDisplay(item.created_at)}
+          </div>
+        </div>
+        <span style={{
+          background: js.bg, color: js.fg, padding: '4px 12px', borderRadius: '999px',
+          fontSize: '0.72rem', fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0
+        }}>
+          {item.jenis}
+        </span>
+      </div>
+
+      <div style={{ fontSize: '0.85rem', color: C.dark }}>
+        <span style={{ fontWeight: 600 }}>{item.bab}</span>
+        {item.sub_bab && <span style={{ color: C.gray }}> — {item.sub_bab}</span>}
+      </div>
+
+      {item.deskripsi && (
+        <div style={{
+          fontSize: '0.83rem', color: C.gray, background: C.cream, borderRadius: '10px',
+          padding: '0.6rem 0.75rem', lineHeight: 1.4, wordBreak: 'break-word'
+        }}>
+          {item.deskripsi}
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: '8px', marginTop: '2px' }}>
+        <a
+          href={item.file_url}
+          target="_blank"
+          rel="noreferrer"
+          style={{
+            flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+            minHeight: `${TOUCH_TARGET}px`, borderRadius: '10px',
+            background: fileBadgeColor(ftype), color: '#fff',
+            fontSize: '0.8rem', fontWeight: 700, textDecoration: 'none'
+          }}
+        >
+          📎 Buka File ({ftype.toUpperCase()})
+        </a>
+        <button
+          onClick={() => onDelete(item)}
+          disabled={deleting[item.id]}
+          style={{
+            minHeight: `${TOUCH_TARGET}px`, minWidth: `${TOUCH_TARGET}px`,
+            background: 'transparent', border: `1.5px solid ${C.red}`, color: C.red,
+            borderRadius: '10px', cursor: deleting[item.id] ? 'default' : 'pointer',
+            fontSize: '0.8rem', fontWeight: 600, opacity: deleting[item.id] ? 0.6 : 1,
+          }}
+        >
+          {deleting[item.id] ? '...' : 'Hapus'}
+        </button>
+      </div>
+    </div>
+  );
 };
 
 const StudentArsip = () => {
@@ -290,7 +366,8 @@ const StudentArsip = () => {
     padding: '10px 12px',
     borderRadius: '10px',
     border: `1.5px solid ${C.border}`,
-    fontSize: '0.9rem',
+    fontSize: isMobile ? '16px' : '0.9rem',
+    minHeight: isMobile ? `${TOUCH_TARGET}px` : 'auto',
     color: C.dark,
     fontFamily: 'inherit',
     background: C.white,
@@ -449,6 +526,8 @@ const StudentArsip = () => {
                 background: submitting ? C.grayLight : C.gold,
                 border: 'none',
                 padding: '10px 24px',
+                minHeight: isMobile ? `${TOUCH_TARGET}px` : 'auto',
+                width: isMobile ? '100%' : 'auto',
                 borderRadius: '10px',
                 cursor: submitting ? 'default' : 'pointer',
                 color: '#fff',
@@ -471,10 +550,10 @@ const StudentArsip = () => {
           </span>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem', marginBottom: '1.25rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem', marginBottom: '1.25rem' }}>
           <div>
             <label style={{ ...labelStyle, fontSize: '0.72rem' }}>Jenis</label>
-            <select value={filterJenis} onChange={(e) => setFilterJenis(e.target.value)} style={{ ...inputStyle, cursor: 'pointer', fontSize: '0.85rem' }}>
+            <select value={filterJenis} onChange={(e) => setFilterJenis(e.target.value)} style={{ ...inputStyle, cursor: 'pointer' }}>
               <option value="Semua">Semua</option>
               {jenisOptions.map((j) => (
                 <option key={j} value={j}>{j}</option>
@@ -488,7 +567,7 @@ const StudentArsip = () => {
               placeholder="Cari judul, bab, atau deskripsi..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              style={{ ...inputStyle, fontSize: '0.85rem' }}
+              style={inputStyle}
             />
           </div>
         </div>
@@ -497,6 +576,22 @@ const StudentArsip = () => {
           <div style={{ color: C.red, fontSize: '0.85rem', marginBottom: '1rem' }}>{entriesError}</div>
         )}
 
+        {/* Riwayat: kartu di mobile (tanpa scroll horizontal), tabel di desktop */}
+        {isMobile ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            {loadingEntries && (
+              <div style={{ padding: '2rem', textAlign: 'center', color: C.grayLight }}>Memuat riwayat...</div>
+            )}
+            {!loadingEntries && filteredEntries.map((item) => (
+              <EntryCardMobile key={item.id} item={item} onDelete={handleDelete} deleting={deleting} />
+            ))}
+            {!loadingEntries && filteredEntries.length === 0 && (
+              <div style={{ padding: '2rem', textAlign: 'center', color: C.grayLight }}>
+                Belum ada file yang diupload.
+              </div>
+            )}
+          </div>
+        ) : (
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
             <thead>
@@ -607,6 +702,7 @@ const StudentArsip = () => {
             </tbody>
           </table>
         </div>
+        )}
       </div>
     </div>
   );

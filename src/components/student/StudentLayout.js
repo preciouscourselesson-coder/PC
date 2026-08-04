@@ -1,5 +1,5 @@
 // src/components/student/StudentLayout.js
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { supabase } from '../../supabaseClient';
 import logo from '../../Resource/PC_Horisontal.png';
@@ -24,6 +24,11 @@ const navItems = [
   { label: 'Arsip Soal',   path: '/siswa/arsip',     icon: '📂' },
 ];
 
+// Tinggi bottom nav mobile (dipakai juga untuk padding-bottom konten agar tidak ketutupan)
+const BOTTOM_NAV_HEIGHT = 60;
+// Ukuran minimum target sentuh yang nyaman di layar HP (rekomendasi Apple/Google: ~44-48px)
+const TOUCH_TARGET = 44;
+
 // Bottom nav: Home, Absensi, Tugas, Materi, dan Lainnya (☰)
 const bottomNavItems = [
   { label: 'Home',    path: '/siswa',          icon: '🏠' },
@@ -32,6 +37,19 @@ const bottomNavItems = [
   { label: 'Materi',  path: '/siswa/materi',   icon: '📚' },
   { label: 'Lainnya', path: '#',               icon: '☰' },
 ];
+
+// ─── Style global khusus kenyamanan mobile ───────────────────────────────────
+// - Menghilangkan highlight biru/abu saat tap di iOS/Android
+// - touch-action: manipulation supaya tidak ada delay 300ms & tidak zoom saat double-tap
+// - overscroll-behavior-y supaya swipe di ujung halaman tidak memicu "pull refresh" browser
+const GlobalMobileStyles = () => (
+  <style>{`
+    * { -webkit-tap-highlight-color: transparent; }
+    button { touch-action: manipulation; }
+    html, body { overscroll-behavior-y: contain; }
+    body.no-scroll { overflow: hidden; position: fixed; width: 100%; }
+  `}</style>
+);
 
 // ─── Hook: deteksi layar mobile ───────────────────────────────────────────────
 const MOBILE_BREAKPOINT = 768;
@@ -145,7 +163,11 @@ const MobileSidebar = ({ user, open, onClose }) => {
       }}>
         <div style={{ padding: '0 1.2rem', marginBottom: '2rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <img src={logo} alt="Precious Course" style={{ height: '40px' }} />
-          <button onClick={onClose} style={{ border: 'none', background: 'none', fontSize: '1.3rem', cursor: 'pointer', color: C.gray, padding: '4px' }}>✕</button>
+          <button onClick={onClose} aria-label="Tutup menu" style={{
+            border: 'none', background: 'none', fontSize: '1.3rem', cursor: 'pointer', color: C.gray,
+            minWidth: `${TOUCH_TARGET}px`, minHeight: `${TOUCH_TARGET}px`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center'
+          }}>✕</button>
         </div>
         <nav style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px', padding: '0 0.8rem', overflowY: 'auto' }}>
           {navItems.map(item => {
@@ -204,21 +226,26 @@ const BottomNav = ({ onMenuClick }) => {
       position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 60,
       background: C.white, borderTop: `1.5px solid ${C.border}`,
       display: 'flex', alignItems: 'stretch', justifyContent: 'space-between',
+      height: `${BOTTOM_NAV_HEIGHT}px`,
       paddingBottom: 'env(safe-area-inset-bottom, 0px)',
       boxShadow: '0 -4px 16px rgba(0,0,0,0.06)'
     }}>
       {bottomNavItems.map(item => {
         const active = location.pathname === item.path;
         return (
-          <button key={item.label} onClick={() => handleNav(item.path)} style={{
-            flex: '1 0 auto', minWidth: '58px',
-            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-            gap: '2px', padding: '8px 4px 6px', border: 'none',
-            background: 'none', color: active ? C.gold : C.gray,
-            fontFamily: 'inherit', cursor: 'pointer'
-          }}>
-            <span style={{ fontSize: '1.25rem', lineHeight: 1 }}>{item.icon}</span>
-            <span style={{ fontSize: '0.62rem', fontWeight: active ? 'bold' : 'normal', whiteSpace: 'nowrap' }}>
+          <button
+            key={item.label}
+            onClick={() => handleNav(item.path)}
+            aria-label={item.label}
+            style={{
+              flex: '1 1 0', minWidth: 0, minHeight: `${TOUCH_TARGET}px`,
+              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+              gap: '2px', padding: '6px 2px', border: 'none',
+              background: 'none', color: active ? C.gold : C.gray,
+              fontFamily: 'inherit', cursor: 'pointer', WebkitTapHighlightColor: 'transparent'
+            }}>
+            <span style={{ fontSize: '1.3rem', lineHeight: 1 }}>{item.icon}</span>
+            <span style={{ fontSize: '0.65rem', fontWeight: active ? 'bold' : 'normal', whiteSpace: 'nowrap' }}>
               {item.label}
             </span>
           </button>
@@ -234,6 +261,23 @@ const Topbar = ({ user, isMobile, onMenuClick }) => {
   const location = useLocation();
   const [dropOpen, setDropOpen] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState(null);
+  const dropRef = useRef(null);
+
+  // Tutup dropdown saat user tap di luar area dropdown (wajib di mobile, tidak ada hover)
+  useEffect(() => {
+    if (!dropOpen) return;
+    const handleOutside = (e) => {
+      if (dropRef.current && !dropRef.current.contains(e.target)) {
+        setDropOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutside);
+    document.addEventListener('touchstart', handleOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleOutside);
+      document.removeEventListener('touchstart', handleOutside);
+    };
+  }, [dropOpen]);
 
   const nama    = user?.full_name || user?.nama || 'Siswa';
   const initial = nama[0]?.toUpperCase() || 'S';
@@ -291,9 +335,11 @@ const Topbar = ({ user, isMobile, onMenuClick }) => {
 
   return (
     <div style={{
-      height: isMobile ? '56px' : '64px', background: C.white, borderBottom: `1.5px solid ${C.border}`,
+      minHeight: isMobile ? '56px' : '64px', background: C.white, borderBottom: `1.5px solid ${C.border}`,
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      padding: isMobile ? '0 1rem' : '0 2rem', position: 'sticky', top: 0, zIndex: 50, flexShrink: 0
+      padding: isMobile ? '0 1rem' : '0 2rem',
+      paddingTop: isMobile ? 'env(safe-area-inset-top, 0px)' : 0,
+      position: 'sticky', top: 0, zIndex: 50, flexShrink: 0
     }}>
       {/* Kiri: judul halaman (tanpa hamburger) */}
       <span style={{
@@ -312,7 +358,8 @@ const Topbar = ({ user, isMobile, onMenuClick }) => {
             display: 'flex', alignItems: 'center', gap: '6px',
             background: 'none', border: 'none', cursor: 'pointer',
             fontFamily: 'inherit', fontSize: '0.9rem', color: C.gray,
-            padding: isMobile ? '6px 8px' : '6px 12px', borderRadius: '8px',
+            minHeight: `${TOUCH_TARGET}px`, minWidth: `${TOUCH_TARGET}px`,
+            padding: isMobile ? '6px 10px' : '6px 12px', borderRadius: '8px',
             transition: 'all 0.15s',
           }}
           onMouseEnter={e => e.currentTarget.style.background = C.cream}
@@ -322,9 +369,10 @@ const Topbar = ({ user, isMobile, onMenuClick }) => {
           {!isMobile && ' Pesan'}
         </button>
 
-        <div style={{ position: 'relative' }}>
+        <div ref={dropRef} style={{ position: 'relative' }}>
           <button onClick={() => setDropOpen(!dropOpen)} style={{
             display: 'flex', alignItems: 'center', gap: isMobile ? '4px' : '10px',
+            minHeight: `${TOUCH_TARGET}px`, padding: isMobile ? '4px' : '4px 6px',
             background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit'
           }}>
             <div style={{
@@ -356,13 +404,13 @@ const Topbar = ({ user, isMobile, onMenuClick }) => {
               border: `1px solid ${C.border}`, zIndex: 100
             }}>
               <button onClick={() => { setDropOpen(false); navigate('/siswa/profil'); }} 
-                style={{ display: 'block', width: '100%', padding: '11px 16px', border: 'none', background: 'none', textAlign: 'left', fontSize: '0.9rem', color: C.dark, cursor: 'pointer', fontFamily: 'inherit', borderBottom: `1px solid ${C.border}` }}
+                style={{ display: 'block', width: '100%', minHeight: `${TOUCH_TARGET}px`, padding: '11px 16px', border: 'none', background: 'none', textAlign: 'left', fontSize: '0.9rem', color: C.dark, cursor: 'pointer', fontFamily: 'inherit', borderBottom: `1px solid ${C.border}` }}
                 onMouseEnter={e => e.currentTarget.style.background = C.cream}
                 onMouseLeave={e => e.currentTarget.style.background = 'none'}>
                 👤 Profil Saya
               </button>
               <button onClick={handleLogout} style={{
-                display: 'block', width: '100%', padding: '11px 16px', border: 'none',
+                display: 'block', width: '100%', minHeight: `${TOUCH_TARGET}px`, padding: '11px 16px', border: 'none',
                 background: 'none', textAlign: 'left', fontSize: '0.9rem', color: '#e74c3c',
                 cursor: 'pointer', fontFamily: 'inherit'
               }}
@@ -405,11 +453,24 @@ const StudentLayout = () => {
     if (!isMobile) setSidebarOpen(false);
   }, [isMobile]);
 
+  // Kunci scroll body saat drawer (sidebar mobile) terbuka, supaya konten
+  // di belakang overlay tidak ikut ter-scroll saat user swipe di dalam drawer.
+  useEffect(() => {
+    if (isMobile && sidebarOpen) {
+      document.body.classList.add('no-scroll');
+    } else {
+      document.body.classList.remove('no-scroll');
+    }
+    return () => document.body.classList.remove('no-scroll');
+  }, [isMobile, sidebarOpen]);
+
   return (
     <div style={{
       display: 'flex', minHeight: '100vh', background: C.cream, fontFamily: 'inherit',
-      flexDirection: isMobile ? 'column' : 'row'
+      flexDirection: isMobile ? 'column' : 'row',
+      overflowX: 'hidden', width: '100%'
     }}>
+      <GlobalMobileStyles />
       {!isMobile && <DesktopSidebar />}
       {isMobile && <MobileSidebar user={user} open={sidebarOpen} onClose={() => setSidebarOpen(false)} />}
 
@@ -418,8 +479,12 @@ const StudentLayout = () => {
         <main style={{
           flex: 1,
           padding: isMobile ? '1rem' : '2rem',
-          paddingBottom: isMobile ? 'calc(64px + env(safe-area-inset-bottom, 0px) + 1rem)' : '2rem',
+          paddingBottom: isMobile
+            ? `calc(${BOTTOM_NAV_HEIGHT}px + env(safe-area-inset-bottom, 0px) + 1rem)`
+            : '2rem',
           overflowY: 'auto',
+          overflowX: 'hidden',
+          WebkitOverflowScrolling: 'touch',
           boxSizing: 'border-box'
         }}>
           <Outlet />

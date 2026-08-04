@@ -199,6 +199,7 @@ const TaskCard = ({ task, onUpload, onWork, isMobile }) => {
                 border: isSubmitted ? `1.5px solid ${C.primary}` : 'none',
                 color: isSubmitted ? C.primary : C.white,
                 padding: '6px 14px',
+                minHeight: isMobile ? '40px' : 'auto',
                 borderRadius: '40px',
                 fontWeight: 'bold',
                 fontSize: '0.8rem',
@@ -228,6 +229,7 @@ const TaskCard = ({ task, onUpload, onWork, isMobile }) => {
                 border: 'none',
                 color: C.white,
                 padding: '6px 14px',
+                minHeight: isMobile ? '40px' : 'auto',
                 borderRadius: '40px',
                 fontWeight: 'bold',
                 fontSize: '0.8rem',
@@ -536,7 +538,7 @@ const InteractiveWorkModal = ({ task, answers, onAnswerChange, onSubmit, onClose
           onClick={onClose}
           style={{
             flexShrink: 0, background: C.cream, border: `1.5px solid ${C.border}`, color: C.gray,
-            width: '34px', height: '34px', borderRadius: '50%', fontSize: '1.3rem', cursor: 'pointer', lineHeight: 1,
+            width: isMobile ? '40px' : '34px', height: isMobile ? '40px' : '34px', borderRadius: '50%', fontSize: '1.3rem', cursor: 'pointer', lineHeight: 1,
           }}
           aria-label="Tutup"
         >
@@ -605,7 +607,7 @@ const InteractiveWorkModal = ({ task, answers, onAnswerChange, onSubmit, onClose
                             style={{
                               margin: '0 4px', minWidth: '100px', padding: '5px 10px',
                               borderRadius: '8px', border: `1.5px solid ${C.primary}`,
-                              fontFamily: 'inherit', fontSize: '0.95rem', textAlign: 'center',
+                              fontFamily: 'inherit', fontSize: isMobile ? '16px' : '0.95rem', textAlign: 'center',
                               background: C.cream, color: C.dark,
                             }}
                           />
@@ -678,14 +680,16 @@ const InteractiveWorkModal = ({ task, answers, onAnswerChange, onSubmit, onClose
       <div style={{
         flexShrink: 0, borderTop: `1.5px solid ${C.border}`, background: C.white,
         padding: isMobile ? '0.7rem 1rem' : '0.9rem 2rem',
-        display: 'flex', gap: '0.6rem', justifyContent: 'flex-end',
+        display: 'flex', flexDirection: isMobile ? 'column-reverse' : 'row',
+        gap: '0.6rem', justifyContent: 'flex-end',
       }}>
         <button
           onClick={onClose}
           disabled={submitting}
           style={{
-            padding: '8px 16px', borderRadius: '10px', border: `1.5px solid ${C.border}`,
+            padding: '10px 16px', borderRadius: '10px', border: `1.5px solid ${C.border}`,
             background: 'transparent', color: C.gray, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+            width: isMobile ? '100%' : 'auto', minHeight: isMobile ? '44px' : 'auto',
           }}
         >
           Tutup
@@ -694,10 +698,11 @@ const InteractiveWorkModal = ({ task, answers, onAnswerChange, onSubmit, onClose
           onClick={onSubmit}
           disabled={submitting}
           style={{
-            padding: '8px 20px', borderRadius: '10px', border: 'none',
+            padding: '10px 20px', borderRadius: '10px', border: 'none',
             background: submitting ? C.border : C.primary, color: C.white,
             fontWeight: 700, cursor: submitting ? 'not-allowed' : 'pointer',
             opacity: submitting ? 0.6 : 1, fontFamily: 'inherit',
+            width: isMobile ? '100%' : 'auto', minHeight: isMobile ? '44px' : 'auto',
           }}
         >
           {submitting ? 'Mengirim...' : isSubmitted ? 'Kirim Ulang Jawaban' : 'Kirim Jawaban'}
@@ -1262,19 +1267,19 @@ const StudentHomework = () => {
   };
 
 
+  const isActiveStatus = (status) => filterStatus === status && filterMapel === 'Semua Mapel';
+
+  const handleStatusClick = (status) => {
+    setFilterStatus(status);
+    setFilterMapel('Semua Mapel');
+  };
+
+  const handleMapelClick = (mapel) => {
+    setFilterMapel(mapel);
+    setFilterStatus('Semua');
+  };
+
   const Sidebar = () => {
-    const isActiveStatus = (status) => filterStatus === status && filterMapel === 'Semua Mapel';
-
-    const handleStatusClick = (status) => {
-      setFilterStatus(status);
-      setFilterMapel('Semua Mapel');
-    };
-
-    const handleMapelClick = (mapel) => {
-      setFilterMapel(mapel);
-      setFilterStatus('Semua');
-    };
-
     return (
       <div style={{
         background: C.white,
@@ -1335,6 +1340,65 @@ const StudentHomework = () => {
     );
   };
 
+  // ─── Filter khusus mobile: chip yang bisa digeser horizontal ────────────────
+  // Sidebar vertikal terlalu memakan tempat di layar HP (siswa harus scroll
+  // panjang dulu sebelum sampai ke daftar tugas). Di mobile, filter status &
+  // mapel ditampilkan sebagai baris chip yang bisa digeser ke samping,
+  // sehingga daftar tugas langsung terlihat di bawahnya.
+  const FilterChip = ({ label, count, active, onClick }) => (
+    <button
+      onClick={onClick}
+      style={{
+        flexShrink: 0, whiteSpace: 'nowrap',
+        display: 'inline-flex', alignItems: 'center', gap: '6px',
+        padding: '8px 14px', minHeight: '40px', borderRadius: '40px',
+        border: `1.5px solid ${active ? C.primary : C.border}`,
+        background: active ? C.primary : C.white,
+        color: active ? C.white : C.dark,
+        fontSize: '0.8rem', fontWeight: 'bold', cursor: 'pointer', fontFamily: 'inherit',
+      }}
+    >
+      {label}
+      <span style={{
+        background: active ? 'rgba(255,255,255,0.25)' : C.primaryBg,
+        color: active ? C.white : C.primary,
+        padding: '1px 8px', borderRadius: '40px', fontSize: '0.7rem',
+      }}>
+        {count}
+      </span>
+    </button>
+  );
+
+  const FilterChipsBar = () => (
+    <div style={{ marginBottom: '1rem' }}>
+      <div style={{
+        display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '6px',
+        WebkitOverflowScrolling: 'touch',
+      }}>
+        <FilterChip label="Semua" count={stats.total} active={filterStatus === 'Semua' && filterMapel === 'Semua Mapel'} onClick={() => { setFilterStatus('Semua'); setFilterMapel('Semua Mapel'); }} />
+        <FilterChip label="Belum" count={stats.belum} active={isActiveStatus('Belum Dikumpulkan')} onClick={() => handleStatusClick('Belum Dikumpulkan')} />
+        <FilterChip label="Sudah" count={stats.sudah} active={isActiveStatus('Sudah Dikumpulkan')} onClick={() => handleStatusClick('Sudah Dikumpulkan')} />
+        <FilterChip label="Terlambat" count={stats.terlambat} active={isActiveStatus('Terlambat')} onClick={() => handleStatusClick('Terlambat')} />
+      </div>
+      {mapelList.length > 1 && (
+        <div style={{
+          display: 'flex', gap: '8px', overflowX: 'auto', marginTop: '2px',
+          WebkitOverflowScrolling: 'touch',
+        }}>
+          {mapelList.filter(m => m !== 'Semua Mapel').map(m => (
+            <FilterChip
+              key={m}
+              label={m}
+              count={stats.mapelStats[m] || 0}
+              active={filterMapel === m && filterStatus === 'Semua'}
+              onClick={() => handleMapelClick(m)}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
   const SidebarItem = ({ label, count, active, onClick }) => (
     <div
       onClick={onClick}
@@ -1380,7 +1444,7 @@ const StudentHomework = () => {
         {/* HEADER dengan latar biru */}
         <div style={{
           background: C.primary,
-          padding: '1.2rem 2rem',
+          padding: isMobile ? '1rem 1.2rem' : '1.2rem 2rem',
           borderRadius: '16px 16px 0 0',
           marginBottom: '1.5rem',
         }}>
@@ -1421,7 +1485,8 @@ const StudentHomework = () => {
               style={{
                 flex: 1, padding: '9px 14px', borderRadius: '40px',
                 border: `1.5px solid ${C.border}`, fontFamily: 'inherit',
-                fontSize: '0.85rem', outline: 'none', background: C.white, color: C.dark,
+                fontSize: isMobile ? '16px' : '0.85rem', minHeight: isMobile ? '44px' : 'auto',
+                outline: 'none', background: C.white, color: C.dark, boxSizing: 'border-box',
               }}
             />
             <button
@@ -1431,6 +1496,7 @@ const StudentHomework = () => {
                 padding: '9px 20px', borderRadius: '40px', border: 'none',
                 background: joining || !joinCodeInput.trim() ? C.border : C.primary,
                 color: C.white, fontWeight: 'bold', fontSize: '0.85rem',
+                minHeight: isMobile ? '44px' : 'auto',
                 cursor: joining || !joinCodeInput.trim() ? 'not-allowed' : 'pointer',
                 fontFamily: 'inherit', whiteSpace: 'nowrap',
               }}
@@ -1451,13 +1517,18 @@ const StudentHomework = () => {
           flexDirection: isMobile ? 'column' : 'row',
           gap: '1.5rem',
         }}>
-          {/* Sidebar */}
-          <div style={{ flex: '0 0 240px', minWidth: isMobile ? '100%' : '200px' }}>
-            <Sidebar />
-          </div>
+          {/* Sidebar filter — hanya di desktop; di mobile diganti FilterChipsBar
+              (di dalam kolom konten) supaya daftar tugas langsung terlihat */}
+          {!isMobile && (
+            <div style={{ flex: '0 0 240px', minWidth: '200px' }}>
+              <Sidebar />
+            </div>
+          )}
 
           {/* Konten Utama */}
           <div style={{ flex: 1, minWidth: 0 }}>
+            {isMobile && <FilterChipsBar />}
+
             {/* Kontrol Sortir */}
             <div style={{
               display: 'flex',
@@ -1473,7 +1544,8 @@ const StudentHomework = () => {
                   padding: '6px 12px',
                   borderRadius: '40px',
                   border: `1.5px solid ${C.border}`,
-                  fontSize: '0.82rem',
+                  fontSize: isMobile ? '16px' : '0.82rem',
+                  minHeight: isMobile ? '44px' : 'auto',
                   fontFamily: 'inherit',
                   background: C.white,
                   color: C.dark,
@@ -1495,6 +1567,7 @@ const StudentHomework = () => {
                     background: 'transparent',
                     color: C.primary,
                     fontSize: '0.75rem',
+                    minHeight: isMobile ? '36px' : 'auto',
                     cursor: 'pointer',
                     fontFamily: 'inherit',
                   }}
@@ -1609,17 +1682,19 @@ const StudentHomework = () => {
               <div style={{ color: C.red, fontSize: '0.82rem', marginTop: '0.5rem' }}>{errorMsg}</div>
             )}
 
-            <div style={{ display: 'flex', gap: '0.6rem', marginTop: '1.2rem', justifyContent: 'flex-end' }}>
+            <div style={{ display: 'flex', flexDirection: isMobile ? 'column-reverse' : 'row', gap: '0.6rem', marginTop: '1.2rem', justifyContent: 'flex-end' }}>
               <button
                 onClick={closeUploadModal}
                 style={{
-                  padding: '8px 16px',
+                  padding: '10px 16px',
                   borderRadius: '10px',
                   border: `1.5px solid ${C.border}`,
                   background: 'transparent',
                   color: C.gray,
                   fontWeight: '600',
                   cursor: 'pointer',
+                  width: isMobile ? '100%' : 'auto',
+                  minHeight: isMobile ? '44px' : 'auto',
                 }}
               >
                 Batal
@@ -1628,7 +1703,7 @@ const StudentHomework = () => {
                 onClick={submitUpload}
                 disabled={!uploadFile || uploading}
                 style={{
-                  padding: '8px 20px',
+                  padding: '10px 20px',
                   borderRadius: '10px',
                   border: 'none',
                   background: !uploadFile || uploading ? C.border : C.primary,
@@ -1636,6 +1711,8 @@ const StudentHomework = () => {
                   fontWeight: '700',
                   cursor: !uploadFile || uploading ? 'not-allowed' : 'pointer',
                   opacity: !uploadFile || uploading ? 0.6 : 1,
+                  width: isMobile ? '100%' : 'auto',
+                  minHeight: isMobile ? '44px' : 'auto',
                 }}
               >
                 {uploading ? 'Mengunggah...' : 'Kirim'}

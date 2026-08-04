@@ -60,6 +60,8 @@ const statusStyle = (status) => {
 };
 
 const TABLE = 'sesi_pembelajaran';
+// Ukuran minimum target sentuh yang nyaman di layar HP (rekomendasi Apple/Google: ~44px)
+const TOUCH_TARGET = 44;
 
 const useIsMobile = (bp = 768) => {
   const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' ? window.innerWidth < bp : false);
@@ -69,6 +71,116 @@ const useIsMobile = (bp = 768) => {
     return () => window.removeEventListener('resize', onResize);
   }, [bp]);
   return isMobile;
+};
+
+// ─── Kartu riwayat untuk tampilan mobile ─────────────────────────────────────
+// Tabel dengan 8 kolom sangat tidak nyaman di HP (harus scroll horizontal &
+// teks kepotong). Untuk layar sempit, satu baris data ditampilkan sebagai
+// kartu vertikal yang lebih mudah dibaca dan disentuh.
+const EntryCardMobile = ({ item, namaGuru, onKonfirmasi, confirming, actionMessage }) => {
+  const st = statusStyle(item.status);
+  const isMenunggu = item.status === 'Menunggu';
+  const isConfirmed = item.status === 'Disetujui';
+
+  return (
+    <div style={{
+      background: C.white, border: `1.5px solid ${C.border}`, borderRadius: '14px',
+      padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.65rem'
+    }}>
+      {/* Baris atas: judul materi + tanggal, dan badge status */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontWeight: 700, fontSize: '0.95rem', color: C.dark, wordBreak: 'break-word' }}>
+            {item.judul_materi}
+          </div>
+          <div style={{ fontSize: '0.78rem', color: C.gray, marginTop: '2px' }}>
+            {formatTanggalDisplay(item.tanggal)}
+          </div>
+        </div>
+        <span style={{
+          background: st.bg, color: st.fg, padding: '4px 12px', borderRadius: '999px',
+          fontSize: '0.72rem', fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0
+        }}>
+          {item.status}
+        </span>
+      </div>
+
+      {/* Guru pengajar */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <span style={{
+          width: '26px', height: '26px', borderRadius: '50%', background: avatarColor(namaGuru),
+          color: C.white, fontSize: '0.65rem', fontWeight: 700,
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+        }}>
+          {initials(namaGuru)}
+        </span>
+        <span style={{ fontSize: '0.85rem', fontWeight: 500, color: C.dark }}>{namaGuru}</span>
+      </div>
+
+      {/* Catatan guru (kalau ada) */}
+      {item.catatan && (
+        <div style={{
+          fontSize: '0.83rem', color: C.gray, background: C.cream, borderRadius: '10px',
+          padding: '0.6rem 0.75rem', lineHeight: 1.4, wordBreak: 'break-word'
+        }}>
+          {item.catatan}
+        </div>
+      )}
+
+      {/* Bukti file (foto/PDF) — chip diperbesar supaya mudah disentuh */}
+      {item.bukti_urls && item.bukti_urls.length > 0 && (
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          {item.bukti_urls.map((url, i) => (
+            <a
+              key={i}
+              href={url}
+              target="_blank"
+              rel="noreferrer"
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: '6px',
+                minHeight: `${TOUCH_TARGET}px`, padding: '0 12px', borderRadius: '10px',
+                background: fileTypeFromUrl(url) === 'pdf' ? '#e0574f' : '#3f7ea6',
+                color: '#fff', fontSize: '0.75rem', fontWeight: 700, textDecoration: 'none'
+              }}
+            >
+              {fileTypeFromUrl(url) === 'pdf' ? '📄 PDF' : '🖼️ Foto'} {i + 1}
+            </a>
+          ))}
+        </div>
+      )}
+
+      {/* Tindak lanjut: tombol lebar penuh biar nyaman ditekan jari */}
+      <div style={{ marginTop: '2px' }}>
+        {isConfirmed ? (
+          <div style={{ color: C.green, fontSize: '0.83rem', fontWeight: 500 }}>✓ Sudah dikonfirmasi</div>
+        ) : isMenunggu ? (
+          <div>
+            <button
+              onClick={() => onKonfirmasi(item.id)}
+              disabled={confirming[item.id]}
+              style={{
+                width: '100%', minHeight: `${TOUCH_TARGET}px`,
+                background: confirming[item.id] ? C.grayLight : C.green,
+                border: 'none', borderRadius: '10px',
+                cursor: confirming[item.id] ? 'default' : 'pointer',
+                color: '#fff', fontWeight: 600, fontSize: '0.9rem',
+                opacity: confirming[item.id] ? 0.6 : 1,
+              }}
+            >
+              {confirming[item.id] ? 'Memproses...' : '✓ Terima Kehadiran'}
+            </button>
+            {actionMessage[item.id] && (
+              <div style={{ marginTop: '6px', fontSize: '0.78rem', color: actionMessage[item.id].type === 'error' ? C.red : C.green }}>
+                {actionMessage[item.id].text}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div style={{ color: C.gray, fontSize: '0.83rem' }}>Tidak perlu tindakan</div>
+        )}
+      </div>
+    </div>
+  );
 };
 
 const StudentAbsent = () => {
@@ -260,10 +372,10 @@ const StudentAbsent = () => {
         </div>
 
         {/* Filters */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem', marginBottom: '1.25rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem', marginBottom: '1.25rem' }}>
           <div>
             <label style={{ ...labelStyle, fontSize: '0.72rem' }}>Bulan</label>
-            <select value={filterBulan} onChange={(e) => setFilterBulan(e.target.value)} style={{ ...inputStyle(false), cursor: 'pointer', fontSize: '0.85rem' }}>
+            <select value={filterBulan} onChange={(e) => setFilterBulan(e.target.value)} style={{ ...inputStyle(false), cursor: 'pointer', fontSize: isMobile ? '16px' : '0.85rem', minHeight: `${TOUCH_TARGET}px` }}>
               {bulanOptions.map((b) => (
                 <option key={b} value={b}>{b}</option>
               ))}
@@ -276,7 +388,7 @@ const StudentAbsent = () => {
               placeholder="Cari materi atau catatan..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              style={{ ...inputStyle(false), fontSize: '0.85rem' }}
+              style={{ ...inputStyle(false), fontSize: isMobile ? '16px' : '0.85rem', minHeight: `${TOUCH_TARGET}px` }}
             />
           </div>
         </div>
@@ -285,7 +397,29 @@ const StudentAbsent = () => {
           <div style={{ color: C.red, fontSize: '0.85rem', marginBottom: '1rem' }}>{entriesError}</div>
         )}
 
-        {/* Table */}
+        {/* Riwayat: kartu di mobile (tanpa scroll horizontal), tabel di desktop */}
+        {isMobile ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            {loadingEntries && (
+              <div style={{ padding: '2rem', textAlign: 'center', color: C.grayLight }}>Memuat riwayat...</div>
+            )}
+            {!loadingEntries && filteredEntries.map((item) => (
+              <EntryCardMobile
+                key={item.id}
+                item={item}
+                namaGuru={item.profiles?.full_name || 'Guru tidak ditemukan'}
+                onKonfirmasi={handleKonfirmasi}
+                confirming={confirming}
+                actionMessage={actionMessage}
+              />
+            ))}
+            {!loadingEntries && filteredEntries.length === 0 && (
+              <div style={{ padding: '2rem', textAlign: 'center', color: C.grayLight }}>
+                Belum ada pertemuan yang tercatat untuk Anda.
+              </div>
+            )}
+          </div>
+        ) : (
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
             <thead>
@@ -434,6 +568,7 @@ const StudentAbsent = () => {
             </tbody>
           </table>
         </div>
+        )}
       </div>
     </div>
   );
