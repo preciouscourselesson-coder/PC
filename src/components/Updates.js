@@ -379,15 +379,41 @@ const Updates = () => {
   }, [composerOpen]);
 
   useLayoutEffect(() => {
-    const ids = new Set();
-    updates.forEach(u => {
-      const el = contentRefs.current[u.id];
-      if (el && el.scrollHeight > el.clientHeight + 2) {
-        ids.add(u.id);
-      }
+    const recalcOverflow = () => {
+      const ids = new Set();
+      updates.forEach(u => {
+        const el = contentRefs.current[u.id];
+        if (el && el.scrollHeight > el.clientHeight + 2) {
+          ids.add(u.id);
+        }
+      });
+      setOverflowIds(ids);
+    };
+
+    recalcOverflow();
+
+    // Ukur ulang setelah gambar di dalam konten (jika ada) selesai dimuat,
+    // karena tinggi gambar yang belum load bisa membuat deteksi overflow salah.
+    const imgs = Object.values(contentRefs.current)
+      .filter(Boolean)
+      .flatMap(el => Array.from(el.querySelectorAll('img')));
+    imgs.forEach(img => {
+      if (!img.complete) img.addEventListener('load', recalcOverflow);
     });
-    setOverflowIds(ids);
-  }, [updates]);
+
+    // Ukur ulang jika font web baru selesai dimuat (bisa mengubah line-wrap).
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(recalcOverflow);
+    }
+
+    // Ukur ulang saat ukuran layar berubah (lebar container ikut berubah).
+    window.addEventListener('resize', recalcOverflow);
+
+    return () => {
+      imgs.forEach(img => img.removeEventListener('load', recalcOverflow));
+      window.removeEventListener('resize', recalcOverflow);
+    };
+  }, [updates, isMobile]);
 
   const toggleExpand = (id) => {
     setExpandedIds(prev => {
