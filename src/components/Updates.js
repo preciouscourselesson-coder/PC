@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 
 // ─── Warna ───────────────────────────────────────────────────────────────────
@@ -293,7 +293,10 @@ const Updates = () => {
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
 
-
+  // ── Expand / overflow konten panjang ────────────────────────────────────
+  const [expandedIds, setExpandedIds] = useState(new Set());
+  const [overflowIds, setOverflowIds] = useState(new Set());
+  const contentRefs = useRef({});
 
   // ── Ambil data awal ──────────────────────────────────────────────────────
   const loadAll = async () => {
@@ -374,6 +377,52 @@ const Updates = () => {
       editorRef.current.focus();
     }
   }, [composerOpen]);
+
+  useLayoutEffect(() => {
+    const recalcOverflow = () => {
+      const ids = new Set();
+      updates.forEach(u => {
+        const el = contentRefs.current[u.id];
+        if (el && el.scrollHeight > el.clientHeight + 2) {
+          ids.add(u.id);
+        }
+      });
+      setOverflowIds(ids);
+    };
+
+    recalcOverflow();
+
+    // Ukur ulang setelah gambar di dalam konten (jika ada) selesai dimuat,
+    // karena tinggi gambar yang belum load bisa membuat deteksi overflow salah.
+    const imgs = Object.values(contentRefs.current)
+      .filter(Boolean)
+      .flatMap(el => Array.from(el.querySelectorAll('img')));
+    imgs.forEach(img => {
+      if (!img.complete) img.addEventListener('load', recalcOverflow);
+    });
+
+    // Ukur ulang jika font web baru selesai dimuat (bisa mengubah line-wrap).
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(recalcOverflow);
+    }
+
+    // Ukur ulang saat ukuran layar berubah (lebar container ikut berubah).
+    window.addEventListener('resize', recalcOverflow);
+
+    return () => {
+      imgs.forEach(img => img.removeEventListener('load', recalcOverflow));
+      window.removeEventListener('resize', recalcOverflow);
+    };
+  }, [updates, isMobile]);
+
+  const toggleExpand = (id) => {
+    setExpandedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   // ── Composer update ──────────────────────────────────────────────────────
   const handleEditorInput = () => {
@@ -843,6 +892,8 @@ const Updates = () => {
           <p style={{ color: C.gray, fontSize: '0.9rem' }}>Belum ada update.</p>
         ) : (
           updates.map((u, idx) => {
+            const expanded = expandedIds.has(u.id);
+            const hasOverflow = overflowIds.has(u.id);
             const komentarList = comments[u.id] || [];
             const isSubmittingComment = submittingComment[u.id] || false;
 
@@ -863,16 +914,27 @@ const Updates = () => {
                     </div>
 
                     {u.konten && (
-                      <div style={{ marginTop: '0.4rem' }}>
+                      <div style={{ position: 'relative', marginTop: '0.4rem' }}>
                         <div
+                          ref={(el) => { contentRefs.current[u.id] = el; }}
                           style={{
                             fontSize: '0.9rem',
                             color: C.dark,
                             lineHeight: 1.55,
+                            maxHeight: expanded ? 'none' : '96px',
+                            overflow: 'hidden',
                           }}
                           dangerouslySetInnerHTML={{ __html: u.konten }}
                         />
+                        {!expanded && hasOverflow && (
+                          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '30px', background: `linear-gradient(to bottom, rgba(255,255,255,0), ${C.white})`, pointerEvents: 'none' }} />
+                        )}
                       </div>
+                    )}
+                    {hasOverflow && (
+                      <button onClick={() => toggleExpand(u.id)} style={{ ...linkBtn, fontSize: '0.8rem', marginTop: '0.3rem' }}>
+                        {expanded ? '▴ Sembunyikan' : '▾ Lihat Semua'}
+                      </button>
                     )}
 
                     {u.image_url && (
