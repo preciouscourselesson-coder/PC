@@ -525,7 +525,7 @@ const StudentHome = () => {
 
   // ========== RENDER ==========
   const cardStyle = { background: C.white, borderRadius: '16px', border: `1.5px solid ${C.border}`, padding: isMobile ? '1rem' : '1.5rem' };
-  const linkBtn = { background: 'none', border: 'none', color: C.gold, fontWeight: '600', cursor: 'pointer' };
+  const linkBtn = { background: 'none', border: 'none', color: C.gold, fontWeight: '600', cursor: 'pointer', padding: '6px 2px', fontFamily: 'inherit' };
   const modalOverlayStyle = {
     position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
     display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 60,
@@ -560,7 +560,7 @@ const StudentHome = () => {
   };
 
   return (
-    <div style={{ maxWidth: '1200px', margin: '0 auto', fontFamily: 'inherit' }}>
+    <div style={{ maxWidth: '1200px', margin: '0 auto', padding: isMobile ? '0 0.85rem' : '0', fontFamily: 'inherit', boxSizing: 'border-box' }}>
       {/* Sapaan */}
       <div style={{ marginBottom: '1.5rem' }}>
         <h1 style={{ fontSize: isMobile ? '1.35rem' : '1.8rem', fontWeight: '700', color: C.dark, margin: '0' }}>
@@ -589,6 +589,72 @@ const StudentHome = () => {
             <p style={{ color: C.gray, fontSize: '0.9rem' }}>Memuat jadwal...</p>
           ) : slots.length === 0 ? (
             <p style={{ color: C.gray, fontSize: '0.9rem' }}>Belum ada jadwal les yang terdaftar.</p>
+          ) : isMobile ? (
+            // ── Tampilan kartu per hari (mobile) — lebih mudah dibaca & disentuh dibanding tabel 8 kolom ──
+            (() => {
+              const hariDenganJadwal = HARI_LIST
+                .map(hari => ({
+                  hari,
+                  entries: slots
+                    .map(slot => ({ slot, cell: getCell(hari, slot) }))
+                    .filter(x => x.cell),
+                }))
+                .filter(x => x.entries.length > 0);
+
+              if (hariDenganJadwal.length === 0) {
+                return <p style={{ color: C.gray, fontSize: '0.9rem' }}>Belum ada jadwal les yang terdaftar.</p>;
+              }
+
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  {hariDenganJadwal.map(({ hari, entries }) => (
+                    <div key={hari}>
+                      <div style={{ fontSize: '0.78rem', fontWeight: 700, color: C.gold, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.4rem' }}>
+                        {hari}
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                        {entries.map(({ slot, cell }) => {
+                          const badge = badgeForJenis(cell.jenis);
+                          return (
+                            <div
+                              key={cell.id}
+                              onClick={() => openForm(cell.id)}
+                              role="button"
+                              style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                gap: '0.5rem',
+                                padding: '0.7rem 0.8rem',
+                                borderRadius: '10px',
+                                background: C.cream,
+                                cursor: 'pointer',
+                                minHeight: '44px',
+                                boxSizing: 'border-box',
+                              }}
+                            >
+                              <div style={{ minWidth: 0 }}>
+                                <div style={{ fontWeight: 700, color: C.dark, fontSize: '0.88rem' }}>
+                                  {formatJam(slot.jam_mulai)} - {formatJam(slot.jam_selesai)}
+                                </div>
+                                <div style={{ fontSize: '0.8rem', color: badge.color, fontWeight: 600, marginTop: '2px' }}>
+                                  {guruMap[cell.guru_id] || 'Guru'}
+                                  <span style={{ fontSize: '0.68rem', border: `1px solid ${badge.color}`, borderRadius: '4px', padding: '0 4px', marginLeft: '4px' }}>
+                                    {badge.letter}
+                                  </span>
+                                </div>
+                                <div style={{ fontSize: '0.75rem', color: C.gray, marginTop: '1px' }}>{cell.kelas}</div>
+                              </div>
+                              <span style={{ color: C.grayLight, fontSize: '1rem', flexShrink: 0 }}>›</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()
           ) : (
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
@@ -663,21 +729,21 @@ const StudentHome = () => {
           ) : (
             ujianTerdekatList.map((item, idx) => (
               <div key={item.id} style={{ padding: '0.75rem 0', borderBottom: idx < ujianTerdekatList.length - 1 ? `1px solid ${C.border}` : 'none' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <div>
-                    <div style={{ fontWeight: '600', color: C.dark }}>{item.materi}</div>
-                    <div style={{ fontSize: '0.85rem', color: C.gray }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '4px 8px' }}>
+                  <div style={{ flex: '1 1 180px', minWidth: 0 }}>
+                    <div style={{ fontWeight: '600', color: C.dark, wordBreak: 'break-word' }}>{item.materi}</div>
+                    <div style={{ fontSize: '0.85rem', color: C.gray, wordBreak: 'break-word' }}>
                       {item.id_mapel?.nama}{item.id_bab?.nama ? ` - ${item.id_bab.nama}` : ''}
                     </div>
                     {item.nama_siswa && (
                       <div style={{ fontSize: '0.8rem', color: C.gray }}>Siswa: {item.nama_siswa}</div>
                     )}
                     {item.deskripsi && (
-                      <div style={{ fontSize: '0.78rem', color: C.gray, fontStyle: 'italic' }}>{item.deskripsi}</div>
+                      <div style={{ fontSize: '0.78rem', color: C.gray, fontStyle: 'italic', wordBreak: 'break-word' }}>{item.deskripsi}</div>
                     )}
                   </div>
                   <span style={{ fontSize: '0.8rem', color: C.gray, whiteSpace: 'nowrap' }}>
-                    {new Date(item.tanggal).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
+                    {new Date(item.tanggal).toLocaleDateString('id-ID', { day: 'numeric', month: isMobile ? 'short' : 'long', year: 'numeric' })}
                   </span>
                 </div>
               </div>
@@ -794,18 +860,18 @@ const StudentHome = () => {
             ) : (
               materiRequestList.map((item, idx) => (
                 <div key={item.id} style={{ padding: '0.75rem 0', borderBottom: idx < materiRequestList.length - 1 ? `1px solid ${C.border}` : 'none' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: '600', color: C.dark }}>{item.judul_materi}</div>
-                      <div style={{ fontSize: '0.85rem', color: C.gray }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '6px 10px' }}>
+                    <div style={{ flex: '1 1 160px', minWidth: 0 }}>
+                      <div style={{ fontWeight: '600', color: C.dark, wordBreak: 'break-word' }}>{item.judul_materi}</div>
+                      <div style={{ fontSize: '0.85rem', color: C.gray, wordBreak: 'break-word' }}>
                         Untuk guru: {guruOptions.find(g => g.id === item.guru_id)?.nama || '...'}
                       </div>
                       {item.deskripsi && (
-                        <div style={{ fontSize: '0.78rem', color: C.gray, fontStyle: 'italic' }}>{item.deskripsi}</div>
+                        <div style={{ fontSize: '0.78rem', color: C.gray, fontStyle: 'italic', wordBreak: 'break-word' }}>{item.deskripsi}</div>
                       )}
                       <div style={{ fontSize: '0.75rem', color: C.gray }}>{waktuLalu(item.created_at)}</div>
                     </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px', marginLeft: '1rem' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px', maxWidth: isMobile ? '100%' : '220px' }}>
                       {item.status === 'selesai' ? (
                         <span style={{ fontSize: '0.72rem', fontWeight: 600, padding: '2px 8px', borderRadius: '999px', background: C.greenBg, color: C.green, whiteSpace: 'nowrap' }}>✅ Selesai</span>
                       ) : item.status === 'ditolak' ? (
@@ -814,7 +880,7 @@ const StudentHome = () => {
                         <span style={{ fontSize: '0.72rem', fontWeight: 600, padding: '2px 8px', borderRadius: '999px', background: C.goldBg, color: C.gold, whiteSpace: 'nowrap' }}>⏳ Menunggu</span>
                       )}
                       {item.catatan_guru && (
-                        <div style={{ fontSize: '0.72rem', color: C.gray, background: C.cream, padding: '2px 8px', borderRadius: '4px', textAlign: 'right', maxWidth: '200px' }}>
+                        <div style={{ fontSize: '0.72rem', color: C.gray, background: C.cream, padding: '4px 8px', borderRadius: '4px', textAlign: 'right', wordBreak: 'break-word' }}>
                           💬 {item.catatan_guru}
                         </div>
                       )}
@@ -836,7 +902,7 @@ const StudentHome = () => {
               <select
                 value={materiForm.guruId}
                 onChange={(e) => setMateriForm({ ...materiForm, guruId: e.target.value })}
-                style={{ padding: '6px 10px', borderRadius: '8px', border: `1px solid ${C.border}`, background: C.white, fontSize: '0.85rem' }}
+                style={{ padding: '8px 10px', borderRadius: '8px', border: `1px solid ${C.border}`, background: C.white, fontSize: isMobile ? '16px' : '0.85rem', width: '100%', boxSizing: 'border-box' }}
               >
                 <option value="">-- Pilih Guru --</option>
                 {guruOptions.map(g => (
@@ -850,7 +916,7 @@ const StudentHome = () => {
                 placeholder="Contoh: Integral Tak Tentu"
                 value={materiForm.judul}
                 onChange={(e) => setMateriForm({ ...materiForm, judul: e.target.value })}
-                style={{ padding: '6px 10px', borderRadius: '8px', border: `1px solid ${C.border}`, background: C.white, fontSize: '0.85rem' }}
+                style={{ padding: '8px 10px', borderRadius: '8px', border: `1px solid ${C.border}`, background: C.white, fontSize: isMobile ? '16px' : '0.85rem', width: '100%', boxSizing: 'border-box' }}
               />
 
               <label style={{ fontSize: '0.8rem', fontWeight: 600, color: C.dark }}>Deskripsi (opsional)</label>
@@ -859,7 +925,7 @@ const StudentHome = () => {
                 value={materiForm.deskripsi}
                 onChange={(e) => setMateriForm({ ...materiForm, deskripsi: e.target.value })}
                 rows={2}
-                style={{ padding: '6px 10px', borderRadius: '8px', border: `1px solid ${C.border}`, background: C.white, resize: 'vertical', fontFamily: 'inherit', fontSize: '0.85rem' }}
+                style={{ padding: '8px 10px', borderRadius: '8px', border: `1px solid ${C.border}`, background: C.white, resize: 'vertical', fontFamily: 'inherit', fontSize: isMobile ? '16px' : '0.85rem', width: '100%', boxSizing: 'border-box' }}
               />
 
               <button
@@ -891,7 +957,7 @@ const StudentHome = () => {
             <select
               value={tugasForm.guruId}
               onChange={(e) => setTugasForm({ ...tugasForm, guruId: e.target.value })}
-              style={{ padding: '8px', borderRadius: '8px', border: `1px solid ${C.border}`, marginBottom: '0.5rem' }}
+              style={{ padding: '8px', borderRadius: '8px', border: `1px solid ${C.border}`, marginBottom: '0.5rem', width: '100%', boxSizing: 'border-box', fontSize: isMobile ? '16px' : '1rem' }}
             >
               <option value="">-- Pilih Guru --</option>
               {guruOptions.map(g => (
@@ -902,7 +968,7 @@ const StudentHome = () => {
             <select
               value={tugasForm.mapelId}
               onChange={(e) => handleTugasMapelChange(e.target.value)}
-              style={{ padding: '8px', borderRadius: '8px', border: `1px solid ${C.border}`, marginBottom: '0.5rem' }}
+              style={{ padding: '8px', borderRadius: '8px', border: `1px solid ${C.border}`, marginBottom: '0.5rem', width: '100%', boxSizing: 'border-box', fontSize: isMobile ? '16px' : '1rem' }}
             >
               <option value="">-- Pilih Mapel --</option>
               {mapelOptions.map(m => (
@@ -915,7 +981,7 @@ const StudentHome = () => {
                 <select
                   value={tugasForm.babId}
                   onChange={(e) => setTugasForm({ ...tugasForm, babId: e.target.value })}
-                  style={{ padding: '8px', borderRadius: '8px', border: `1px solid ${C.border}`, marginBottom: '0.5rem' }}
+                  style={{ padding: '8px', borderRadius: '8px', border: `1px solid ${C.border}`, marginBottom: '0.5rem', width: '100%', boxSizing: 'border-box', fontSize: isMobile ? '16px' : '1rem' }}
                 >
                   <option value="">-- Pilih Bab --</option>
                   {babOptions.map(b => (
@@ -930,14 +996,14 @@ const StudentHome = () => {
               placeholder="Contoh: Ulangan Harian Bab Integral"
               value={tugasForm.materi}
               onChange={(e) => setTugasForm({ ...tugasForm, materi: e.target.value })}
-              style={{ padding: '8px', borderRadius: '8px', border: `1px solid ${C.border}`, marginBottom: '0.5rem' }}
+              style={{ padding: '8px', borderRadius: '8px', border: `1px solid ${C.border}`, marginBottom: '0.5rem', width: '100%', boxSizing: 'border-box', fontSize: isMobile ? '16px' : '1rem' }}
             />
             <label style={{ fontSize: '0.85rem', color: C.gray }}>Tanggal</label>
             <input
               type="date"
               value={tugasForm.tanggal}
               onChange={(e) => setTugasForm({ ...tugasForm, tanggal: e.target.value })}
-              style={{ padding: '8px', borderRadius: '8px', border: `1px solid ${C.border}`, marginBottom: '0.5rem' }}
+              style={{ padding: '8px', borderRadius: '8px', border: `1px solid ${C.border}`, marginBottom: '0.5rem', width: '100%', boxSizing: 'border-box', fontSize: isMobile ? '16px' : '1rem' }}
             />
             <label style={{ fontSize: '0.85rem', color: C.gray }}>Catatan (opsional)</label>
             <textarea
@@ -945,7 +1011,7 @@ const StudentHome = () => {
               value={tugasForm.deskripsi}
               onChange={(e) => setTugasForm({ ...tugasForm, deskripsi: e.target.value })}
               rows={3}
-              style={{ padding: '8px', borderRadius: '8px', border: `1px solid ${C.border}`, resize: 'vertical' }}
+              style={{ padding: '8px', borderRadius: '8px', border: `1px solid ${C.border}`, resize: 'vertical', width: '100%', boxSizing: 'border-box', fontSize: isMobile ? '16px' : '1rem' }}
             />
             <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem', justifyContent: 'flex-end' }}>
               <button onClick={() => setShowTugasForm(false)} style={buttonBatal}>Batal</button>
@@ -966,7 +1032,7 @@ const StudentHome = () => {
             <select
               value={selectedJadwalId}
               onChange={(e) => openForm(e.target.value)}
-              style={{ width: '100%', padding: '8px', marginBottom: '0.75rem', borderRadius: '8px', border: `1px solid ${C.border}` }}
+              style={{ width: '100%', padding: '8px', marginBottom: '0.75rem', borderRadius: '8px', border: `1px solid ${C.border}`, boxSizing: 'border-box', fontSize: isMobile ? '16px' : '1rem' }}
             >
               <option value="">-- Pilih --</option>
               {jadwalList.map(j => (
@@ -979,27 +1045,27 @@ const StudentHome = () => {
             <select
               value={formData.hari_baru}
               onChange={(e) => setFormData({ ...formData, hari_baru: e.target.value })}
-              style={{ width: '100%', padding: '8px', marginBottom: '0.75rem', borderRadius: '8px', border: `1px solid ${C.border}` }}
+              style={{ width: '100%', padding: '8px', marginBottom: '0.75rem', borderRadius: '8px', border: `1px solid ${C.border}`, boxSizing: 'border-box', fontSize: isMobile ? '16px' : '1rem' }}
             >
               {HARI_LIST.map(h => <option key={h} value={h}>{h}</option>)}
             </select>
-            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem' }}>
-              <div style={{ flex: 1 }}>
+            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
+              <div style={{ flex: '1 1 130px' }}>
                 <label style={{ fontSize: '0.85rem', color: C.gray }}>Jam Mulai</label>
                 <input
                   type="time"
                   value={formData.jam_mulai_baru}
                   onChange={(e) => setFormData({ ...formData, jam_mulai_baru: e.target.value })}
-                  style={{ width: '100%', padding: '8px', borderRadius: '8px', border: `1px solid ${C.border}` }}
+                  style={{ width: '100%', padding: '8px', borderRadius: '8px', border: `1px solid ${C.border}`, boxSizing: 'border-box', fontSize: isMobile ? '16px' : '1rem' }}
                 />
               </div>
-              <div style={{ flex: 1 }}>
+              <div style={{ flex: '1 1 130px' }}>
                 <label style={{ fontSize: '0.85rem', color: C.gray }}>Jam Selesai</label>
                 <input
                   type="time"
                   value={formData.jam_selesai_baru}
                   onChange={(e) => setFormData({ ...formData, jam_selesai_baru: e.target.value })}
-                  style={{ width: '100%', padding: '8px', borderRadius: '8px', border: `1px solid ${C.border}` }}
+                  style={{ width: '100%', padding: '8px', borderRadius: '8px', border: `1px solid ${C.border}`, boxSizing: 'border-box', fontSize: isMobile ? '16px' : '1rem' }}
                 />
               </div>
             </div>
@@ -1018,7 +1084,7 @@ const StudentHome = () => {
                   type="date"
                   value={formData.tanggal_temporary_baru}
                   onChange={(e) => setFormData({ ...formData, tanggal_temporary_baru: e.target.value })}
-                  style={{ width: '100%', padding: '8px', borderRadius: '8px', border: `1px solid ${C.border}` }}
+                  style={{ width: '100%', padding: '8px', borderRadius: '8px', border: `1px solid ${C.border}`, boxSizing: 'border-box', fontSize: isMobile ? '16px' : '1rem' }}
                 />
               </div>
             )}
@@ -1027,7 +1093,7 @@ const StudentHome = () => {
               value={formData.alasan}
               onChange={(e) => setFormData({ ...formData, alasan: e.target.value })}
               rows={3}
-              style={{ width: '100%', padding: '8px', marginBottom: '1rem', borderRadius: '8px', border: `1px solid ${C.border}`, resize: 'vertical' }}
+              style={{ width: '100%', padding: '8px', marginBottom: '1rem', borderRadius: '8px', border: `1px solid ${C.border}`, resize: 'vertical', boxSizing: 'border-box', fontSize: isMobile ? '16px' : '1rem' }}
             />
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
               <button onClick={() => setShowForm(false)} style={buttonBatal}>Batal</button>

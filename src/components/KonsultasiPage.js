@@ -241,6 +241,18 @@ const StepDataDiri = ({ data, setData, onNext }) => {
             </div>
           </div>
         )}
+
+        <div>
+          <Label>Kode Referral (opsional)</Label>
+          <Input
+            placeholder="Contoh: BRIAN7K2Q"
+            value={data.kodeReferral}
+            onChange={e => setData({ ...data, kodeReferral: e.target.value.toUpperCase() })}
+          />
+          <p style={{ margin: '6px 0 0', fontSize: '0.78rem', color: C.gray }}>
+            Punya kode referral dari guru atau teman? Masukkan di sini agar tercatat.
+          </p>
+        </div>
       </div>
 
       <NavButtons showBack={false} onNext={handleNext} />
@@ -440,6 +452,7 @@ const StepKonfirmasi = ({ dataDiri, kebutuhan, jadwal, onEdit, onSubmit }) => {
       hari:      jadwal.hari        || [],
       jam:       jadwal.jam         || [],
       budget:    jadwal.budget      || null,
+      kode_referral: dataDiri.kodeReferral ? dataDiri.kodeReferral.trim().toUpperCase() : null,
     }]);
 
     setLoading(false);
@@ -495,6 +508,11 @@ const StepKonfirmasi = ({ dataDiri, kebutuhan, jadwal, onEdit, onSubmit }) => {
           <ConfirmRow icon="💰" label="Budget"
             value={jadwal.budget}
             onEdit={() => onEdit(3)} />
+        )}
+        {dataDiri.kodeReferral && (
+          <ConfirmRow icon="🎟️" label="Kode Referral"
+            value={dataDiri.kodeReferral}
+            onEdit={() => onEdit(1)} />
         )}
       </div>
 
@@ -625,7 +643,7 @@ const LeftSidebar = () => (
 
 const KonsultasiPage = () => {
   const [step, setStep]           = useState(1);
-  const [dataDiri, setDataDiri]   = useState({ nama: '', whatsapp: '', email: '', status: '', sekolah: '', kelas: '' });
+  const [dataDiri, setDataDiri]   = useState({ nama: '', whatsapp: '', email: '', status: '', sekolah: '', kelas: '', kodeReferral: '' });
   const [kebutuhan, setKebutuhan] = useState({ tujuan: [], mapel: [], kesulitan: '' });
   const [jadwal, setJadwal]       = useState({ metode: '', hari: [], jam: [], budget: '' });
   const navigate                  = useNavigate();

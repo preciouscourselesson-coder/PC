@@ -18,10 +18,38 @@ const C = {
 
 const MOBILE_BREAKPOINT = 768;
 
+// ─── Lampiran file ───────────────────────────────────────────────────────────
+// Nama bucket Supabase Storage tempat file lampiran chat disimpan.
+// Pastikan bucket ini sudah dibuat (public) di project Supabase.
+const ATTACHMENT_BUCKET = 'chat-attachments';
+const MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024; // 10MB
+
 const ROLE_LABELS = {
   student: 'Siswa',
   teacher: 'Guru',
   admin: 'Admin',
+};
+
+const isImageType = (type) => !!type && type.startsWith('image/');
+
+const formatFileSize = (bytes) => {
+  if (!bytes && bytes !== 0) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+// Ikon sederhana berbasis ekstensi file (tanpa dependency tambahan)
+const fileIconFor = (name = '') => {
+  const ext = name.split('.').pop().toLowerCase();
+  if (['pdf'].includes(ext)) return '📄';
+  if (['doc', 'docx'].includes(ext)) return '📝';
+  if (['xls', 'xlsx', 'csv'].includes(ext)) return '📊';
+  if (['ppt', 'pptx'].includes(ext)) return '📽️';
+  if (['zip', 'rar', '7z'].includes(ext)) return '🗜️';
+  if (['mp4', 'mov', 'avi', 'webm'].includes(ext)) return '🎬';
+  if (['mp3', 'wav', 'ogg'].includes(ext)) return '🎵';
+  return '📎';
 };
 
 const useIsMobile = () => {
@@ -112,10 +140,29 @@ const ChatMessages = () => {
   const [sending, setSending] = useState(false);
   const [loadingThread, setLoadingThread] = useState(false);
 
+  // ─── Lampiran file yang sedang dipilih (belum terkirim) ────────────────
+  const [selectedFile, setSelectedFile] = useState(null); // File object
+  const [filePreviewUrl, setFilePreviewUrl] = useState(null); // object URL untuk preview gambar
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const fileInputRef = useRef(null);
+
+  // ─── Hapus pesan ─────────────────────────────────────────────────────────
+  const [hoveredMsgId, setHoveredMsgId] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
+
   // Di mobile: apakah sedang menampilkan panel chat (true) atau daftar (false)
   const [showThreadMobile, setShowThreadMobile] = useState(false);
 
   const messagesEndRef = useRef(null);
+  const composerRef = useRef(null);
+
+  // ── Auto-resize kotak ketik pesan (maksimal ~5 baris) agar nyaman untuk pesan panjang ──
+  useEffect(() => {
+    const el = composerRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
+  }, [messageText]);
 
   // ─── Ambil identitas sendiri ───────────────────────────────────────────
   const fetchMe = async () => {
@@ -287,14 +334,73 @@ const ChatMessages = () => {
     await openConversation(enrichedConv);
   };
 
+  // ─── Pilih file lampiran dari input ─────────────────────────────────────
+  const handleFileSelect = (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // supaya bisa pilih file yang sama lagi setelah dihapus
+    if (!file) return;
+    if (file.size > MAX_ATTACHMENT_SIZE) {
+      alert(`Ukuran file maksimal ${formatFileSize(MAX_ATTACHMENT_SIZE)}.`);
+      return;
+    }
+    if (filePreviewUrl) URL.revokeObjectURL(filePreviewUrl);
+    setSelectedFile(file);
+    setFilePreviewUrl(isImageType(file.type) ? URL.createObjectURL(file) : null);
+  };
+
+  const removeSelectedFile = () => {
+    if (filePreviewUrl) URL.revokeObjectURL(filePreviewUrl);
+    setSelectedFile(null);
+    setFilePreviewUrl(null);
+  };
+
+  // ─── Unggah file ke Supabase Storage, kembalikan metadata lampiran ─────
+  const uploadAttachment = async (file, conversationId) => {
+    const safeName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_');
+    const path = `${conversationId}/${Date.now()}-${safeName}`;
+    const { error: uploadErr } = await supabase.storage
+      .from(ATTACHMENT_BUCKET)
+      .upload(path, file, { cacheControl: '3600', upsert: false });
+    if (uploadErr) throw uploadErr;
+    const { data: publicData } = supabase.storage.from(ATTACHMENT_BUCKET).getPublicUrl(path);
+    return {
+      attachment_url: publicData.publicUrl,
+      attachment_name: file.name,
+      attachment_type: file.type || 'application/octet-stream',
+      attachment_size: file.size,
+    };
+  };
+
   // ─── Kirim pesan ────────────────────────────────────────────────────────
   const sendMessage = async () => {
-    if (!messageText.trim() || !activeConversation || !me || sending) return;
-    const content = messageText.trim();
+    const trimmed = messageText.trim();
+    if ((!trimmed && !selectedFile) || !activeConversation || !me || sending || uploadingFile) return;
+
+    let attachmentFields = {};
+    if (selectedFile) {
+      setUploadingFile(true);
+      try {
+        attachmentFields = await uploadAttachment(selectedFile, activeConversation.id);
+      } catch (uploadErr) {
+        console.error('Gagal mengunggah lampiran:', uploadErr);
+        setUploadingFile(false);
+        alert('Gagal mengunggah lampiran.');
+        return;
+      }
+      setUploadingFile(false);
+    }
+
+    const content = trimmed;
     setSending(true);
     const { data, error } = await supabase
       .from('messages')
-      .insert([{ conversation_id: activeConversation.id, sender_id: me.id, content, is_read: false }])
+      .insert([{
+        conversation_id: activeConversation.id,
+        sender_id: me.id,
+        content,
+        is_read: false,
+        ...attachmentFields,
+      }])
       .select()
       .single();
     setSending(false);
@@ -305,17 +411,22 @@ const ChatMessages = () => {
     }
     setChatMessages((prev) => [...prev, data]);
     setMessageText('');
+    removeSelectedFile();
+
+    const lastMessagePreview = content || (attachmentFields.attachment_url
+      ? `📎 ${isImageType(attachmentFields.attachment_type) ? 'Gambar' : attachmentFields.attachment_name}`
+      : content);
 
     const nowIso = new Date().toISOString();
     const { error: updErr } = await supabase
       .from('conversations')
-      .update({ last_message: content, last_message_at: nowIso })
+      .update({ last_message: lastMessagePreview, last_message_at: nowIso })
       .eq('id', activeConversation.id);
     if (updErr) console.error('Gagal memperbarui ringkasan percakapan:', updErr);
 
     setConversations((prev) =>
       prev
-        .map((c) => (c.id === activeConversation.id ? { ...c, last_message: content, last_message_at: nowIso } : c))
+        .map((c) => (c.id === activeConversation.id ? { ...c, last_message: lastMessagePreview, last_message_at: nowIso } : c))
         .sort((a, b) => new Date(b.last_message_at || b.created_at) - new Date(a.last_message_at || a.created_at))
     );
   };
@@ -325,6 +436,69 @@ const ChatMessages = () => {
       e.preventDefault();
       sendMessage();
     }
+  };
+
+  // ─── Hapus pesan untuk semua ────────────────────────────────────────────
+  // Pesan tidak dihapus fisik dari DB, tapi ditandai is_deleted supaya
+  // kedua sisi (pengirim & penerima) melihat "Pesan ini telah dihapus".
+  const canDeleteMessage = (m) => !!me && !m.is_deleted && (m.sender_id === me.id || me.role === 'admin');
+
+  const deleteMessage = async (m) => {
+    if (!canDeleteMessage(m) || deletingId) return;
+    const ok = window.confirm('Hapus pesan ini untuk semua orang?');
+    if (!ok) return;
+
+    setDeletingId(m.id);
+
+    // Hapus file lampiran dari storage juga, kalau ada (best-effort).
+    if (m.attachment_url) {
+      try {
+        const marker = `/${ATTACHMENT_BUCKET}/`;
+        const idx = m.attachment_url.indexOf(marker);
+        if (idx !== -1) {
+          const storagePath = decodeURIComponent(m.attachment_url.slice(idx + marker.length));
+          await supabase.storage.from(ATTACHMENT_BUCKET).remove([storagePath]);
+        }
+      } catch (storageErr) {
+        console.error('Gagal menghapus file lampiran:', storageErr);
+      }
+    }
+
+    const { error } = await supabase
+      .from('messages')
+      .update({
+        is_deleted: true,
+        content: '',
+        attachment_url: null,
+        attachment_name: null,
+        attachment_type: null,
+        attachment_size: null,
+      })
+      .eq('id', m.id);
+
+    setDeletingId(null);
+
+    if (error) {
+      console.error('Gagal menghapus pesan:', error);
+      alert('Gagal menghapus pesan.');
+      return;
+    }
+
+    setChatMessages((prev) =>
+      prev.map((msg) => (msg.id === m.id
+        ? { ...msg, is_deleted: true, content: '', attachment_url: null, attachment_name: null, attachment_type: null, attachment_size: null }
+        : msg))
+    );
+
+    // Kalau pesan yang dihapus adalah pesan terakhir, perbarui juga
+    // ringkasan percakapan di sidebar supaya konsisten.
+    setConversations((prev) => {
+      const isLatestInThread = chatMessages.length > 0 && chatMessages[chatMessages.length - 1].id === m.id;
+      if (!isLatestInThread || !activeConversation) return prev;
+      const newPreview = 'Pesan telah dihapus';
+      supabase.from('conversations').update({ last_message: newPreview }).eq('id', activeConversation.id).then(() => {});
+      return prev.map((c) => (c.id === activeConversation.id ? { ...c, last_message: newPreview } : c));
+    });
   };
 
   // ─── Deep-link: buka otomatis percakapan dari ?contactId=... ──────────
@@ -355,6 +529,14 @@ const ChatMessages = () => {
           if (newMsg.sender_id === me.id) return; // sudah ditambahkan optimis di sendMessage
           setChatMessages((prev) => (prev.find((m) => m.id === newMsg.id) ? prev : [...prev, newMsg]));
           supabase.from('messages').update({ is_read: true }).eq('id', newMsg.id).then(() => {});
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'messages', filter: `conversation_id=eq.${activeConversation.id}` },
+        (payload) => {
+          const updated = payload.new;
+          setChatMessages((prev) => prev.map((m) => (m.id === updated.id ? { ...m, ...updated } : m)));
         }
       )
       .subscribe();
@@ -519,7 +701,7 @@ const ChatMessages = () => {
           {isMobile && (
             <button
               onClick={() => setShowThreadMobile(false)}
-              style={{ background: 'none', border: 'none', fontSize: '1.3rem', cursor: 'pointer', color: C.gray, padding: 0 }}
+              style={{ background: 'none', border: 'none', fontSize: '1.3rem', cursor: 'pointer', color: C.gray, padding: '6px', margin: '-6px 2px -6px -6px' }}
             >
               ←
             </button>
@@ -540,8 +722,28 @@ const ChatMessages = () => {
           ) : (
             chatMessages.map((m) => {
               const mine = m.sender_id === me.id;
+              const showDelete = hoveredMsgId === m.id && canDeleteMessage(m);
               return (
-                <div key={m.id} style={{ display: 'flex', justifyContent: mine ? 'flex-end' : 'flex-start' }}>
+                <div
+                  key={m.id}
+                  onMouseEnter={() => setHoveredMsgId(m.id)}
+                  onMouseLeave={() => setHoveredMsgId((id) => (id === m.id ? null : id))}
+                  onClick={() => canDeleteMessage(m) && setHoveredMsgId((id) => (id === m.id ? null : m.id))}
+                  style={{ display: 'flex', justifyContent: mine ? 'flex-end' : 'flex-start', alignItems: 'center', gap: '6px' }}
+                >
+                  {mine && showDelete && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); deleteMessage(m); }}
+                      disabled={deletingId === m.id}
+                      title="Hapus pesan untuk semua"
+                      style={{
+                        background: 'none', border: 'none', color: C.grayLight, fontSize: '1rem',
+                        cursor: deletingId === m.id ? 'not-allowed' : 'pointer', padding: '8px', order: -1,
+                      }}
+                    >
+                      🗑️
+                    </button>
+                  )}
                   <div
                     style={{
                       maxWidth: '75%',
@@ -555,7 +757,57 @@ const ChatMessages = () => {
                       boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
                     }}
                   >
-                    {m.content}
+                    {m.is_deleted ? (
+                      <span style={{ fontStyle: 'italic', opacity: 0.75 }}>🚫 Pesan ini telah dihapus</span>
+                    ) : (
+                      <>
+                        {m.attachment_url && isImageType(m.attachment_type) && (
+                          <a href={m.attachment_url} target="_blank" rel="noopener noreferrer">
+                            <img
+                              src={m.attachment_url}
+                              alt={m.attachment_name || 'Lampiran gambar'}
+                              style={{
+                                display: 'block',
+                                maxWidth: '100%',
+                                maxHeight: '260px',
+                                borderRadius: '10px',
+                                marginBottom: m.content ? '6px' : 0,
+                                objectFit: 'cover',
+                              }}
+                            />
+                          </a>
+                        )}
+                        {m.attachment_url && !isImageType(m.attachment_type) && (
+                          <a
+                            href={m.attachment_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                              padding: '8px 10px',
+                              borderRadius: '10px',
+                              background: mine ? 'rgba(255,255,255,0.18)' : C.goldLight,
+                              textDecoration: 'none',
+                              color: 'inherit',
+                              marginBottom: m.content ? '6px' : 0,
+                            }}
+                          >
+                            <span style={{ fontSize: '1.3rem' }}>{fileIconFor(m.attachment_name)}</span>
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ fontSize: '0.85rem', fontWeight: '600', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {m.attachment_name || 'File'}
+                              </div>
+                              {!!m.attachment_size && (
+                                <div style={{ fontSize: '0.7rem', opacity: 0.8 }}>{formatFileSize(m.attachment_size)}</div>
+                              )}
+                            </div>
+                          </a>
+                        )}
+                        {m.content}
+                      </>
+                    )}
                     <div
                       style={{
                         fontSize: '0.65rem',
@@ -567,6 +819,19 @@ const ChatMessages = () => {
                       {formatClock(m.created_at)}
                     </div>
                   </div>
+                  {!mine && showDelete && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); deleteMessage(m); }}
+                      disabled={deletingId === m.id}
+                      title="Hapus pesan untuk semua"
+                      style={{
+                        background: 'none', border: 'none', color: C.grayLight, fontSize: '1rem',
+                        cursor: deletingId === m.id ? 'not-allowed' : 'pointer', padding: '8px',
+                      }}
+                    >
+                      🗑️
+                    </button>
+                  )}
                 </div>
               );
             })
@@ -574,29 +839,96 @@ const ChatMessages = () => {
           <div ref={messagesEndRef} />
         </div>
 
+        {/* Preview lampiran yang dipilih */}
+        {selectedFile && (
+          <div
+            style={{
+              display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 16px',
+              borderTop: `1px solid ${C.border}`, background: C.goldLight,
+            }}
+          >
+            {filePreviewUrl ? (
+              <img
+                src={filePreviewUrl}
+                alt="Preview"
+                style={{ width: 42, height: 42, borderRadius: '8px', objectFit: 'cover' }}
+              />
+            ) : (
+              <div style={{ fontSize: '1.4rem' }}>{fileIconFor(selectedFile.name)}</div>
+            )}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: '0.85rem', fontWeight: '600', color: C.dark, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {selectedFile.name}
+              </div>
+              <div style={{ fontSize: '0.72rem', color: C.grayLight }}>
+                {uploadingFile ? 'Mengunggah...' : formatFileSize(selectedFile.size)}
+              </div>
+            </div>
+            <button
+              onClick={removeSelectedFile}
+              disabled={uploadingFile}
+              style={{
+                background: 'none', border: 'none', color: C.gray, fontSize: '1.1rem',
+                cursor: uploadingFile ? 'not-allowed' : 'pointer', padding: '4px',
+              }}
+              aria-label="Hapus lampiran"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
         {/* Composer */}
-        <div style={{ display: 'flex', gap: '8px', padding: '12px 16px', borderTop: `1px solid ${C.border}`, background: C.white }}>
+        <div
+          style={{
+            display: 'flex', gap: '8px', padding: '12px 16px', borderTop: `1px solid ${C.border}`, background: C.white,
+            alignItems: 'flex-end', paddingBottom: isMobile ? 'max(12px, env(safe-area-inset-bottom))' : '12px',
+          }}
+        >
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileSelect}
+            style={{ display: 'none' }}
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={sending || uploadingFile}
+            title="Lampirkan file"
+            style={{
+              background: 'transparent', border: `1.5px solid ${C.border}`, color: C.gray,
+              width: '44px', height: '44px', minWidth: '44px', borderRadius: '50%',
+              cursor: sending || uploadingFile ? 'not-allowed' : 'pointer', fontSize: '1.15rem',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            📎
+          </button>
           <textarea
+            ref={composerRef}
             value={messageText}
             onChange={(e) => setMessageText(e.target.value)}
             onKeyDown={handleComposerKeyDown}
             placeholder="Tulis pesan..."
             rows={1}
             style={{
-              flex: 1, padding: '10px 14px', borderRadius: '20px', border: `1.5px solid ${C.border}`,
+              flex: 1, padding: '11px 14px', borderRadius: '20px', border: `1.5px solid ${C.border}`,
               fontSize: '16px', fontFamily: 'inherit', outline: 'none', resize: 'none', boxSizing: 'border-box',
+              maxHeight: '120px', overflowY: 'auto', lineHeight: 1.4,
             }}
           />
           <button
             onClick={sendMessage}
-            disabled={sending || !messageText.trim()}
+            disabled={sending || uploadingFile || (!messageText.trim() && !selectedFile)}
             style={{
               background: C.gold, border: 'none', color: 'white', padding: '0 20px', borderRadius: '999px',
-              fontWeight: 'bold', cursor: sending || !messageText.trim() ? 'not-allowed' : 'pointer',
-              opacity: sending || !messageText.trim() ? 0.6 : 1, fontFamily: 'inherit', fontSize: '0.9rem',
+              fontWeight: 'bold', height: '44px',
+              cursor: sending || uploadingFile || (!messageText.trim() && !selectedFile) ? 'not-allowed' : 'pointer',
+              opacity: sending || uploadingFile || (!messageText.trim() && !selectedFile) ? 0.6 : 1,
+              fontFamily: 'inherit', fontSize: '0.9rem',
             }}
           >
-            Kirim
+            {uploadingFile ? '...' : 'Kirim'}
           </button>
         </div>
       </div>
@@ -623,7 +955,7 @@ const ChatMessages = () => {
           borderRadius: isMobile ? 0 : '20px',
           border: isMobile ? 'none' : `1.5px solid ${C.border}`,
           overflow: 'hidden',
-          height: isMobile ? '100vh' : 'calc(100vh - 140px)',
+          height: isMobile ? '100dvh' : 'calc(100vh - 140px)',
           boxShadow: isMobile ? 'none' : '0 4px 16px rgba(0,0,0,0.06)',
         }}
       >

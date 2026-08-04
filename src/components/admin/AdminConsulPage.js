@@ -1,5 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../../supabaseClient';
+
+const ROLE_LABEL = {
+  student: 'Siswa',
+  teacher: 'Guru',
+  parent:  'Wali Siswa',
+  admin:   'Admin',
+};
 
 // ─── Warna ───────────────────────────────────────────────────────────────────
 const C = {
@@ -116,7 +123,31 @@ const AdminConsulPage = () => {
   const [statusBaru, setStatusBaru] = useState('');
   const [waStatus, setWaStatus] = useState('belum');
   const [waCatatan, setWaCatatan] = useState('');
+  const [kodeReferral, setKodeReferral] = useState('');
+  const [referralOwners, setReferralOwners] = useState([]);
   const [updating, setUpdating] = useState(false);
+
+  // ─── Ambil daftar pemilik kode referral (guru/siswa terdaftar) ────────────
+  const fetchReferralOwners = async () => {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, full_name, email, role, referral_code')
+      .not('referral_code', 'is', null);
+    if (!error) setReferralOwners(data || []);
+  };
+
+  const referralMap = useMemo(() => {
+    const map = new Map();
+    referralOwners.forEach(p => {
+      if (p.referral_code) map.set(p.referral_code.trim().toUpperCase(), p);
+    });
+    return map;
+  }, [referralOwners]);
+
+  const findReferralOwner = (code) => {
+    if (!code) return null;
+    return referralMap.get(code.trim().toUpperCase()) || null;
+  };
 
   // ─── Ambil data ───────────────────────────────────────────────────────────
   const fetchData = async () => {
@@ -152,6 +183,7 @@ const AdminConsulPage = () => {
 
   useEffect(() => {
     fetchData();
+    fetchReferralOwners();
   }, []);
 
   // ─── Filter ───────────────────────────────────────────────────────────────
@@ -172,6 +204,7 @@ const AdminConsulPage = () => {
       setStatusBaru(item.status_konsultasi || 'baru');
       setWaStatus(item.wa_status || 'belum');
       setWaCatatan(item.wa_catatan || '');
+      setKodeReferral(item.kode_referral || '');
       setShowDetail(true);
       setSelectedId(id);
       setErrorMsg('');
@@ -199,6 +232,7 @@ const AdminConsulPage = () => {
       catatan: catatan,
       wa_status: waStatus,
       wa_catatan: waCatatan,
+      kode_referral: kodeReferral ? kodeReferral.trim().toUpperCase() : null,
     };
 
     try {
@@ -317,12 +351,15 @@ const AdminConsulPage = () => {
                   <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 'bold', color: C.gray }}>Jenjang</th>
                   <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 'bold', color: C.gray }}>Status Konsultasi</th>
                   <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 'bold', color: C.gray }}>Proses WA</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 'bold', color: C.gray }}>Referral</th>
                   <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 'bold', color: C.gray }}>Tanggal</th>
                   <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 'bold', color: C.gray }}>Aksi</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredList.map((item) => (
+                {filteredList.map((item) => {
+                  const referralOwner = findReferralOwner(item.kode_referral);
+                  return (
                   <tr key={item.id} style={{ borderBottom: `1px solid ${C.border}`, transition: 'background 0.2s' }}
                     onMouseEnter={e => e.currentTarget.style.background = C.goldBg}
                     onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
@@ -332,6 +369,22 @@ const AdminConsulPage = () => {
                     <td style={{ padding: '12px 16px', color: C.gray }}>{item.jenjang || '-'}</td>
                     <td style={{ padding: '12px 16px' }}><StatusBadge status={item.status_konsultasi || 'baru'} /></td>
                     <td style={{ padding: '12px 16px' }}><WaStatusBadge status={item.wa_status || 'belum'} /></td>
+                    <td style={{ padding: '12px 16px' }}>
+                      {item.kode_referral ? (
+                        <div>
+                          <div style={{ fontFamily: 'monospace', fontWeight: 'bold', fontSize: '0.8rem', color: C.dark }}>
+                            {item.kode_referral}
+                          </div>
+                          <div style={{ fontSize: '0.7rem', color: referralOwner ? '#2e7d32' : C.red }}>
+                            {referralOwner
+                              ? `👤 ${referralOwner.full_name || referralOwner.email} (${ROLE_LABEL[referralOwner.role] || referralOwner.role})`
+                              : '⚠️ Tidak dikenali'}
+                          </div>
+                        </div>
+                      ) : (
+                        <span style={{ color: C.gray, fontSize: '0.82rem' }}>-</span>
+                      )}
+                    </td>
                     <td style={{ padding: '12px 16px', color: C.gray, fontSize: '0.8rem' }}>
                       {item.created_at ? new Date(item.created_at).toLocaleDateString('id-ID') : '-'}
                     </td>
@@ -354,7 +407,8 @@ const AdminConsulPage = () => {
                       </button>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -416,6 +470,7 @@ const AdminConsulPage = () => {
               <div><strong>Kelas:</strong> {detailData.kelas || '-'}</div>
               <div><strong>Status Konsultasi:</strong> <StatusBadge status={detailData.status_konsultasi || 'baru'} /></div>
               <div><strong>Proses WA:</strong> <WaStatusBadge status={detailData.wa_status || 'belum'} /></div>
+              <div><strong>Kode Referral:</strong> {detailData.kode_referral || '-'}</div>
               <div><strong>Tujuan:</strong> {(detailData.tujuan || []).join(', ') || '-'}</div>
               <div><strong>Mata Pelajaran:</strong> {(detailData.mapel || []).join(', ') || '-'}</div>
               <div><strong>Kesulitan:</strong> {detailData.kesulitan || '-'}</div>
@@ -473,6 +528,51 @@ const AdminConsulPage = () => {
                 <option value="selesai_join">✅ Selesai - Siswa bergabung</option>
                 <option value="selesai_tidak">❌ Selesai - Siswa tidak bergabung</option>
               </select>
+            </div>
+
+            {/* Kode Referral (bisa diisi/diperbaiki manual oleh admin) */}
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '6px', color: C.dark }}>
+                Kode Referral
+              </label>
+              <input
+                type="text"
+                value={kodeReferral}
+                onChange={e => setKodeReferral(e.target.value.toUpperCase())}
+                placeholder="Contoh: BRIAN7K2Q (kosongkan jika tidak ada)"
+                style={{
+                  width: '100%',
+                  padding: '10px 14px',
+                  borderRadius: '10px',
+                  border: `1.5px solid ${C.border}`,
+                  fontSize: '0.92rem',
+                  fontFamily: 'monospace',
+                  fontWeight: 'bold',
+                  letterSpacing: '0.5px',
+                  background: C.white,
+                  outline: 'none',
+                  boxSizing: 'border-box',
+                }}
+              />
+              {kodeReferral && (
+                (() => {
+                  const owner = findReferralOwner(kodeReferral);
+                  return owner ? (
+                    <p style={{ margin: '6px 0 0', fontSize: '0.82rem', color: '#2e7d32', fontWeight: 'bold' }}>
+                      ✅ Milik: {owner.full_name || owner.email} ({ROLE_LABEL[owner.role] || owner.role})
+                    </p>
+                  ) : (
+                    <p style={{ margin: '6px 0 0', fontSize: '0.82rem', color: C.red, fontWeight: 'bold' }}>
+                      ⚠️ Kode ini tidak cocok dengan guru/siswa manapun. Cek kembali penulisannya.
+                    </p>
+                  );
+                })()
+              )}
+              {!kodeReferral && (
+                <p style={{ margin: '6px 0 0', fontSize: '0.78rem', color: C.gray }}>
+                  Siswa belum mengisi kode referral saat mendaftar. Admin bisa menambahkannya manual di sini.
+                </p>
+              )}
             </div>
 
             {/* Catatan Umum */}

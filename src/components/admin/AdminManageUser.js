@@ -45,6 +45,68 @@ const GENDER_LABEL = {
 const KELAS_OPTIONS = ['VII', 'VIII', 'IX', 'X', 'XI', 'XII'];
 const MAPEL_OPTIONS = ['Matematika', 'Fisika', 'Kimia', 'Bahasa Inggris'];
 
+// Small dependency-free inline icons used for row actions.
+const IconCheck = ({ size = 15, color = 'currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="20 6 9 17 4 12" />
+  </svg>
+);
+const IconX = ({ size = 15, color = 'currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+  </svg>
+);
+const IconTrash = ({ size = 15, color = 'currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="3 6 5 6 21 6" />
+    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+    <path d="M10 11v6" /><path d="M14 11v6" />
+    <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+  </svg>
+);
+const IconLogIn = ({ size = 15, color = 'currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+    <polyline points="10 17 15 12 10 7" /><line x1="15" y1="12" x2="3" y2="12" />
+  </svg>
+);
+const IconCopy = ({ size = 14, color = 'currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="9" y="9" width="13" height="13" rx="2" />
+    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+  </svg>
+);
+const IconRefresh = ({ size = 14, color = 'currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" />
+    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+  </svg>
+);
+const IconTicket = ({ size = 14, color = 'currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M2 9a3 3 0 0 1 0 6v3a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-3a3 3 0 0 1 0-6V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2z" />
+    <line x1="13" y1="5" x2="13" y2="19" strokeDasharray="3 3" />
+  </svg>
+);
+
+// Round icon-only button used across the Aksi column.
+const IconBtn = ({ onClick, disabled, title, color, bg, border, children }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    disabled={disabled}
+    title={title}
+    aria-label={title}
+    style={{
+      width: '30px', height: '30px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+      borderRadius: '8px', border: `1.5px solid ${border}`, background: bg, color,
+      cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.6 : 1, padding: 0,
+    }}
+  >
+    {children}
+  </button>
+);
+
 const AdminManageUser = () => {
   const [users, setUsers]         = useState([]);
   const [loading, setLoading]     = useState(true);
@@ -60,6 +122,9 @@ const AdminManageUser = () => {
   const [addForm, setAddForm] = useState({ full_name: '', email: '', password: '', role: 'student', gender: '', kelas: '' });
   const [addSubmitting, setAddSubmitting] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [mapelDropdownOpenId, setMapelDropdownOpenId] = useState(null);
+  const [loginAsId, setLoginAsId] = useState(null);
+  const mapelDropdownRef = useRef(null);
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);
@@ -67,7 +132,7 @@ const AdminManageUser = () => {
 
     const { data, error: fetchError } = await supabase
       .from('profiles')
-      .select('id, email, full_name, role, status, gender, kelas, created_at, mapel')
+      .select('id, email, full_name, role, status, gender, kelas, created_at, mapel, referral_code')
       .order('created_at', { ascending: false });
 
     setLoading(false);
@@ -87,6 +152,17 @@ const AdminManageUser = () => {
     const t = setTimeout(() => setToast(null), 3000);
     return () => clearTimeout(t);
   }, [toast]);
+
+  useEffect(() => {
+    if (mapelDropdownOpenId === null) return;
+    const handleClickOutside = (e) => {
+      if (mapelDropdownRef.current && !mapelDropdownRef.current.contains(e.target)) {
+        setMapelDropdownOpenId(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [mapelDropdownOpenId]);
 
   const filtered = useMemo(() => {
     return users.filter(u => {
@@ -203,6 +279,91 @@ const AdminManageUser = () => {
     setToast({ type: 'success', message: `Data profil ${name} telah dihapus.` });
   };
 
+  const handleLoginAs = async (id, name) => {
+    setLoginAsId(id);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const { data, error: fnError } = await supabase.functions.invoke('admin-login-as', {
+        body: { user_id: id },
+        headers: { Authorization: `Bearer ${session?.access_token}` },
+      });
+      if (fnError) throw new Error(fnError.message || 'Gagal membuat akses login.');
+      if (data?.error) throw new Error(data.error);
+      if (!data?.action_link) throw new Error('Link login tidak diterima dari server.');
+
+      window.open(data.action_link, '_blank', 'noopener,noreferrer');
+      setToast({
+        type: 'success',
+        message: `Tab baru dibuka untuk masuk sebagai ${name}. Gunakan jendela InPrivate/Incognito agar sesi admin Anda tidak ikut tertimpa.`,
+      });
+    } catch (err) {
+      setToast({ type: 'error', message: err.message });
+    } finally {
+      setLoginAsId(null);
+    }
+  };
+
+  const generateReferralCode = (name) => {
+    const base = (name || 'USER')
+      .toUpperCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^A-Z]/g, '')
+      .slice(0, 5) || 'USER';
+    const rand = Math.random().toString(36).slice(2, 6).toUpperCase();
+    return `${base}${rand}`;
+  };
+
+  const handleGenerateReferral = async (id, name) => {
+    setBusyId(id);
+    const code = generateReferralCode(name);
+    const { error: updateError } = await supabase
+      .from('profiles')
+      .update({ referral_code: code })
+      .eq('id', id);
+    setBusyId(null);
+
+    if (updateError) {
+      setToast({ type: 'error', message: `Gagal membuat kode referral untuk ${name}.` });
+      return;
+    }
+    setUsers(prev => prev.map(u => u.id === id ? { ...u, referral_code: code } : u));
+    setToast({ type: 'success', message: `Kode referral ${name}: ${code}` });
+  };
+
+  const handleCopyReferral = async (code) => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setToast({ type: 'success', message: `Kode ${code} disalin ke clipboard.` });
+    } catch {
+      setToast({ type: 'error', message: 'Gagal menyalin kode. Salin manual dari tabel.' });
+    }
+  };
+
+  const handleGenerateAllReferrals = async () => {
+    const targets = users.filter(u => !u.referral_code);
+    if (!targets.length) {
+      setToast({ type: 'success', message: 'Semua user sudah memiliki kode referral.' });
+      return;
+    }
+    setImporting(true);
+    let success = 0, fail = 0;
+    for (const u of targets) {
+      const code = generateReferralCode(u.full_name || u.email);
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ referral_code: code })
+        .eq('id', u.id);
+      if (updateError) fail++;
+      else success++;
+    }
+    setImporting(false);
+    setToast({
+      type: fail === 0 ? 'success' : 'error',
+      message: `Kode referral dibuat untuk ${success} user${fail ? `, ${fail} gagal` : ''}.`,
+    });
+    fetchUsers();
+  };
+
   const createUserViaEdgeFunction = async ({ full_name, email, password, role, status, gender, kelas }) => {
     const { data: { session } } = await supabase.auth.getSession();
     const { data, error: fnError } = await supabase.functions.invoke('create-user', {
@@ -263,6 +424,7 @@ const AdminManageUser = () => {
       Gender: GENDER_LABEL[u.gender] || '-',
       Kelas: u.role === 'student' ? (u.kelas || '-') : '-',
       Mapel: u.role === 'teacher' ? (u.mapel || []).join(', ') : '-',
+      'Kode Referral': u.referral_code || '-',
       Status: STATUS_LABEL[u.status] || u.status,
       Terdaftar: u.created_at ? new Date(u.created_at).toLocaleDateString('id-ID') : '',
     }));
@@ -453,6 +615,18 @@ const AdminManageUser = () => {
         >
           📎 Ekspor Excel
         </button>
+        <button
+          onClick={handleGenerateAllReferrals}
+          disabled={importing}
+          style={{
+            padding: '9px 16px', borderRadius: '10px', border: `1.5px solid ${C.gold}`,
+            background: C.white, color: C.gold, fontSize: '0.85rem', fontWeight: 'bold',
+            cursor: importing ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
+            opacity: importing ? 0.6 : 1,
+          }}
+        >
+          🎟️ Generate Kode Referral
+        </button>
       </div>
 
       <div style={{
@@ -521,7 +695,7 @@ const AdminManageUser = () => {
             <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '960px' }}>
               <thead>
                 <tr style={{ background: C.cream }}>
-                  {['Nama', 'Email', 'Peran', 'Gender', 'Kelas', 'Mapel', 'Status', 'Terdaftar', 'Aksi'].map(h => (
+                  {['Nama', 'Email', 'Peran', 'Gender', 'Kelas', 'Mapel', 'Referral', 'Status', 'Terdaftar', 'Aksi'].map(h => (
                     <th key={h} style={{
                       textAlign: 'left', padding: '12px 16px', fontSize: '0.78rem',
                       color: C.gray, fontWeight: 'bold', textTransform: 'uppercase',
@@ -600,37 +774,122 @@ const AdminManageUser = () => {
                       </td>
                       <td style={{ padding: '12px 16px' }}>
                         {u.role === 'teacher' ? (
-                          <select
-                            multiple
-                            value={u.mapel || []}
-                            disabled={isBusy}
-                            onChange={e => {
-                              const options = e.target.options;
-                              const selected = [];
-                              for (let i = 0; i < options.length; i++) {
-                                if (options[i].selected) selected.push(options[i].value);
-                              }
-                              handleMapelChange(u.id, u.full_name || u.email, selected);
-                            }}
-                            style={{
-                              width: '100%',
-                              minWidth: '120px',
-                              padding: '6px 10px',
-                              borderRadius: '8px',
-                              border: `1.5px solid ${C.border}`,
-                              fontSize: '0.83rem',
-                              fontFamily: 'inherit',
-                              color: C.dark,
-                              background: C.white,
-                              cursor: isBusy ? 'not-allowed' : 'pointer',
-                            }}
+                          <div
+                            ref={mapelDropdownOpenId === u.id ? mapelDropdownRef : null}
+                            style={{ position: 'relative', minWidth: '160px' }}
                           >
-                            {MAPEL_OPTIONS.map(m => (
-                              <option key={m} value={m}>{m}</option>
-                            ))}
-                          </select>
+                            <button
+                              type="button"
+                              disabled={isBusy}
+                              onClick={() => setMapelDropdownOpenId(mapelDropdownOpenId === u.id ? null : u.id)}
+                              style={{
+                                width: '100%',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                textAlign: 'left',
+                                padding: '6px 10px',
+                                borderRadius: '8px',
+                                border: `1.5px solid ${mapelDropdownOpenId === u.id ? C.gold : C.border}`,
+                                fontSize: '0.83rem',
+                                fontFamily: 'inherit',
+                                color: C.dark,
+                                background: C.white,
+                                cursor: isBusy ? 'not-allowed' : 'pointer',
+                              }}
+                            >
+                              {(u.mapel && u.mapel.length > 0) ? (
+                                <span style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', flex: 1 }}>
+                                  {u.mapel.map(m => (
+                                    <span key={m} style={{
+                                      background: C.goldBg, color: C.gold, fontSize: '0.72rem', fontWeight: 'bold',
+                                      padding: '2px 8px', borderRadius: '10px', whiteSpace: 'nowrap',
+                                    }}>
+                                      {m}
+                                    </span>
+                                  ))}
+                                </span>
+                              ) : (
+                                <span style={{ color: C.gray, flex: 1 }}>Pilih mapel</span>
+                              )}
+                              <span style={{ color: C.gray, fontSize: '0.7rem' }}>▾</span>
+                            </button>
+
+                            {mapelDropdownOpenId === u.id && (
+                              <div style={{
+                                position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 30,
+                                minWidth: '190px', background: C.white, border: `1.5px solid ${C.border}`,
+                                borderRadius: '10px', boxShadow: '0 8px 20px rgba(23,20,17,0.14)', padding: '6px',
+                              }}>
+                                {MAPEL_OPTIONS.map(m => {
+                                  const checked = (u.mapel || []).includes(m);
+                                  return (
+                                    <label
+                                      key={m}
+                                      style={{
+                                        display: 'flex', alignItems: 'center', gap: '9px', padding: '7px 8px',
+                                        borderRadius: '6px', cursor: 'pointer', fontSize: '0.83rem', color: C.dark,
+                                      }}
+                                      onMouseEnter={e => { e.currentTarget.style.background = C.cream; }}
+                                      onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={checked}
+                                        disabled={isBusy}
+                                        onChange={() => {
+                                          const current = u.mapel || [];
+                                          const next = checked ? current.filter(x => x !== m) : [...current, m];
+                                          handleMapelChange(u.id, u.full_name || u.email, next);
+                                        }}
+                                        style={{ accentColor: C.gold, width: '15px', height: '15px', cursor: 'pointer' }}
+                                      />
+                                      {m}
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
                         ) : (
                           <span style={{ color: C.gray, fontSize: '0.83rem' }}>-</span>
+                        )}
+                      </td>
+                      <td style={{ padding: '12px 16px' }}>
+                        {u.referral_code ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{
+                              fontFamily: 'monospace', fontSize: '0.82rem', fontWeight: 'bold',
+                              color: C.dark, background: C.cream, padding: '4px 8px', borderRadius: '6px',
+                              letterSpacing: '0.3px', whiteSpace: 'nowrap',
+                            }}>
+                              {u.referral_code}
+                            </span>
+                            <IconBtn
+                              title="Salin kode"
+                              color={C.gray} bg={C.white} border={C.border}
+                              onClick={() => handleCopyReferral(u.referral_code)}
+                            >
+                              <IconCopy />
+                            </IconBtn>
+                            <IconBtn
+                              title="Buat ulang kode"
+                              disabled={isBusy}
+                              color={C.gold} bg={C.white} border={C.border}
+                              onClick={() => handleGenerateReferral(u.id, u.full_name || u.email)}
+                            >
+                              <IconRefresh />
+                            </IconBtn>
+                          </div>
+                        ) : (
+                          <IconBtn
+                            title="Buat kode referral"
+                            disabled={isBusy}
+                            color={C.gold} bg={C.goldBg} border={C.gold}
+                            onClick={() => handleGenerateReferral(u.id, u.full_name || u.email)}
+                          >
+                            <IconTicket />
+                          </IconBtn>
                         )}
                       </td>
                       <td style={{ padding: '12px 16px' }}>
@@ -647,42 +906,43 @@ const AdminManageUser = () => {
                       <td style={{ padding: '12px 16px' }}>
                         <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                           {u.status !== 'approved' && (
-                            <button
+                            <IconBtn
+                              title="Setujui"
                               disabled={isBusy}
+                              color={C.white} bg={C.gold} border={C.gold}
                               onClick={() => handleStatusChange(u.id, u.full_name || u.email, 'approved')}
-                              style={{
-                                padding: '6px 12px', borderRadius: '8px', border: 'none',
-                                background: C.gold, color: C.white, fontSize: '0.78rem', fontWeight: 'bold',
-                                cursor: isBusy ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
-                              }}
                             >
-                              Setujui
-                            </button>
+                              <IconCheck />
+                            </IconBtn>
                           )}
                           {u.status !== 'rejected' && (
-                            <button
+                            <IconBtn
+                              title="Tolak"
                               disabled={isBusy}
+                              color={C.danger} bg={C.white} border={C.danger}
                               onClick={() => handleStatusChange(u.id, u.full_name || u.email, 'rejected')}
-                              style={{
-                                padding: '6px 12px', borderRadius: '8px', border: `1.5px solid ${C.danger}`,
-                                background: C.white, color: C.danger, fontSize: '0.78rem', fontWeight: 'bold',
-                                cursor: isBusy ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
-                              }}
                             >
-                              Tolak
-                            </button>
+                              <IconX />
+                            </IconBtn>
                           )}
-                          <button
+                          {(u.role === 'teacher' || u.role === 'student') && u.status === 'approved' && (
+                            <IconBtn
+                              title={loginAsId === u.id ? 'Membuka...' : `Masuk sebagai ${u.full_name || u.email}`}
+                              disabled={isBusy || loginAsId === u.id}
+                              color={C.gold} bg={C.white} border={C.gold}
+                              onClick={() => handleLoginAs(u.id, u.full_name || u.email)}
+                            >
+                              {loginAsId === u.id ? <IconRefresh /> : <IconLogIn />}
+                            </IconBtn>
+                          )}
+                          <IconBtn
+                            title="Hapus"
                             disabled={isBusy}
+                            color={C.gray} bg={C.white} border={C.border}
                             onClick={() => setConfirmDelete(u)}
-                            style={{
-                              padding: '6px 12px', borderRadius: '8px', border: `1.5px solid ${C.border}`,
-                              background: C.white, color: C.gray, fontSize: '0.78rem', fontWeight: 'bold',
-                              cursor: isBusy ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
-                            }}
                           >
-                            Hapus
-                          </button>
+                            <IconTrash />
+                          </IconBtn>
                         </div>
                       </td>
                     </tr>

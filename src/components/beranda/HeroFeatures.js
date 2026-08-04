@@ -12,10 +12,10 @@ const HeroFeatures = () => {
   };
 
   const featuresData = [
-    { icon: 'fa-user-friends', title: 'Pendekatan Personal', desc: 'Belajar sesuai kebutuhan setiap siswa' },
-    { icon: 'fa-layer-group', title: 'Materi Terstruktur', desc: 'Disusun berbagai materi yang relevan' },
-    { icon: 'fa-chart-line', title: 'Evaluasi Berkala', desc: 'Monitoring progress secara rutin' },
-    { icon: 'fa-laptop-house', title: 'Belajar Fleksibel', desc: 'Online maupun offline sesuai kesepakatan' }
+    { icon: 'fa-user-friends', emoji: '🤝', title: 'Pendekatan Personal', desc: 'Belajar sesuai kebutuhan setiap siswa' },
+    { icon: 'fa-layer-group', emoji: '📚', title: 'Materi Terstruktur', desc: 'Disusun berbagai materi yang relevan' },
+    { icon: 'fa-chart-line', emoji: '📈', title: 'Evaluasi Berkala', desc: 'Monitoring progress secara rutin' },
+    { icon: 'fa-laptop-house', emoji: '💻', title: 'Belajar Fleksibel', desc: 'Online maupun offline sesuai kesepakatan' }
   ];
 
   const navigate = useNavigate();
@@ -74,26 +74,43 @@ const HeroFeatures = () => {
             gridRow: '2',
             gridColumn: idx + 1,
             background: 'white',
-            padding: '1.2rem',
+            padding: '1.5rem 1.2rem 1.2rem',
             borderRadius: '24px',
             boxShadow: '0 10px 20px rgba(0,0,0,0.1), 0 6px 6px rgba(0,0,0,0.05)',
-            transition: 'transform 0.2s, box-shadow 0.2s',
+            transition: 'transform 0.25s ease, box-shadow 0.25s ease',
             cursor: 'pointer',
             height: '100%',
             display: 'flex',
-            flexDirection: 'column'
+            flexDirection: 'column',
+            alignItems: 'flex-start',
+            border: '1px solid transparent'
           }}
           onMouseEnter={(e) => {
-            e.currentTarget.style.transform = 'translateY(-5px)';
-            e.currentTarget.style.boxShadow = '0 20px 25px -5px rgba(0,0,0,0.15), 0 10px 10px -5px rgba(0,0,0,0.05)';
+            e.currentTarget.style.transform = 'translateY(-6px)';
+            e.currentTarget.style.boxShadow = '0 20px 25px -5px rgba(180,150,75,0.25), 0 10px 10px -5px rgba(0,0,0,0.05)';
+            e.currentTarget.style.border = '1px solid rgba(180,150,75,0.3)';
           }}
           onMouseLeave={(e) => {
             e.currentTarget.style.transform = 'translateY(0)';
             e.currentTarget.style.boxShadow = '0 10px 20px rgba(0,0,0,0.1), 0 6px 6px rgba(0,0,0,0.05)';
+            e.currentTarget.style.border = '1px solid transparent';
           }}>
-            <i className={`fas ${f.icon}`} style={{ fontSize: '1.6rem', color: '#b4964b', marginBottom: '12px', display: 'block' }}></i>
-            <h3 style={{ marginBottom: '6px', color: '#171411', fontSize: '0.95rem' }}>{f.title}</h3>
-            <p style={{ color: '#444242', margin: 0, fontSize: '0.88rem' }}>{f.desc}</p>
+            <div style={{
+              width: '52px',
+              height: '52px',
+              borderRadius: '16px',
+              background: 'linear-gradient(135deg, #b4964b 0%, #d9b968 100%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginBottom: '14px',
+              boxShadow: '0 6px 14px rgba(180,150,75,0.35)'
+            }}>
+              <span style={{ fontSize: '1.5rem', lineHeight: 1 }} role="img" aria-hidden="true">{f.emoji}</span>
+              <i className={`fas ${f.icon}`} style={{ display: 'none' }}></i>
+            </div>
+            <h3 style={{ marginBottom: '6px', color: '#171411', fontSize: '0.95rem', fontWeight: 'bold' }}>{f.title}</h3>
+            <p style={{ color: '#444242', margin: 0, fontSize: '0.88rem', lineHeight: 1.5 }}>{f.desc}</p>
           </div>
         ))}
       </div>

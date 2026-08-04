@@ -23,6 +23,7 @@ import {
   FileText,
   Image as ImageIcon,
   Music,
+  Mic,
 } from "lucide-react";
 import { supabase } from "../../supabaseClient";
 
@@ -43,6 +44,21 @@ import { supabase } from "../../supabaseClient";
 // `due_date` sudah ada di skema lama, namun sekarang sengaja dibiarkan
 // kosong sampai tugas dibagikan ke siswa (lihat ShareModal) — tidak lagi
 // diminta saat tugas pertama kali dibuat.
+//
+// Catatan migrasi tambahan — tenggat waktu kini menyertakan JAM, bukan
+// cuma tanggal. Kalau kolom `due_date` masih bertipe `date`, ubah ke
+// `timestamp` (tanpa timezone) supaya jam ikut tersimpan:
+//   alter table homework alter column due_date type timestamp using due_date::timestamp;
+// Baris lama yang cuma berisi tanggal (tanpa jam) tetap terbaca normal —
+// UI otomatis mengasumsikan jam 23:59 untuk data lama tersebut.
+//
+// Catatan migrasi tambahan — lepas publikasi (unpublish) & publish ulang:
+// tidak perlu kolom baru. Guru bisa mengembalikan `homework.status` dari
+// "published" ke "draft" (lihat handleUnpublish di HomeworkEditor) supaya
+// bebas merevisi soal, lalu mempublikasikan ulang (handlePublish akan
+// memakai ulang `share_code` yang sama kalau sudah pernah ada, jadi
+// link/kode yang sudah dipegang siswa tetap berlaku dan baris
+// `homework_assignments` yang sudah ada tidak perlu dibuat ulang).
 //
 // Catatan migrasi tambahan — dukungan gambar pada soal: tambahkan kolom
 // `image_url` (text, nullable) pada `homework_questions` jika belum ada:
@@ -81,6 +97,41 @@ import { supabase } from "../../supabaseClient";
 // Strategi penyimpanan soal: setiap kali disimpan, soal lama untuk homework_id
 // terkait dihapus lalu diinsert ulang sesuai state saat ini. Sederhana dan
 // cukup untuk skala kelas; untuk skala besar pertimbangkan diffing per-soal.
+//
+// Catatan migrasi tambahan — dukungan soal pilihan ganda: tambahkan 3 kolom
+// pada `homework_questions` jika belum ada:
+//   alter table homework_questions add column if not exists type text not null default 'isian';
+//   alter table homework_questions add column if not exists options jsonb;
+//   alter table homework_questions add column if not exists correct_option_id text;
+// `type` berisi 'isian' (format [blank] seperti sebelumnya), 'pilihan_ganda',
+// atau 'speaking'. Untuk 'pilihan_ganda', `options` berisi array
+// [{ id, text }] dan `correct_option_id` menyimpan id opsi yang benar;
+// kolom `blanks` dikosongkan ([]) untuk tipe ini. Soal lama tanpa kolom
+// `type` otomatis dibaca sebagai 'isian' lewat fallback di kode.
+//
+// Catatan migrasi tambahan — dukungan soal Speaking (siswa merekam jawaban
+// suara): tambahkan 1 kolom lagi pada `homework_questions`:
+//   alter table homework_questions add column if not exists reference_answer text;
+// `reference_answer` bersifat opsional, hanya catatan internal guru untuk
+// membantu menilai (mis. jawaban/pengucapan yang diharapkan) — TIDAK
+// ditampilkan ke siswa. Soal tipe 'speaking' tidak punya `blanks`/`options`/
+// `correct_option_id` (semua dikosongkan), dan tidak dinilai otomatis —
+// guru menilai manual lewat kolom skor di GradingPanel setelah mendengarkan
+// rekaman siswa.
+//
+// PENTING — StudentHomework.js (sisi siswa, tidak ada di file ini) juga
+// perlu diperbarui agar bisa merender & menilai soal bertipe
+// 'pilihan_ganda' dan 'speaking':
+// - 'pilihan_ganda': tampilkan `options` sebagai radio button, simpan id
+//   opsi yang dipilih siswa ke `answers[question_id]` (array 1 elemen:
+//   [optionId] agar formatnya konsisten dengan soal isian), lalu
+//   bandingkan dengan `correct_option_id` saat menghitung skor otomatis.
+// - 'speaking': sediakan tombol rekam (Web Audio/MediaRecorder), unggah
+//   hasil rekaman ke bucket Storage baru (mis. "homework-speaking-answers",
+//   public, dengan policy serupa "homework-audio"), lalu simpan public
+//   URL-nya ke `answers[question_id]` (array 1 elemen: [audioUrl]). Karena
+//   tidak ada penilaian otomatis untuk audio, skor soal ini TIDAK ikut
+//   dihitung ke `computeInteractiveScore` — guru menilainya manual.
 // ---------------------------------------------------------------------------
 
 /** Menghasilkan kode tugas acak 6 karakter, mis. "K3F9XA" */
@@ -91,31 +142,83 @@ function generateShareCode() {
 let idCounter = 1;
 const generateId = () => `q${idCounter++}_${Date.now().toString(36)}`;
 
+/**
+ * Mengubah nilai due_date dari Supabase (bisa berupa "YYYY-MM-DD" lama,
+ * "YYYY-MM-DD HH:mm:ss", atau string ISO dengan timezone) menjadi format
+ * yang dibutuhkan <input type="datetime-local">, yaitu "YYYY-MM-DDTHH:mm".
+ * Data lama yang cuma tanggal (belum punya jam) diasumsikan jam 23:59
+ * supaya tidak tampil kosong di form.
+ */
+function toDateTimeInputValue(value) {
+  if (!value) return "";
+  const normalized = String(value).replace(" ", "T");
+  if (/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+    return `${normalized}T23:59`;
+  }
+  return normalized.slice(0, 16);
+}
+
+/**
+ * Memformat due_date untuk ditampilkan ke guru, mis. "4 Agustus 2026, 23.59".
+ */
+function formatDueDateDisplay(value) {
+  if (!value) return "";
+  const normalized =
+    String(value).length === 10 ? `${value}T23:59` : String(value).replace(" ", "T");
+  const d = new Date(normalized);
+  if (Number.isNaN(d.getTime())) return value;
+  const tanggal = d.toLocaleDateString("id-ID", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+  const jam = d.toLocaleTimeString("id-ID", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  return `${tanggal}, ${jam}`;
+}
+
 const SUBJECT_OPTIONS = [
   "Matematika",
-  "Bahasa Indonesia",
+  "Fisika",
+  "Kimia",
   "Bahasa Inggris",
-  "IPA",
-  "IPS",
-  "PPKn",
-  "Seni Budaya",
-  "Lainnya",
+  "Bahasa Mandarin",
 ];
 
-const GRADE_OPTIONS = [
-  "Kelas 1",
-  "Kelas 2",
-  "Kelas 3",
-  "Kelas 4",
-  "Kelas 5",
-  "Kelas 6",
-  "Kelas 7",
-  "Kelas 8",
-  "Kelas 9",
-  "Kelas 10",
-  "Kelas 11",
-  "Kelas 12",
+// Tingkat kelas dikelompokkan per jenjang: SD (Kelas I-VI), SMP (Kelas
+// VII-IX), SMA (Kelas X-XII), dan Universitas (Semester 1-8). Dirender
+// sebagai <optgroup> di dropdown "Tingkat Kelas" supaya tetap satu field
+// tapi terlihat rapi per jenjang.
+const GRADE_GROUPS = [
+  {
+    label: "SD",
+    options: ["Kelas I", "Kelas II", "Kelas III", "Kelas IV", "Kelas V", "Kelas VI"],
+  },
+  {
+    label: "SMP",
+    options: ["Kelas VII", "Kelas VIII", "Kelas IX"],
+  },
+  {
+    label: "SMA",
+    options: ["Kelas X", "Kelas XI", "Kelas XII"],
+  },
+  {
+    label: "Universitas",
+    options: [
+      "Semester 1",
+      "Semester 2",
+      "Semester 3",
+      "Semester 4",
+      "Semester 5",
+      "Semester 6",
+      "Semester 7",
+      "Semester 8",
+    ],
+  },
 ];
+
 
 /**
  * Mengambil daftar unik siswa yang benar-benar diajar oleh guru yang sedang
@@ -200,13 +303,24 @@ function extractBlanks(text) {
   return matches.map((m) => m[1].trim()).filter(Boolean);
 }
 
+let optionIdCounter = 1;
+const generateOptionId = () => `opt${optionIdCounter++}_${Date.now().toString(36)}`;
+
+function createEmptyOption() {
+  return { id: generateOptionId(), text: "" };
+}
+
 function createEmptyQuestion() {
   return {
     id: generateId(),
+    type: "isian", // "isian" (format [blank]), "pilihan_ganda", atau "speaking"
     questionText: "",
     imageUrl: null,
     audioUrl: null,
     blanks: [],
+    options: [],
+    correctOptionId: null,
+    referenceAnswer: "", // catatan internal guru untuk soal speaking (opsional)
     points: 10,
   };
 }
@@ -228,9 +342,11 @@ function createEmptyHomework(overrides = {}) {
   };
 }
 
-/** Merender preview soal: gambar/audio (jika ada) + teks biasa + kotak blank untuk setiap [kata] */
-function QuestionPreview({ text, imageUrl, audioUrl }) {
+/** Merender preview soal: gambar/audio (jika ada) + teks biasa + kotak blank untuk setiap [kata], atau daftar opsi untuk soal pilihan ganda */
+function QuestionPreview({ text, imageUrl, audioUrl, type = "isian", options = [], correctOptionId = null }) {
   const parts = text.split(/(\[.+?\])/g).filter((p) => p !== "");
+  const isPilihanGanda = type === "pilihan_ganda";
+  const isSpeaking = type === "speaking";
 
   if (!text.trim() && !imageUrl && !audioUrl) {
     return (
@@ -239,6 +355,8 @@ function QuestionPreview({ text, imageUrl, audioUrl }) {
       </p>
     );
   }
+
+  const optionLetters = ["A", "B", "C", "D", "E", "F"];
 
   return (
     <div>
@@ -256,7 +374,7 @@ function QuestionPreview({ text, imageUrl, audioUrl }) {
           className="mb-2 w-full"
         />
       )}
-      {text.trim() && (
+      {text.trim() && !isPilihanGanda && !isSpeaking && (
         <p className="text-base leading-8 text-slate-700">
           {parts.map((part, i) => {
             const match = part.match(/^\[(.+?)\]$/);
@@ -274,6 +392,49 @@ function QuestionPreview({ text, imageUrl, audioUrl }) {
             return <span key={i}>{part}</span>;
           })}
         </p>
+      )}
+      {text.trim() && (isPilihanGanda || isSpeaking) && (
+        <p className="mb-2 text-base leading-7 text-slate-700">{text}</p>
+      )}
+      {isSpeaking && (
+        <div className="flex items-center gap-2 rounded-lg border border-dashed border-teal-300 bg-teal-50 px-3 py-3 text-sm text-teal-700">
+          <Mic size={18} className="shrink-0" />
+          Siswa akan merekam jawaban suara di sini
+        </div>
+      )}
+      {isPilihanGanda && (
+        <div className="space-y-1.5">
+          {options.map((opt, i) => {
+            const isCorrect = opt.id === correctOptionId;
+            return (
+              <div
+                key={opt.id || i}
+                className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm ${
+                  isCorrect
+                    ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+                    : "border-slate-200 bg-white text-slate-700"
+                }`}
+              >
+                <span
+                  className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
+                    isCorrect
+                      ? "bg-emerald-500 text-white"
+                      : "bg-slate-100 text-slate-500"
+                  }`}
+                >
+                  {optionLetters[i] || i + 1}
+                </span>
+                <span className="flex-1">{opt.text || "(opsi kosong)"}</span>
+                {isCorrect && <Check size={15} className="shrink-0 text-emerald-600" />}
+              </div>
+            );
+          })}
+          {options.length === 0 && (
+            <p className="text-sm italic text-slate-400">
+              Belum ada opsi jawaban…
+            </p>
+          )}
+        </div>
       )}
     </div>
   );
@@ -299,6 +460,78 @@ function QuestionEditor({ question, index, onChange, onDelete }) {
   const handlePointsChange = (value) => {
     const points = Math.max(0, Number(value) || 0);
     onChange(question.id, { ...question, points });
+  };
+
+  /**
+   * Beralih tipe soal antara "Isian", "Pilihan Ganda", dan "Speaking".
+   *
+   * PENTING: field milik tipe lain (mis. `correctOptionId`/`options` untuk
+   * Pilihan Ganda, `blanks` untuk Isian, `referenceAnswer` untuk Speaking)
+   * SENGAJA TIDAK direset di sini — hanya `type` yang berubah. Field yang
+   * tidak relevan dengan tipe aktif memang tidak dipakai (lihat
+   * `persistHomework`, `validateHomework`, dan `QuestionPreview`, yang
+   * semuanya sudah menyaring berdasarkan `q.type`), tapi datanya tetap
+   * disimpan di objek soal supaya kalau guru beralih tipe lalu balik lagi
+   * (mis. iseng klik "Isian" lalu klik "Pilihan Ganda" lagi), kunci
+   * jawaban / opsi yang sudah dibuat sebelumnya TIDAK hilang. Sebelumnya
+   * kode ini menyetel `correctOptionId: null` setiap ganti tipe — itulah
+   * penyebab kunci soal Pilihan Ganda tampak hilang.
+   */
+  const handleTypeChange = (type) => {
+    if (type === question.type) return;
+    if (type === "pilihan_ganda") {
+      onChange(question.id, {
+        ...question,
+        type,
+        options:
+          question.options && question.options.length >= 2
+            ? question.options
+            : [createEmptyOption(), createEmptyOption()],
+      });
+    } else if (type === "speaking") {
+      onChange(question.id, { ...question, type });
+    } else {
+      onChange(question.id, {
+        ...question,
+        type,
+        blanks: extractBlanks(question.questionText),
+      });
+    }
+  };
+
+  const handleOptionTextChange = (optionId, text) => {
+    onChange(question.id, {
+      ...question,
+      options: question.options.map((o) =>
+        o.id === optionId ? { ...o, text } : o
+      ),
+    });
+  };
+
+  const handleAddOption = () => {
+    if (question.options.length >= 6) return;
+    onChange(question.id, {
+      ...question,
+      options: [...question.options, createEmptyOption()],
+    });
+  };
+
+  const handleRemoveOption = (optionId) => {
+    if (question.options.length <= 2) return;
+    onChange(question.id, {
+      ...question,
+      options: question.options.filter((o) => o.id !== optionId),
+      correctOptionId:
+        question.correctOptionId === optionId ? null : question.correctOptionId,
+    });
+  };
+
+  const handleSetCorrectOption = (optionId) => {
+    onChange(question.id, { ...question, correctOptionId: optionId });
+  };
+
+  const handleReferenceAnswerChange = (value) => {
+    onChange(question.id, { ...question, referenceAnswer: value });
   };
 
   /**
@@ -453,16 +686,63 @@ function QuestionEditor({ question, index, onChange, onDelete }) {
         </button>
       </div>
 
+      {/* Toggle tipe soal */}
+      <div className="mb-3 inline-flex rounded-lg border border-slate-200 bg-slate-50 p-1">
+        <button
+          type="button"
+          onClick={() => handleTypeChange("isian")}
+          className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
+            question.type === "isian" || !question.type
+              ? "bg-white text-teal-700 shadow-sm"
+              : "text-slate-500 hover:text-slate-700"
+          }`}
+        >
+          Isian
+        </button>
+        <button
+          type="button"
+          onClick={() => handleTypeChange("pilihan_ganda")}
+          className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
+            question.type === "pilihan_ganda"
+              ? "bg-white text-teal-700 shadow-sm"
+              : "text-slate-500 hover:text-slate-700"
+          }`}
+        >
+          Pilihan Ganda
+        </button>
+        <button
+          type="button"
+          onClick={() => handleTypeChange("speaking")}
+          className={`inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium transition ${
+            question.type === "speaking"
+              ? "bg-white text-teal-700 shadow-sm"
+              : "text-slate-500 hover:text-slate-700"
+          }`}
+        >
+          <Mic size={13} />
+          Speaking
+        </button>
+      </div>
+
       <label className="mb-1 block text-xs font-medium text-slate-500">
-        Kalimat Soal (pilih kata lalu klik "Jadikan Blank", atau ketik manual
-        dengan format [kata])
+        {question.type === "pilihan_ganda"
+          ? "Kalimat Soal"
+          : question.type === "speaking"
+          ? "Pertanyaan / Instruksi Speaking"
+          : 'Kalimat Soal (pilih kata lalu klik "Jadikan Blank", atau ketik manual dengan format [kata])'}
       </label>
       <textarea
         ref={textareaRef}
         value={question.questionText}
         onChange={(e) => handleTextChange(e.target.value)}
         rows={3}
-        placeholder="Contoh: Sistem tata surya kita berpusat pada [Matahari]."
+        placeholder={
+          question.type === "pilihan_ganda"
+            ? "Contoh: Planet apa yang paling dekat dengan Matahari?"
+            : question.type === "speaking"
+            ? "Contoh: Ceritakan kegiatanmu hari ini dalam Bahasa Inggris (minimal 3 kalimat)."
+            : "Contoh: Sistem tata surya kita berpusat pada [Matahari]."
+        }
         className="w-full resize-none rounded-lg border border-slate-300 p-3 text-sm text-slate-800 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-100"
       />
 
@@ -553,14 +833,18 @@ function QuestionEditor({ question, index, onChange, onDelete }) {
       </div>
 
       <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-        <button
-          type="button"
-          onClick={handleMakeBlank}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-teal-50 px-3 py-1.5 text-xs font-medium text-teal-700 transition hover:bg-teal-100"
-        >
-          <Type size={14} />
-          Jadikan Blank
-        </button>
+        {question.type === "isian" ? (
+          <button
+            type="button"
+            onClick={handleMakeBlank}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-teal-50 px-3 py-1.5 text-xs font-medium text-teal-700 transition hover:bg-teal-100"
+          >
+            <Type size={14} />
+            Jadikan Blank
+          </button>
+        ) : (
+          <span />
+        )}
 
         <div className="flex items-center gap-2">
           <label className="text-xs font-medium text-slate-500">Poin</label>
@@ -574,8 +858,86 @@ function QuestionEditor({ question, index, onChange, onDelete }) {
         </div>
       </div>
 
-      {/* Jawaban terdeteksi */}
-      {question.blanks.length > 0 && (
+      {/* Editor opsi jawaban (khusus Pilihan Ganda) */}
+      {question.type === "pilihan_ganda" && (
+        <div className="mt-3 space-y-2">
+          <label className="mb-1 block text-xs font-medium text-slate-500">
+            Opsi Jawaban (pilih tombol bulat di kiri untuk menandai jawaban benar)
+          </label>
+          {question.options.map((opt, i) => (
+            <div key={opt.id} className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => handleSetCorrectOption(opt.id)}
+                aria-label={`Tandai opsi ${i + 1} sebagai jawaban benar`}
+                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition ${
+                  question.correctOptionId === opt.id
+                    ? "border-emerald-500 bg-emerald-500 text-white"
+                    : "border-slate-300 text-transparent hover:border-emerald-400"
+                }`}
+              >
+                <Check size={13} />
+              </button>
+              <input
+                type="text"
+                value={opt.text}
+                onChange={(e) => handleOptionTextChange(opt.id, e.target.value)}
+                placeholder={`Opsi ${i + 1}`}
+                className="flex-1 rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-800 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-100"
+              />
+              <button
+                type="button"
+                onClick={() => handleRemoveOption(opt.id)}
+                disabled={question.options.length <= 2}
+                aria-label={`Hapus opsi ${i + 1}`}
+                className="rounded-lg p-1.5 text-slate-400 transition hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <X size={16} />
+              </button>
+            </div>
+          ))}
+          <div className="flex items-center justify-between pt-1">
+            <button
+              type="button"
+              onClick={handleAddOption}
+              disabled={question.options.length >= 6}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-teal-50 px-3 py-1.5 text-xs font-medium text-teal-700 transition hover:bg-teal-100 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Plus size={14} />
+              Tambah Opsi
+            </button>
+            {!question.correctOptionId && (
+              <span className="text-xs font-medium text-amber-600">
+                Pilih salah satu opsi sebagai jawaban benar
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Catatan jawaban acuan (khusus Speaking, tidak terlihat siswa) */}
+      {question.type === "speaking" && (
+        <div className="mt-3">
+          <label className="mb-1 flex items-center gap-1.5 text-xs font-medium text-slate-500">
+            <Mic size={13} />
+            Catatan Jawaban Acuan (opsional, hanya guru — tidak dilihat siswa)
+          </label>
+          <textarea
+            rows={2}
+            value={question.referenceAnswer}
+            onChange={(e) => handleReferenceAnswerChange(e.target.value)}
+            placeholder="Contoh: jawaban minimal 3 kalimat, pengucapan kata 'weather' dan 'temperature' jelas."
+            className="w-full resize-none rounded-lg border border-slate-300 p-3 text-sm text-slate-800 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-100"
+          />
+          <p className="mt-1 text-xs text-slate-400">
+            Soal Speaking dinilai manual oleh guru setelah mendengarkan
+            rekaman siswa (lihat panel Penilaian).
+          </p>
+        </div>
+      )}
+
+      {/* Jawaban terdeteksi (khusus Isian) */}
+      {question.type === "isian" && question.blanks.length > 0 && (
         <div className="mt-3 flex flex-wrap items-center gap-1.5">
           <span className="text-xs font-medium text-slate-400">
             Kunci jawaban:
@@ -597,7 +959,14 @@ function QuestionEditor({ question, index, onChange, onDelete }) {
           <Eye size={13} />
           Preview Siswa
         </div>
-        <QuestionPreview text={question.questionText} imageUrl={question.imageUrl} audioUrl={question.audioUrl} />
+        <QuestionPreview
+          text={question.questionText}
+          imageUrl={question.imageUrl}
+          audioUrl={question.audioUrl}
+          type={question.type}
+          options={question.options}
+          correctOptionId={question.correctOptionId}
+        />
       </div>
     </div>
   );
@@ -706,11 +1075,11 @@ function ShareModal({
         <div className="mb-5">
           <label className="mb-1 flex items-center gap-1.5 text-xs font-medium text-slate-500">
             <Calendar size={13} />
-            Tenggat Waktu Pengerjaan
+            Tenggat Waktu Pengerjaan (Tanggal & Jam)
           </label>
           <div className="flex items-center gap-2">
             <input
-              type="date"
+              type="datetime-local"
               value={dueDate}
               onChange={(e) => onDueDateChange(e.target.value)}
               className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-800 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-100"
@@ -837,7 +1206,7 @@ function ShareModal({
  * select lewat PostgREST tidak bisa diandalkan — data siswa diambil lewat
  * dua query terpisah, sama seperti pola di `fetchTeacherStudents()`.
  */
-function PublishedHomeworkModal({ homeworkId, onClose, onSaved }) {
+function PublishedHomeworkModal({ homeworkId, onClose, onSaved, onEdit }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [homework, setHomework] = useState(null);
@@ -914,7 +1283,7 @@ function PublishedHomeworkModal({ homeworkId, onClose, onSaved }) {
             }))
             .sort((a, b) => a.name.localeCompare(b.name, "id"))
         );
-        setDueDateInput(hwRow.due_date || "");
+        setDueDateInput(toDateTimeInputValue(hwRow.due_date));
       } catch (err) {
         console.error("Gagal memuat detail tugas:", err);
         if (!cancelled) setError(err.message || "Gagal memuat detail tugas.");
@@ -1015,11 +1384,11 @@ function PublishedHomeworkModal({ homeworkId, onClose, onSaved }) {
             <div className="mb-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
               <label className="mb-1 flex items-center gap-1.5 text-xs font-medium text-slate-500">
                 <Calendar size={13} />
-                Tenggat Waktu Pengerjaan
+                Tenggat Waktu Pengerjaan (Tanggal & Jam)
               </label>
               <div className="flex items-center gap-2">
                 <input
-                  type="date"
+                  type="datetime-local"
                   value={dueDateInput}
                   onChange={(e) => setDueDateInput(e.target.value)}
                   className="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-100"
@@ -1095,7 +1464,14 @@ function PublishedHomeworkModal({ homeworkId, onClose, onSaved }) {
                         {q.points} poin
                       </span>
                     </div>
-                    <QuestionPreview text={q.question_text} imageUrl={q.image_url} audioUrl={q.audio_url} />
+                    <QuestionPreview
+                      text={q.question_text}
+                      imageUrl={q.image_url}
+                      audioUrl={q.audio_url}
+                      type={q.type}
+                      options={q.options || []}
+                      correctOptionId={q.correct_option_id}
+                    />
                   </div>
                 ))}
                 {questions.length === 0 && (
@@ -1108,13 +1484,23 @@ function PublishedHomeworkModal({ homeworkId, onClose, onSaved }) {
           </>
         )}
 
-        <div className="mt-6 flex justify-end">
+        <div className="mt-6 flex justify-end gap-2">
           <button
             onClick={onClose}
             className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
           >
             Tutup
           </button>
+          {onEdit && !loading && !error && (
+            <button
+              onClick={() => onEdit(homeworkId)}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-teal-700"
+              title="Buka di editor untuk merevisi soal — batalkan publikasi dulu di sana kalau perlu, lalu publikasikan ulang"
+            >
+              <PenLine size={16} />
+              Edit / Revisi Soal
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -1360,10 +1746,14 @@ function NewAssignmentModal({ folders, defaultFolderId, onCreate, onClose }) {
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-800 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-100"
               >
                 <option value="">Pilih kelas</option>
-                {GRADE_OPTIONS.map((g) => (
-                  <option key={g} value={g}>
-                    {g}
-                  </option>
+                {GRADE_GROUPS.map((group) => (
+                  <optgroup key={group.label} label={group.label}>
+                    {group.options.map((g) => (
+                      <option key={g} value={g}>
+                        {g}
+                      </option>
+                    ))}
+                  </optgroup>
                 ))}
               </select>
             </div>
@@ -1653,7 +2043,7 @@ function Dashboard({
                   {hw.dueDate && (
                     <span className="flex items-center gap-1 text-[11px] text-slate-400">
                       <Calendar size={11} />
-                      {hw.dueDate}
+                      {formatDueDateDisplay(hw.dueDate)}
                     </span>
                   )}
                 </div>
@@ -1943,27 +2333,83 @@ function GradingPanel({ homeworkId, questions }) {
                       <p className="mb-2 text-sm text-slate-700">
                         {q.questionText || q.question_text}
                       </p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {(q.blanks || []).map((key, bi) => {
-                          const val = given[bi] ?? "-";
-                          const correct =
-                            String(val).trim().toLowerCase() ===
-                            String(key).trim().toLowerCase();
+                      {q.type === "pilihan_ganda" ? (
+                        (() => {
+                          const options = q.options || [];
+                          const correctId = q.correctOptionId ?? q.correct_option_id;
+                          const chosenId = given[0];
+                          const chosenOpt = options.find((o) => o.id === chosenId);
+                          const isCorrect = chosenId != null && chosenId === correctId;
+                          const correctOpt = options.find((o) => o.id === correctId);
                           return (
-                            <span
-                              key={bi}
-                              className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                                correct
-                                  ? "bg-emerald-50 text-emerald-700"
-                                  : "bg-red-50 text-red-600"
-                              }`}
-                              title={`Kunci: ${key}`}
-                            >
-                              {val}
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span
+                                className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                                  isCorrect
+                                    ? "bg-emerald-50 text-emerald-700"
+                                    : "bg-red-50 text-red-600"
+                                }`}
+                                title={correctOpt ? `Kunci: ${correctOpt.text}` : undefined}
+                              >
+                                {chosenOpt ? chosenOpt.text : "Belum dijawab"}
+                              </span>
+                              {!isCorrect && correctOpt && (
+                                <span className="text-xs text-slate-400">
+                                  (Kunci: {correctOpt.text})
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })()
+                      ) : q.type === "speaking" ? (
+                        (() => {
+                          const recordingUrl = given[0];
+                          const referenceAnswer = q.referenceAnswer ?? q.reference_answer;
+                          return recordingUrl ? (
+                            <div className="space-y-1.5">
+                              <div className="flex items-center gap-2">
+                                <Mic size={14} className="shrink-0 text-teal-600" />
+                                <audio
+                                  src={recordingUrl}
+                                  controls
+                                  className="h-9 max-w-[280px]"
+                                />
+                              </div>
+                              {referenceAnswer && (
+                                <p className="text-xs text-slate-400">
+                                  Acuan guru: {referenceAnswer}
+                                </p>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-500">
+                              Belum ada rekaman
                             </span>
                           );
-                        })}
-                      </div>
+                        })()
+                      ) : (
+                        <div className="flex flex-wrap gap-1.5">
+                          {(q.blanks || []).map((key, bi) => {
+                            const val = given[bi] ?? "-";
+                            const correct =
+                              String(val).trim().toLowerCase() ===
+                              String(key).trim().toLowerCase();
+                            return (
+                              <span
+                                key={bi}
+                                className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                                  correct
+                                    ? "bg-emerald-50 text-emerald-700"
+                                    : "bg-red-50 text-red-600"
+                                }`}
+                                title={`Kunci: ${key}`}
+                              >
+                                {val}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -2022,7 +2468,7 @@ function HomeworkEditor({ initialHomework, onBack, onSaved }) {
     };
   }, [initialHomework.id]);
 
-  const [status, setStatus] = useState("draft"); // draft | saving | publishing | published
+  const [status, setStatus] = useState("draft"); // draft | saving | publishing | unpublishing | published
   const [shareInfo, setShareInfo] = useState(
     initialHomework.shareCode
       ? {
@@ -2038,7 +2484,9 @@ function HomeworkEditor({ initialHomework, onBack, onSaved }) {
   const [showShareModal, setShowShareModal] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
 
-  const [dueDateInput, setDueDateInput] = useState(initialHomework.dueDate || "");
+  const [dueDateInput, setDueDateInput] = useState(
+    toDateTimeInputValue(initialHomework.dueDate)
+  );
   const [assigning, setAssigning] = useState(false);
   const [assignMessage, setAssignMessage] = useState("");
   const [updatingDueDate, setUpdatingDueDate] = useState(false);
@@ -2052,6 +2500,18 @@ function HomeworkEditor({ initialHomework, onBack, onSaved }) {
     () => homework.questions.reduce((sum, q) => sum + (Number(q.points) || 0), 0),
     [homework.questions]
   );
+
+  // Ringkasan jumlah soal per tipe — ditampilkan di tab "Lembar Soal" supaya
+  // jelas isian, pilihan ganda, dan speaking memang bercampur dalam SATU
+  // lembar kerja/homework yang sama (bukan lembar terpisah per tipe).
+  const typeCounts = useMemo(() => {
+    const counts = { isian: 0, pilihan_ganda: 0, speaking: 0 };
+    homework.questions.forEach((q) => {
+      const t = q.type || "isian";
+      if (counts[t] !== undefined) counts[t] += 1;
+    });
+    return counts;
+  }, [homework.questions]);
 
   const updateField = (field, value) => {
     setHomework((prev) => ({ ...prev, [field]: value }));
@@ -2089,8 +2549,20 @@ function HomeworkEditor({ initialHomework, onBack, onSaved }) {
     if (homework.questions.length === 0) return "Tambahkan minimal satu soal.";
     const emptyQuestion = homework.questions.find((q) => !q.questionText.trim());
     if (emptyQuestion) return "Ada soal yang masih kosong.";
-    const noBlank = homework.questions.find((q) => q.blanks.length === 0);
-    if (noBlank) return "Setiap soal harus memiliki minimal satu bagian [blank].";
+
+    const noBlank = homework.questions.find(
+      (q) => q.type === "isian" && q.blanks.length === 0
+    );
+    if (noBlank) return "Setiap soal isian harus memiliki minimal satu bagian [blank].";
+
+    const pgQuestions = homework.questions.filter((q) => q.type === "pilihan_ganda");
+    const pgIncomplete = pgQuestions.find(
+      (q) => q.options.filter((o) => o.text.trim()).length < 2
+    );
+    if (pgIncomplete) return "Setiap soal pilihan ganda harus memiliki minimal 2 opsi terisi.";
+    const pgNoAnswer = pgQuestions.find((q) => !q.correctOptionId);
+    if (pgNoAnswer) return "Setiap soal pilihan ganda harus punya jawaban benar yang ditandai.";
+
     return null;
   };
 
@@ -2134,7 +2606,11 @@ function HomeworkEditor({ initialHomework, onBack, onSaved }) {
         question_text: q.questionText,
         image_url: q.imageUrl || null,
         audio_url: q.audioUrl || null,
-        blanks: q.blanks,
+        type: q.type || "isian",
+        blanks: q.type === "isian" ? q.blanks : [],
+        options: q.type === "pilihan_ganda" ? q.options : null,
+        correct_option_id: q.type === "pilihan_ganda" ? q.correctOptionId : null,
+        reference_answer: q.type === "speaking" ? q.referenceAnswer || null : null,
         points: q.points,
         order_index: index,
       }));
@@ -2151,23 +2627,77 @@ function HomeworkEditor({ initialHomework, onBack, onSaved }) {
     setStatus("saving");
     setSaveMessage("");
     try {
-      const hwData = await persistHomework({ status: "draft" });
+      // Pertahankan status yang sedang berjalan (draft/published) — dulu
+      // fungsi ini selalu memaksa status kembali ke "draft" setiap kali
+      // disimpan, sehingga tugas yang sudah terpublikasi diam-diam
+      // "ter-unpublish" tanpa sepengetahuan guru. Sekarang melepas
+      // publikasi hanya terjadi lewat tombol "Batalkan Publikasi" yang
+      // eksplisit (lihat handleUnpublish).
+      const hwData = await persistHomework({
+        status: homework.status === "published" ? "published" : "draft",
+      });
       setHomework((prev) => ({ ...prev, id: hwData.id }));
-      setSaveMessage("Draf berhasil disimpan.");
+      setSaveMessage(
+        homework.status === "published"
+          ? "Perubahan berhasil disimpan."
+          : "Draf berhasil disimpan."
+      );
       onSaved?.();
     } catch (err) {
       console.error(err);
-      setSaveMessage(`Gagal menyimpan draf: ${err.message || "Terjadi kesalahan"}`);
+      setSaveMessage(`Gagal menyimpan: ${err.message || "Terjadi kesalahan"}`);
     } finally {
-      setStatus("draft");
+      setStatus(homework.status === "published" ? "published" : "draft");
       setTimeout(() => setSaveMessage(""), 3000);
     }
   };
 
   /**
-   * Mempublikasikan tugas: simpan status "published" + share_code unik.
-   * Tenggat waktu BELUM ditulis di sini — pengguna akan diminta mengisinya
-   * di ShareModal, tepat sebelum tugas benar-benar dibagikan ke siswa.
+   * Melepaskan publikasi tugas (status "published" -> "draft") TANPA
+   * menyentuh share_code, tenggat waktu, maupun baris homework_assignments
+   * yang sudah ada. Tujuannya supaya guru bisa merevisi soal dengan bebas,
+   * lalu mempublikasikan ulang lewat handlePublish di bawah — yang secara
+   * otomatis memakai ulang share_code lama, jadi link/kode yang sudah
+   * dipegang siswa tetap berlaku dan mereka tidak perlu ditugaskan ulang.
+   */
+  const handleUnpublish = async () => {
+    if (!homework.id) return;
+    setStatus("unpublishing");
+    setSaveMessage("");
+    try {
+      const { error } = await supabase
+        .from("homework")
+        .update({ status: "draft" })
+        .eq("id", homework.id);
+      if (error) throw error;
+
+      setHomework((prev) => ({ ...prev, status: "draft" }));
+      setSaveMessage(
+        "Publikasi dibatalkan. Silakan revisi soal, lalu publikasikan ulang — siswa yang sama akan tetap memakai kode/link yang sama."
+      );
+      onSaved?.();
+    } catch (err) {
+      console.error(err);
+      setSaveMessage(
+        `Gagal membatalkan publikasi: ${err.message || "Terjadi kesalahan"}`
+      );
+    } finally {
+      setStatus("draft");
+      setTimeout(() => setSaveMessage(""), 4000);
+    }
+  };
+
+  /**
+   * Mempublikasikan (atau MEMPUBLIKASIKAN ULANG) tugas: simpan status
+   * "published" + share_code. Tenggat waktu BELUM ditulis di sini —
+   * pengguna akan diminta mengisinya di ShareModal, tepat sebelum tugas
+   * benar-benar dibagikan ke siswa.
+   *
+   * Kalau tugas ini sudah pernah punya share_code sebelumnya (mis. baru
+   * saja "Batalkan Publikasi" lalu direvisi), share_code LAMA dipakai
+   * ulang alih-alih membuat kode baru — supaya link/kode yang sudah
+   * dipegang siswa tetap valid dan baris homework_assignments yang sudah
+   * ada tidak perlu ditugaskan ulang dari nol.
    */
   const handlePublish = async () => {
     const validationError = validateHomework();
@@ -2179,7 +2709,7 @@ function HomeworkEditor({ initialHomework, onBack, onSaved }) {
 
     setStatus("publishing");
     try {
-      const shareCode = generateShareCode();
+      const shareCode = homework.shareCode || generateShareCode();
       const hwData = await persistHomework({
         status: "published",
         share_code: shareCode,
@@ -2189,7 +2719,12 @@ function HomeworkEditor({ initialHomework, onBack, onSaved }) {
         typeof window !== "undefined" ? window.location.origin : "https://app.sekolah.id"
       }/tugas/${hwData.share_code}`;
 
-      setHomework((prev) => ({ ...prev, id: hwData.id }));
+      setHomework((prev) => ({
+        ...prev,
+        id: hwData.id,
+        status: "published",
+        shareCode: hwData.share_code,
+      }));
       setShareInfo({ code: hwData.share_code, link });
       setShowShareModal(true);
       setStatus("published");
@@ -2424,10 +2959,14 @@ function HomeworkEditor({ initialHomework, onBack, onSaved }) {
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-800 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-100"
               >
                 <option value="">Pilih kelas</option>
-                {GRADE_OPTIONS.map((g) => (
-                  <option key={g} value={g}>
-                    {g}
-                  </option>
+                {GRADE_GROUPS.map((group) => (
+                  <optgroup key={group.label} label={group.label}>
+                    {group.options.map((g) => (
+                      <option key={g} value={g}>
+                        {g}
+                      </option>
+                    ))}
+                  </optgroup>
                 ))}
               </select>
             </div>
@@ -2454,7 +2993,7 @@ function HomeworkEditor({ initialHomework, onBack, onSaved }) {
               {homework.dueDate ? (
                 <span className="flex items-center gap-1 text-xs text-slate-400">
                   <Calendar size={13} />
-                  Tenggat: {homework.dueDate}
+                  Tenggat: {formatDueDateDisplay(homework.dueDate)}
                 </span>
               ) : (
                 <span className="text-xs text-slate-400">
@@ -2469,7 +3008,7 @@ function HomeworkEditor({ initialHomework, onBack, onSaved }) {
         {/* Tab: Lembar Soal */}
         {activeTab === "soal" && (
         <div className="rounded-xl border border-slate-200 bg-slate-100/60 p-5">
-          <div className="mb-4 flex items-center justify-between">
+          <div className="mb-1 flex items-center justify-between">
             <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-700">
               <ListChecks size={16} />
               Daftar Soal ({homework.questions.length})
@@ -2482,6 +3021,18 @@ function HomeworkEditor({ initialHomework, onBack, onSaved }) {
               Tambah Soal
             </button>
           </div>
+          <p className="mb-4 text-xs text-slate-400">
+            Isian, pilihan ganda, dan speaking boleh dicampur bebas dalam satu
+            lembar kerja ini — atur tipe tiap soal lewat tombol di kartu
+            masing-masing.
+            {homework.questions.length > 0 && (
+              <>
+                {" "}
+                Saat ini: {typeCounts.isian} Isian · {typeCounts.pilihan_ganda}{" "}
+                Pilihan Ganda · {typeCounts.speaking} Speaking.
+              </>
+            )}
+          </p>
 
           <div className="space-y-4">
             {homework.questions.map((q, i) => (
@@ -2532,10 +3083,10 @@ function HomeworkEditor({ initialHomework, onBack, onSaved }) {
             )}
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <button
               onClick={handleSaveDraft}
-              disabled={status === "saving" || status === "publishing"}
+              disabled={["saving", "publishing", "unpublishing"].includes(status)}
               className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {status === "saving" ? (
@@ -2546,18 +3097,33 @@ function HomeworkEditor({ initialHomework, onBack, onSaved }) {
               Simpan Draf
             </button>
 
-            {homework.status === "published" || shareInfo ? (
-              <button
-                onClick={() => setShowShareModal(true)}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-teal-700"
-              >
-                <Share2 size={16} />
-                Bagikan ke Siswa
-              </button>
+            {homework.status === "published" ? (
+              <>
+                <button
+                  onClick={handleUnpublish}
+                  disabled={["saving", "publishing", "unpublishing"].includes(status)}
+                  title="Kembalikan tugas ke draf supaya soal bisa direvisi, lalu publikasikan ulang ke siswa yang sama"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-700 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {status === "unpublishing" ? (
+                    <Loader2 size={16} className="animate-spin" />
+                  ) : (
+                    <X size={16} />
+                  )}
+                  Batalkan Publikasi
+                </button>
+                <button
+                  onClick={() => setShowShareModal(true)}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-teal-700"
+                >
+                  <Share2 size={16} />
+                  Bagikan ke Siswa
+                </button>
+              </>
             ) : (
               <button
                 onClick={handlePublish}
-                disabled={status === "saving" || status === "publishing"}
+                disabled={["saving", "publishing", "unpublishing"].includes(status)}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {status === "publishing" ? (
@@ -2565,7 +3131,7 @@ function HomeworkEditor({ initialHomework, onBack, onSaved }) {
                 ) : (
                   <Share2 size={16} />
                 )}
-                Publish & Bagikan
+                {homework.shareCode ? "Publikasikan Ulang" : "Publish & Bagikan"}
               </button>
             )}
           </div>
@@ -2746,10 +3312,14 @@ export default function TeacherHomework() {
         questions:
           (qRows || []).map((q) => ({
             id: q.id,
+            type: q.type || "isian",
             questionText: q.question_text,
             imageUrl: q.image_url || null,
             audioUrl: q.audio_url || null,
             blanks: q.blanks || [],
+            options: q.options || [],
+            correctOptionId: q.correct_option_id || null,
+            referenceAnswer: q.reference_answer || "",
             points: q.points,
           })) || [],
       });
@@ -2811,6 +3381,10 @@ export default function TeacherHomework() {
           homeworkId={viewingHomeworkId}
           onClose={() => setViewingHomeworkId(null)}
           onSaved={fetchHomeworkList}
+          onEdit={(id) => {
+            setViewingHomeworkId(null);
+            handleOpenHomework(id);
+          }}
         />
       )}
 

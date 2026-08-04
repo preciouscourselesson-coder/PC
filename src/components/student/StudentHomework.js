@@ -1,5 +1,5 @@
 // src/components/student/StudentHomework.js
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '../../supabaseClient';
 
 // ---------------------------------------------------------------------------
@@ -41,17 +41,36 @@ const computeInteractiveScore = (questions = [], answersMap = {}) => {
   let score = 0;
   let maxScore = 0;
   questions.forEach((q) => {
-    const blanks = q.blanks || [];
-    maxScore += q.points || 0;
-    if (blanks.length === 0) return;
+    const type = q.type || 'isian';
+    const points = q.points || 0;
+    maxScore += points;
     const given = answersMap[q.id] || [];
+
+    if (type === 'pilihan_ganda') {
+      // Nilai otomatis: cocokkan opsi yang dipilih siswa dengan correct_option_id.
+      const chosenId = given[0];
+      if (chosenId && q.correct_option_id && chosenId === q.correct_option_id) {
+        score += points;
+      }
+      return;
+    }
+
+    if (type === 'speaking') {
+      // Tidak dinilai otomatis — guru menilai manual lewat GradingPanel
+      // setelah mendengarkan rekaman siswa (lihat TeacherHomework.js).
+      return;
+    }
+
+    // Tipe 'isian' (default): cocokkan tiap [blank] dengan jawaban siswa.
+    const blanks = q.blanks || [];
+    if (blanks.length === 0) return;
     let correctCount = 0;
     blanks.forEach((expected, i) => {
       const userAnswer = String(given[i] || '').trim().toLowerCase();
       const correctAnswer = String(expected || '').trim().toLowerCase();
       if (userAnswer && userAnswer === correctAnswer) correctCount += 1;
     });
-    score += (correctCount / blanks.length) * (q.points || 0);
+    score += (correctCount / blanks.length) * points;
   });
   return { score: Math.round(score * 100) / 100, maxScore };
 };
@@ -66,8 +85,9 @@ const formatDeadline = (iso) => {
 // ─── Komponen Task Card (dengan aksen biru) ─────────────────────────────────
 const TaskCard = ({ task, onUpload, onWork, isMobile }) => {
   const isInteractive = task.type === 'interactive';
-  const isOverdue = new Date(task.deadline) < new Date() && task.status_pengumpulan !== 'Sudah';
-  const isToday = new Date(task.deadline).toDateString() === new Date().toDateString();
+  const hasMedia = isInteractive && (task.questions || []).some(q => q.image_url || q.audio_url);
+  const isOverdue = !!task.deadline && new Date(task.deadline) < new Date() && task.status_pengumpulan !== 'Sudah';
+  const isToday = !!task.deadline && new Date(task.deadline).toDateString() === new Date().toDateString();
   const isSubmitted = task.status_pengumpulan === 'Sudah';
 
   return (
@@ -94,6 +114,22 @@ const TaskCard = ({ task, onUpload, onWork, isMobile }) => {
                 borderRadius: '40px', fontSize: '0.68rem', fontWeight: 'bold',
               }}>
                 ✍️ Isian Interaktif
+              </span>
+            )}
+            {hasMedia && (
+              <span style={{
+                background: C.orangeBg, color: C.orange, padding: '1px 10px',
+                borderRadius: '40px', fontSize: '0.68rem', fontWeight: 'bold',
+              }}>
+                🖼️🔊 Ada Gambar/Audio
+              </span>
+            )}
+            {task.viaCode && (
+              <span style={{
+                background: C.primaryBg, color: C.primary, padding: '1px 10px',
+                borderRadius: '40px', fontSize: '0.68rem', fontWeight: 'bold',
+              }}>
+                🔑 Dibuka via Kode
               </span>
             )}
           </div>
@@ -222,131 +258,450 @@ const TaskCard = ({ task, onUpload, onWork, isMobile }) => {
   );
 };
 
+// ─── Rekam Jawaban Speaking (mic → Supabase Storage) ───────────────────────
+const SpeakingAnswerRecorder = ({ questionId, studentId, value, onChange, disabled }) => {
+  const [recording, setRecording] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState('');
+  const mediaRecorderRef = useRef(null);
+  const chunksRef = useRef([]);
+
+  const uploadRecording = async (blob) => {
+    setUploading(true);
+    setError('');
+    try {
+      const mimeType = blob.type || 'audio/webm';
+      const ext = mimeType.split('/')[1]?.split(';')[0] || 'webm';
+      const fileName = `${studentId}/${questionId}_${Date.now()}.${ext}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('homework-speaking-answers')
+        .upload(fileName, blob, { contentType: mimeType });
+      if (uploadError) throw uploadError;
+
+      const { data: publicUrlData } = supabase.storage
+        .from('homework-speaking-answers')
+        .getPublicUrl(fileName);
+
+      onChange(publicUrlData.publicUrl);
+    } catch (err) {
+      console.error(err);
+      setError('Gagal mengunggah rekaman: ' + err.message);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const startRecording = async () => {
+    setError('');
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setError('Perangkat/browser ini tidak mendukung perekaman audio.');
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const preferredType = ['audio/webm', 'audio/ogg', 'audio/mp4'].find(
+        (t) => typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)
+      );
+      const recorder = preferredType
+        ? new MediaRecorder(stream, { mimeType: preferredType })
+        : new MediaRecorder(stream);
+
+      chunksRef.current = [];
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
+      };
+      recorder.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(chunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+        await uploadRecording(blob);
+      };
+
+      mediaRecorderRef.current = recorder;
+      recorder.start();
+      setRecording(true);
+    } catch (err) {
+      console.error(err);
+      setError('Tidak bisa mengakses mikrofon: ' + err.message);
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && recording) {
+      mediaRecorderRef.current.stop();
+      setRecording(false);
+    }
+  };
+
+  const handleRemove = () => {
+    onChange('');
+    setError('');
+  };
+
+  return (
+    <div style={{ marginTop: '0.4rem' }}>
+      {value ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          <audio src={value} controls style={{ height: '36px', maxWidth: '260px' }} />
+          {!disabled && (
+            <button
+              type="button"
+              onClick={handleRemove}
+              style={{
+                padding: '4px 12px', borderRadius: '40px', border: `1.5px solid ${C.border}`,
+                background: 'transparent', color: C.gray, fontSize: '0.75rem', fontWeight: 'bold',
+                cursor: 'pointer', fontFamily: 'inherit',
+              }}
+            >
+              🔁 Rekam Ulang
+            </button>
+          )}
+        </div>
+      ) : (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={recording ? stopRecording : startRecording}
+            disabled={disabled || uploading}
+            style={{
+              padding: '6px 16px', borderRadius: '40px', border: 'none',
+              background: recording ? C.red : C.primary, color: C.white,
+              fontSize: '0.8rem', fontWeight: 'bold',
+              cursor: disabled || uploading ? 'not-allowed' : 'pointer',
+              opacity: disabled || uploading ? 0.6 : 1, fontFamily: 'inherit',
+            }}
+          >
+            {uploading ? 'Mengunggah...' : recording ? '⏹ Berhenti Merekam' : '🎙️ Mulai Merekam'}
+          </button>
+          {recording && (
+            <span style={{ color: C.red, fontSize: '0.78rem', fontWeight: 'bold' }}>
+              ● Sedang merekam...
+            </span>
+          )}
+        </div>
+      )}
+      {error && (
+        <div style={{ color: C.red, fontSize: '0.78rem', marginTop: '6px' }}>{error}</div>
+      )}
+    </div>
+  );
+};
+
+// ─── Media Soal: Gambar & Audio yang disisipkan guru (responsif desktop & HP) ─
+// Menampilkan gambar/audio soal dengan penanganan error (jika URL gagal
+// dimuat, siswa tetap melihat pesan yang jelas, bukan tampilan kosong),
+// ukuran yang menyesuaikan layar, dan gambar bisa di-tap untuk diperbesar
+// (penting di layar smartphone yang kecil).
+const QuestionMedia = ({ imageUrl, audioUrl, isMobile }) => {
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [imageError, setImageError] = useState(false);
+  const [audioError, setAudioError] = useState(false);
+
+  if (!imageUrl && !audioUrl) return null;
+
+  return (
+    <div style={{ marginBottom: '0.75rem' }}>
+      {imageUrl && (
+        imageError ? (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '8px',
+            background: C.redBg, color: C.red, borderRadius: '10px',
+            padding: '0.6rem 0.8rem', fontSize: '0.8rem', marginBottom: '0.5rem',
+          }}>
+            ⚠️ Gambar soal gagal dimuat. Coba muat ulang halaman.
+          </div>
+        ) : (
+          <div
+            onClick={() => setLightboxOpen(true)}
+            style={{ position: 'relative', display: 'inline-block', cursor: 'zoom-in', maxWidth: '100%', marginBottom: '0.5rem' }}
+          >
+            <img
+              src={imageUrl}
+              alt="Gambar soal dari guru"
+              loading="lazy"
+              onError={() => setImageError(true)}
+              style={{
+                display: 'block',
+                width: '100%',
+                maxWidth: isMobile ? '100%' : '420px',
+                maxHeight: isMobile ? '200px' : '260px',
+                objectFit: 'contain',
+                borderRadius: '10px',
+                border: `1.5px solid ${C.border}`,
+                background: C.cream,
+              }}
+            />
+            <span style={{
+              position: 'absolute', bottom: '6px', right: '6px',
+              background: 'rgba(0,0,0,0.55)', color: C.white,
+              fontSize: '0.65rem', padding: '2px 8px', borderRadius: '40px',
+              fontWeight: 'bold', pointerEvents: 'none',
+            }}>
+              🔍 Perbesar
+            </span>
+          </div>
+        )
+      )}
+
+      {audioUrl && (
+        audioError ? (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '8px',
+            background: C.redBg, color: C.red, borderRadius: '10px',
+            padding: '0.6rem 0.8rem', fontSize: '0.8rem',
+          }}>
+            ⚠️ Audio soal gagal dimuat. Coba muat ulang halaman.
+          </div>
+        ) : (
+          <audio
+            src={audioUrl}
+            controls
+            preload="metadata"
+            onError={() => setAudioError(true)}
+            style={{ width: '100%', maxWidth: isMobile ? '100%' : '380px', height: '38px', display: 'block' }}
+          />
+        )
+      )}
+
+      {lightboxOpen && !imageError && (
+        <div
+          onClick={() => setLightboxOpen(false)}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1200,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: '1.2rem', cursor: 'zoom-out',
+          }}
+        >
+          <img
+            src={imageUrl}
+            alt="Gambar soal (diperbesar)"
+            style={{ maxWidth: '100%', maxHeight: '100%', borderRadius: '8px', objectFit: 'contain' }}
+          />
+          <button
+            onClick={() => setLightboxOpen(false)}
+            aria-label="Tutup"
+            style={{
+              position: 'absolute', top: '1rem', right: '1rem',
+              background: 'rgba(255,255,255,0.15)', border: 'none', color: C.white,
+              width: '36px', height: '36px', borderRadius: '50%',
+              fontSize: '1.3rem', cursor: 'pointer', lineHeight: 1,
+            }}
+          >
+            ×
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ─── Modal Interaktif (dengan aksen biru) ──────────────────────────────────
-const InteractiveWorkModal = ({ task, answers, onAnswerChange, onSubmit, onClose, submitting, error }) => {
+// Ditampilkan FULL LAYAR (baik di desktop maupun smartphone) supaya soal,
+// gambar, dan audio dari guru terlihat lebih besar dan jelas saat dikerjakan.
+const InteractiveWorkModal = ({ task, answers, onAnswerChange, onSubmit, onClose, submitting, error, studentId, isMobile }) => {
+  // Kunci scroll halaman di belakang modal selama siswa mengerjakan soal.
+  useEffect(() => {
+    if (!task) return undefined;
+    const original = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = original; };
+  }, [task]);
+
   if (!task) return null;
   const isSubmitted = task.status_pengumpulan === 'Sudah';
 
   return (
     <div
-      onClick={onClose}
       style={{
-        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000,
-        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem',
+        position: 'fixed', inset: 0, background: C.white, zIndex: 1000,
+        display: 'flex', flexDirection: 'column', height: '100dvh',
       }}
     >
-      <div
-        onClick={e => e.stopPropagation()}
-        style={{
-          background: C.white, borderRadius: '20px', padding: '1.5rem',
-          maxWidth: '640px', width: '100%', maxHeight: '90vh', overflowY: 'auto',
-        }}
-      >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', marginBottom: '0.25rem' }}>
-          <div>
-            <h3 style={{ margin: 0, color: C.dark }}>{task.judul}</h3>
-            <p style={{ color: C.gray, fontSize: '0.85rem', margin: '4px 0 0' }}>
-              {task.mapel}{task.kelas ? ` • ${task.kelas}` : ''} • {(task.questions || []).length} soal
-            </p>
-          </div>
-          <button
-            onClick={onClose}
-            style={{ background: 'none', border: 'none', color: C.gray, fontSize: '1.3rem', cursor: 'pointer', lineHeight: 1 }}
-            aria-label="Tutup"
-          >
-            ×
-          </button>
-        </div>
-
-        {task.deskripsi && (
-          <p style={{ color: C.gray, fontSize: '0.85rem', lineHeight: 1.5, marginTop: '0.75rem' }}>
-            {task.deskripsi}
+      {/* Header — tetap terlihat (sticky) saat soal di-scroll */}
+      <div style={{
+        flexShrink: 0, borderBottom: `1.5px solid ${C.border}`,
+        padding: isMobile ? '0.8rem 1rem' : '1rem 2rem',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem',
+        background: C.white,
+      }}>
+        <div style={{ minWidth: 0 }}>
+          <h3 style={{ margin: 0, color: C.dark, fontSize: isMobile ? '1.05rem' : '1.25rem', overflowWrap: 'break-word' }}>
+            {task.judul}
+          </h3>
+          <p style={{ color: C.gray, fontSize: '0.85rem', margin: '4px 0 0' }}>
+            {task.mapel}{task.kelas ? ` • ${task.kelas}` : ''} • {(task.questions || []).length} soal
           </p>
-        )}
+        </div>
+        <button
+          onClick={onClose}
+          style={{
+            flexShrink: 0, background: C.cream, border: `1.5px solid ${C.border}`, color: C.gray,
+            width: '34px', height: '34px', borderRadius: '50%', fontSize: '1.3rem', cursor: 'pointer', lineHeight: 1,
+          }}
+          aria-label="Tutup"
+        >
+          ×
+        </button>
+      </div>
 
-        {isSubmitted && task.nilai !== null && task.nilai !== undefined && (
-          <div style={{
-            background: '#e6f4ee', color: C.green, borderRadius: '10px',
-            padding: '0.6rem 0.9rem', fontSize: '0.85rem', fontWeight: 'bold',
-            marginTop: '0.75rem',
-          }}>
-            🏆 Nilai Anda: {task.nilai}/{task.maxScore} — Anda bisa mengerjakan ulang untuk memperbaiki jawaban.
-          </div>
-        )}
+      {/* Konten soal — area yang bisa di-scroll, dibatasi lebar agar tetap nyaman dibaca di layar besar */}
+      <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
+        <div style={{
+          maxWidth: '760px', margin: '0 auto',
+          padding: isMobile ? '1rem' : '1.5rem 2rem',
+        }}>
+          {task.deskripsi && (
+            <p style={{ color: C.gray, fontSize: '0.85rem', lineHeight: 1.5, marginTop: 0 }}>
+              {task.deskripsi}
+            </p>
+          )}
 
-        <div style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
-          {(task.questions || []).map((q, qIdx) => {
-            const parts = buildQuestionParts(q.question_text || '');
-            const qAnswers = answers[q.id] || [];
-            return (
-              <div key={q.id} style={{ border: `1.5px solid ${C.border}`, borderRadius: '14px', padding: '1rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                  <span style={{
-                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                    width: '24px', height: '24px', borderRadius: '50%',
-                    background: C.primary, color: C.white, fontSize: '0.75rem', fontWeight: 'bold',
-                  }}>
-                    {qIdx + 1}
-                  </span>
-                  <span style={{ color: C.gray, fontSize: '0.75rem', fontWeight: 'bold' }}>
-                    {q.points} poin
-                  </span>
-                </div>
-                <p style={{ margin: 0, fontSize: '0.95rem', lineHeight: 2, color: C.dark }}>
-                  {parts.map((part, i) =>
-                    part.type === 'text' ? (
-                      <span key={i}>{part.value}</span>
-                    ) : (
-                      <input
-                        key={i}
-                        type="text"
-                        value={qAnswers[part.blankIndex] || ''}
-                        onChange={e => onAnswerChange(q.id, part.blankIndex, e.target.value)}
-                        placeholder="jawaban"
-                        disabled={submitting}
-                        style={{
-                          margin: '0 4px', minWidth: '90px', padding: '4px 8px',
-                          borderRadius: '8px', border: `1.5px solid ${C.primary}`,
-                          fontFamily: 'inherit', fontSize: '0.88rem', textAlign: 'center',
-                          background: C.cream, color: C.dark,
-                        }}
-                      />
-                    )
+          {isSubmitted && task.nilai !== null && task.nilai !== undefined && (
+            <div style={{
+              background: '#e6f4ee', color: C.green, borderRadius: '10px',
+              padding: '0.6rem 0.9rem', fontSize: '0.85rem', fontWeight: 'bold',
+              marginTop: '0.75rem',
+            }}>
+              🏆 Nilai Anda: {task.nilai}/{task.maxScore} — Anda bisa mengerjakan ulang untuk memperbaiki jawaban.
+            </div>
+          )}
+
+          <div style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
+            {(task.questions || []).map((q, qIdx) => {
+              const type = q.type || 'isian';
+              const qAnswers = answers[q.id] || [];
+              const parts = type === 'isian' ? buildQuestionParts(q.question_text || '') : null;
+
+              return (
+                <div key={q.id} style={{ border: `1.5px solid ${C.border}`, borderRadius: '14px', padding: isMobile ? '1rem' : '1.2rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                    <span style={{
+                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                      width: '26px', height: '26px', borderRadius: '50%',
+                      background: C.primary, color: C.white, fontSize: '0.8rem', fontWeight: 'bold',
+                    }}>
+                      {qIdx + 1}
+                    </span>
+                    <span style={{ color: C.gray, fontSize: '0.75rem', fontWeight: 'bold' }}>
+                      {q.points} poin
+                    </span>
+                  </div>
+
+                  <QuestionMedia imageUrl={q.image_url} audioUrl={q.audio_url} isMobile={isMobile} />
+
+                  {type === 'isian' && (
+                    <p style={{ margin: 0, fontSize: isMobile ? '1rem' : '1.05rem', lineHeight: 2.1, color: C.dark }}>
+                      {parts.map((part, i) =>
+                        part.type === 'text' ? (
+                          <span key={i}>{part.value}</span>
+                        ) : (
+                          <input
+                            key={i}
+                            type="text"
+                            value={qAnswers[part.blankIndex] || ''}
+                            onChange={e => onAnswerChange(q.id, part.blankIndex, e.target.value)}
+                            placeholder="jawaban"
+                            disabled={submitting}
+                            style={{
+                              margin: '0 4px', minWidth: '100px', padding: '5px 10px',
+                              borderRadius: '8px', border: `1.5px solid ${C.primary}`,
+                              fontFamily: 'inherit', fontSize: '0.95rem', textAlign: 'center',
+                              background: C.cream, color: C.dark,
+                            }}
+                          />
+                        )
+                      )}
+                    </p>
                   )}
-                </p>
-              </div>
-            );
-          })}
-        </div>
 
-        {error && (
-          <div style={{ color: C.red, fontSize: '0.82rem', marginTop: '1rem' }}>{error}</div>
-        )}
+                  {type === 'pilihan_ganda' && (
+                    <div>
+                      <p style={{ margin: '0 0 0.6rem', fontSize: isMobile ? '1rem' : '1.05rem', lineHeight: 1.5, color: C.dark }}>
+                        {q.question_text}
+                      </p>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {(q.options || []).map((opt) => {
+                          const checked = qAnswers[0] === opt.id;
+                          return (
+                            <label
+                              key={opt.id}
+                              style={{
+                                display: 'flex', alignItems: 'center', gap: '8px',
+                                padding: '10px 12px', borderRadius: '10px',
+                                border: `1.5px solid ${checked ? C.primary : C.border}`,
+                                background: checked ? C.primaryBg : C.white,
+                                cursor: submitting ? 'not-allowed' : 'pointer',
+                                fontSize: '0.92rem', color: C.dark,
+                              }}
+                            >
+                              <input
+                                type="radio"
+                                name={`q_${q.id}`}
+                                checked={checked}
+                                onChange={() => onAnswerChange(q.id, 0, opt.id)}
+                                disabled={submitting}
+                              />
+                              {opt.text}
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
 
-        <div style={{ display: 'flex', gap: '0.6rem', marginTop: '1.2rem', justifyContent: 'flex-end' }}>
-          <button
-            onClick={onClose}
-            disabled={submitting}
-            style={{
-              padding: '8px 16px', borderRadius: '10px', border: `1.5px solid ${C.border}`,
-              background: 'transparent', color: C.gray, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
-            }}
-          >
-            Tutup
-          </button>
-          <button
-            onClick={onSubmit}
-            disabled={submitting}
-            style={{
-              padding: '8px 20px', borderRadius: '10px', border: 'none',
-              background: submitting ? C.border : C.primary, color: C.white,
-              fontWeight: 700, cursor: submitting ? 'not-allowed' : 'pointer',
-              opacity: submitting ? 0.6 : 1, fontFamily: 'inherit',
-            }}
-          >
-            {submitting ? 'Mengirim...' : isSubmitted ? 'Kirim Ulang Jawaban' : 'Kirim Jawaban'}
-          </button>
+                  {type === 'speaking' && (
+                    <div>
+                      <p style={{ margin: '0 0 0.4rem', fontSize: isMobile ? '1rem' : '1.05rem', lineHeight: 1.5, color: C.dark }}>
+                        {q.question_text}
+                      </p>
+                      <SpeakingAnswerRecorder
+                        questionId={q.id}
+                        studentId={studentId}
+                        value={qAnswers[0] || ''}
+                        onChange={(url) => onAnswerChange(q.id, 0, url)}
+                        disabled={submitting}
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {error && (
+            <div style={{ color: C.red, fontSize: '0.82rem', marginTop: '1rem' }}>{error}</div>
+          )}
         </div>
+      </div>
+
+      {/* Footer — tetap terlihat (sticky) supaya tombol Kirim selalu terjangkau */}
+      <div style={{
+        flexShrink: 0, borderTop: `1.5px solid ${C.border}`, background: C.white,
+        padding: isMobile ? '0.7rem 1rem' : '0.9rem 2rem',
+        display: 'flex', gap: '0.6rem', justifyContent: 'flex-end',
+      }}>
+        <button
+          onClick={onClose}
+          disabled={submitting}
+          style={{
+            padding: '8px 16px', borderRadius: '10px', border: `1.5px solid ${C.border}`,
+            background: 'transparent', color: C.gray, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+          }}
+        >
+          Tutup
+        </button>
+        <button
+          onClick={onSubmit}
+          disabled={submitting}
+          style={{
+            padding: '8px 20px', borderRadius: '10px', border: 'none',
+            background: submitting ? C.border : C.primary, color: C.white,
+            fontWeight: 700, cursor: submitting ? 'not-allowed' : 'pointer',
+            opacity: submitting ? 0.6 : 1, fontFamily: 'inherit',
+          }}
+        >
+          {submitting ? 'Mengirim...' : isSubmitted ? 'Kirim Ulang Jawaban' : 'Kirim Jawaban'}
+        </button>
       </div>
     </div>
   );
@@ -385,6 +740,14 @@ const StudentHomework = () => {
   const [workAnswers, setWorkAnswers] = useState({});
   const [submittingAnswers, setSubmittingAnswers] = useState(false);
   const [workError, setWorkError] = useState('');
+
+  // State "Buka Tugas dengan Kode/Link" (opsional — siswa mengerjakan tugas
+  // yang dibagikan lewat kode/link dari guru, tanpa perlu ditugaskan lebih
+  // dulu lewat daftar siswa di TeacherHomework.js).
+  const [joinCodeInput, setJoinCodeInput] = useState('');
+  const [joining, setJoining] = useState(false);
+  const [joinError, setJoinError] = useState('');
+  const [joinSuccessMsg, setJoinSuccessMsg] = useState('');
 
   // ── Ambil data user (hanya studentId) ────────────────────────────────────────
   useEffect(() => {
@@ -467,7 +830,10 @@ const StudentHomework = () => {
             description,
             due_date,
             status,
-            homework_questions ( id, question_text, blanks, points, order_index )
+            homework_questions (
+              id, question_text, blanks, points, order_index,
+              image_url, audio_url, type, options, correct_option_id, reference_answer
+            )
           )
         `)
         .eq('student_id', studentId);
@@ -556,7 +922,7 @@ const StudentHomework = () => {
         result = result.filter(t => t.status_pengumpulan === 'Belum');
       } else if (filterStatus === 'Terlambat') {
         result = result.filter(t => {
-          const isOverdue = new Date(t.deadline) < new Date() && t.status_pengumpulan !== 'Sudah';
+          const isOverdue = !!t.deadline && new Date(t.deadline) < new Date() && t.status_pengumpulan !== 'Sudah';
           return isOverdue;
         });
       }
@@ -587,7 +953,7 @@ const StudentHomework = () => {
     const belum = tasks.filter(t => t.status_pengumpulan === 'Belum').length;
     const sudah = tasks.filter(t => t.status_pengumpulan === 'Sudah').length;
     const terlambat = tasks.filter(t => {
-      return new Date(t.deadline) < new Date() && t.status_pengumpulan !== 'Sudah';
+      return !!t.deadline && new Date(t.deadline) < new Date() && t.status_pengumpulan !== 'Sudah';
     }).length;
     const mapelStats = {};
     tasks.forEach(t => {
@@ -688,9 +1054,17 @@ const StudentHomework = () => {
   const openWorkModal = (task) => {
     const initialAnswers = {};
     (task.questions || []).forEach(q => {
-      const blanksLen = (q.blanks || []).length;
+      const type = q.type || 'isian';
       const existing = task.answers && task.answers[q.id];
-      initialAnswers[q.id] = Array.from({ length: blanksLen }, (_, i) => (existing && existing[i]) || '');
+      if (type === 'isian') {
+        const blanksLen = (q.blanks || []).length;
+        initialAnswers[q.id] = Array.from({ length: blanksLen }, (_, i) => (existing && existing[i]) || '');
+      } else {
+        // 'pilihan_ganda' (id opsi terpilih) & 'speaking' (URL rekaman) hanya
+        // butuh satu nilai, disimpan di index 0 supaya format tetap array
+        // seperti yang dibaca GradingPanel di TeacherHomework.js.
+        initialAnswers[q.id] = [(existing && existing[0]) || ''];
+      }
     });
     setWorkAnswers(initialAnswers);
     setWorkError('');
@@ -758,7 +1132,136 @@ const StudentHomework = () => {
     }
   };
 
-  // ─── SIDEBAR FILTER ──────────────────────────────────────────────────────
+  // ── Buka Tugas dengan Kode/Link (opsional) ────────────────────────────────
+  // Mengekstrak kode 6-karakter dari input siswa. Menerima baik kode polos
+  // (mis. "K3F9XA") maupun link lengkap (mis. "https://app.sekolah.id/tugas/K3F9XA").
+  const parseShareCodeInput = (raw) => {
+    if (!raw) return '';
+    let value = raw.trim();
+    const marker = '/tugas/';
+    const idx = value.indexOf(marker);
+    if (idx !== -1) {
+      value = value.slice(idx + marker.length);
+    }
+    value = value.split(/[?#/]/)[0].trim();
+    return value.toUpperCase();
+  };
+
+  /**
+   * Membuka tugas lewat kode/link yang dibagikan guru (lihat ShareModal &
+   * kolom `share_code` pada tabel `homework` di TeacherHomework.js), TANPA
+   * siswa harus lebih dulu dipilih guru lewat daftar siswa (homework_assignments).
+   * Ini bersifat opsional — tombol "📤 Upload Jawaban" / daftar tugas biasa
+   * tetap berjalan seperti sebelumnya untuk tugas yang memang ditugaskan.
+   *
+   * CATATAN SKEMA/RLS: setelah tugas ditemukan lewat `share_code`, kode ini
+   * mencoba mendaftarkan siswa ke `homework_assignments` (self-enroll) agar
+   * tugas otomatis muncul lagi di "Tugas Saya" pada kunjungan berikutnya.
+   * Ini best-effort: jika policy INSERT pada `homework_assignments` masih
+   * dibatasi hanya untuk guru pemilik tugas (lihat catatan di
+   * `handleAssignToStudents`, TeacherHomework.js), insert ini akan gagal
+   * secara diam-diam — siswa TETAP bisa mengerjakan & mengirim jawaban
+   * tugas ini sekarang, hanya saja perlu memasukkan kode yang sama lagi
+   * setelah reload. Agar permanen, tambahkan policy berikut di Supabase:
+   *   create policy "siswa gabung tugas via kode" on homework_assignments
+   *     for insert with check (auth.uid() = student_id);
+   * Selain itu, pastikan tabel `homework` punya policy SELECT yang
+   * mengizinkan siswa membaca tugas berstatus 'published' meski belum
+   * ditugaskan, mis.:
+   *   create policy "siswa lihat tugas published via kode" on homework
+   *     for select using (status = 'published');
+   */
+  const handleJoinByCode = async () => {
+    const code = parseShareCodeInput(joinCodeInput);
+    setJoinError('');
+    setJoinSuccessMsg('');
+
+    if (!code) {
+      setJoinError('Masukkan kode atau link tugas terlebih dahulu.');
+      return;
+    }
+    if (!studentId) {
+      setJoinError('Sesi belum siap, coba lagi sebentar.');
+      return;
+    }
+
+    setJoining(true);
+    try {
+      const { data: hwRow, error: hwError } = await supabase
+        .from('homework')
+        .select(`
+          id, title, subject, grade, description, due_date, status,
+          homework_questions (
+            id, question_text, blanks, points, order_index,
+            image_url, audio_url, type, options, correct_option_id, reference_answer
+          )
+        `)
+        .eq('share_code', code)
+        .maybeSingle();
+
+      if (hwError) throw hwError;
+      if (!hwRow || hwRow.status !== 'published') {
+        setJoinError('Kode/link tugas tidak ditemukan, atau tugas belum dipublikasikan guru.');
+        return;
+      }
+
+      // Best-effort self-enroll — lihat catatan RLS di atas fungsi ini.
+      try {
+        await supabase
+          .from('homework_assignments')
+          .insert({ homework_id: hwRow.id, student_id: studentId });
+      } catch (assignErr) {
+        console.warn('Gagal mendaftarkan tugas kode ke daftar tugas (RLS?):', assignErr);
+      }
+
+      const { data: subRow } = await supabase
+        .from('homework_submissions')
+        .select('*')
+        .eq('student_id', studentId)
+        .eq('homework_id', hwRow.id)
+        .maybeSingle();
+
+      const questions = (hwRow.homework_questions || [])
+        .slice()
+        .sort((a, b) => (a.order_index || 0) - (b.order_index || 0));
+      const maxScore = questions.reduce((sum, q) => sum + (q.points || 0), 0);
+
+      const newTask = {
+        id: `hw_${hwRow.id}`,
+        homeworkId: hwRow.id,
+        type: 'interactive',
+        judul: hwRow.title,
+        mapel: hwRow.subject,
+        kelas: hwRow.grade,
+        deskripsi: hwRow.description,
+        deadline: hwRow.due_date,
+        questions,
+        maxScore,
+        status_pengumpulan: subRow ? 'Sudah' : 'Belum',
+        nilai: subRow ? subRow.score : null,
+        submitted_at: subRow ? subRow.submitted_at : null,
+        answers: subRow ? subRow.answers : null,
+        viaCode: true,
+      };
+
+      setTasks(prev => {
+        const exists = prev.some(t => t.id === newTask.id);
+        return exists ? prev.map(t => (t.id === newTask.id ? newTask : t)) : [newTask, ...prev];
+      });
+      setMapelList(prev => (newTask.mapel && !prev.includes(newTask.mapel) ? [...prev, newTask.mapel] : prev));
+
+      setJoinCodeInput('');
+      setJoinSuccessMsg(`Tugas "${newTask.judul}" berhasil dibuka.`);
+      openWorkModal(newTask);
+    } catch (err) {
+      console.error(err);
+      setJoinError('Gagal membuka tugas: ' + err.message);
+    } finally {
+      setJoining(false);
+    }
+  };
+
+
   const Sidebar = () => {
     const isActiveStatus = (status) => filterStatus === status && filterMapel === 'Semua Mapel';
 
@@ -891,6 +1394,57 @@ const StudentHomework = () => {
             {errorMsg}
           </div>
         )}
+
+        {/* Kartu opsional: buka tugas lewat kode/link dari guru, tanpa
+            menunggu ditugaskan lewat daftar siswa */}
+        <div style={{
+          background: C.primaryBg,
+          border: `1.5px solid ${C.primary}`,
+          borderRadius: '16px',
+          padding: isMobile ? '1rem' : '1rem 1.5rem',
+          marginBottom: '1.5rem',
+        }}>
+          <h4 style={{ margin: '0 0 4px', color: C.dark, fontSize: '0.95rem', fontWeight: 'bold' }}>
+            🔑 Punya kode atau link tugas dari guru?
+          </h4>
+          <p style={{ margin: '0 0 0.7rem', color: C.gray, fontSize: '0.8rem' }}>
+            Opsional — masukkan kode (mis. K3F9XA) atau tempel link tugas untuk langsung mengerjakannya, tanpa perlu menunggu ditugaskan.
+          </p>
+          <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: '8px' }}>
+            <input
+              type="text"
+              value={joinCodeInput}
+              onChange={e => setJoinCodeInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') handleJoinByCode(); }}
+              placeholder="Kode tugas atau link, mis. K3F9XA"
+              disabled={joining}
+              style={{
+                flex: 1, padding: '9px 14px', borderRadius: '40px',
+                border: `1.5px solid ${C.border}`, fontFamily: 'inherit',
+                fontSize: '0.85rem', outline: 'none', background: C.white, color: C.dark,
+              }}
+            />
+            <button
+              onClick={handleJoinByCode}
+              disabled={joining || !joinCodeInput.trim()}
+              style={{
+                padding: '9px 20px', borderRadius: '40px', border: 'none',
+                background: joining || !joinCodeInput.trim() ? C.border : C.primary,
+                color: C.white, fontWeight: 'bold', fontSize: '0.85rem',
+                cursor: joining || !joinCodeInput.trim() ? 'not-allowed' : 'pointer',
+                fontFamily: 'inherit', whiteSpace: 'nowrap',
+              }}
+            >
+              {joining ? 'Membuka...' : '🚀 Buka Tugas'}
+            </button>
+          </div>
+          {joinError && (
+            <div style={{ color: C.red, fontSize: '0.78rem', marginTop: '6px' }}>{joinError}</div>
+          )}
+          {joinSuccessMsg && !joinError && (
+            <div style={{ color: C.green, fontSize: '0.78rem', marginTop: '6px' }}>{joinSuccessMsg}</div>
+          )}
+        </div>
 
         <div style={{
           display: 'flex',
@@ -1101,6 +1655,8 @@ const StudentHomework = () => {
           onClose={closeWorkModal}
           submitting={submittingAnswers}
           error={workError}
+          studentId={studentId}
+          isMobile={isMobile}
         />
       )}
     </>
