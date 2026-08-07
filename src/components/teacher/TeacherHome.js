@@ -105,26 +105,26 @@ const TeacherHome = () => {
   const [ujianBabOptions, setUjianBabOptions] = useState([]);
   const [submittingUjian, setSubmittingUjian] = useState(false);
 
-  const [showMateriForm, setShowMateriForm] = useState(false);
-  const [materiForm, setMateriForm] = useState({
-    mapel_id: '',
-    mapel_nama: '',
-    bab_id: '',
-    bab_nama: '',
-    file: null,
-    link: '',
-  });
   const [mapelOptions, setMapelOptions] = useState([]);
-  const [babOptions, setBabOptions] = useState([]);
-  const [submittingMateri, setSubmittingMateri] = useState(false);
+  // Arsip materi guru (skema baru -- sama seperti yang dipakai TeacherArsipMateri.js:
+  // mapel/bab/sub_bab teks bebas + kategori Pribadi/Sekolah/Request). Dipakai sebagai
+  // sumber pilihan pada modal "Kirim Materi" di bawah.
   const [materiArsip, setMateriArsip] = useState([]);
 
   const [showKirimMateri, setShowKirimMateri] = useState(false);
   const [selectedRequestId, setSelectedRequestId] = useState(null);
+  // Mode pengiriman materi untuk menjawab request: pilih dari arsip yang sudah ada,
+  // atau upload file baru (yang otomatis tersimpan ke arsip dengan kategori 'Request').
+  const [kirimMateriMode, setKirimMateriMode] = useState('arsip'); // 'arsip' | 'baru'
   const [selectedMateriId, setSelectedMateriId] = useState('');
   const [kirimMateriNote, setKirimMateriNote] = useState('');
+  const [kirimBaruForm, setKirimBaruForm] = useState({ judul: '', mapel: '', bab: '', bentuk: 'File', file: null, link: '' });
+  const [kirimMateriSubmitting, setKirimMateriSubmitting] = useState(false);
 
   const [studentNameMap, setStudentNameMap] = useState({});
+  // Profile id (auth uid) guru yang login -- dipakai sebagai materi_file.user_id
+  // saat guru upload materi baru langsung dari modal Kirim Materi.
+  const [profileId, setProfileId] = useState(null);
 
   const now = new Date();
 
@@ -196,13 +196,14 @@ const TeacherHome = () => {
     try {
       const { data: userData, error: userError } = await supabase.auth.getUser();
       if (userError) throw userError;
-      const profileId = userData?.user?.id;
-      if (!profileId) throw new Error('Tidak ada sesi login yang aktif.');
+      const currentProfileId = userData?.user?.id;
+      if (!currentProfileId) throw new Error('Tidak ada sesi login yang aktif.');
+      setProfileId(currentProfileId);
 
       const { data: guruData, error: guruError } = await supabase
         .from('guru')
         .select('*')
-        .eq('profile_id', profileId)
+        .eq('profile_id', currentProfileId)
         .single();
       if (guruError) throw guruError;
       setGuru(guruData);
@@ -265,7 +266,7 @@ const TeacherHome = () => {
       if (tugasError) throw tugasError;
       setUjianTerdekatList(tugasData || []);
 
-      await refreshMateriArsip(profileId);
+      await refreshMateriArsip(currentProfileId);
       await loadMapel();
     } catch (err) {
       console.error(err);
@@ -275,31 +276,22 @@ const TeacherHome = () => {
     }
   };
 
+  // Arsip materi guru (skema baru, sama seperti TeacherArsipMateri.js): dipakai untuk
+  // opsi "pilih dari arsip" pada modal Kirim Materi. Sengaja ambil status Dipublish dari
+  // semua kategori (Pribadi/Sekolah/Request) supaya guru bisa kirim materi apapun yang
+  // sudah pernah ia unggah, tidak dibatasi kategori tertentu.
   const refreshMateriArsip = async (userId) => {
     const { data: rows, error: fileError } = await supabase
       .from('materi_file')
-      .select('*')
+      .select('id, nama, mapel, bab, sub_bab, kategori, kelas, tipe, url, status')
       .eq('user_id', userId)
-      .order('created_at', { ascending: false });
+      .eq('status', 'Dipublish')
+      .order('tanggal', { ascending: false });
     if (fileError) {
       console.error(fileError);
       return;
     }
-    const list = rows || [];
-    const babIds = [...new Set(list.map(r => r.bab_id).filter(Boolean))];
-    let babMap = {};
-    if (babIds.length > 0) {
-      const { data: babRows, error: babError } = await supabase
-        .from('materi_bab')
-        .select('id, nama, mapel_id (id, nama)')
-        .in('id', babIds);
-      if (babError) {
-        console.error(babError);
-      } else {
-        babMap = Object.fromEntries((babRows || []).map(b => [b.id, b]));
-      }
-    }
-    setMateriArsip(list.map(r => ({ ...r, bab_id: r.bab_id ? (babMap[r.bab_id] || null) : null })));
+    setMateriArsip(rows || []);
   };
 
   const loadMapel = async () => {
@@ -308,16 +300,6 @@ const TeacherHome = () => {
       .select('*')
       .order('nama');
     if (!error) setMapelOptions(data || []);
-  };
-
-  const loadBab = async (mapelId) => {
-    if (!mapelId) { setBabOptions([]); return; }
-    const { data, error } = await supabase
-      .from('materi_bab')
-      .select('*')
-      .eq('mapel_id', mapelId)
-      .order('urutan');
-    if (!error) setBabOptions(data || []);
   };
 
   const loadUjianBab = async (mapelId) => {
@@ -505,51 +487,114 @@ const TeacherHome = () => {
     }
   };
 
-  // ========== KIRIM MATERI DARI ARSIP ==========
+  // ========== KIRIM MATERI (dari arsip, atau upload baru yang otomatis masuk arsip) ==========
   const openKirimMateri = (requestId) => {
+    const request = materiRequestList.find(m => m.id === requestId);
     setSelectedRequestId(requestId);
+    setKirimMateriMode('arsip');
     setSelectedMateriId('');
     setKirimMateriNote('');
+    setKirimBaruForm({ judul: request?.judul_materi || '', mapel: '', bab: '', bentuk: 'File', file: null, link: '' });
     setShowKirimMateri(true);
   };
 
-  const submitKirimMateri = async () => {
-    if (!selectedRequestId || !selectedMateriId) {
-      alert('Pilih materi yang akan dikirim.');
-      return;
+  const closeKirimMateri = () => {
+    setShowKirimMateri(false);
+    setSelectedRequestId(null);
+    setSelectedMateriId('');
+    setKirimMateriNote('');
+    setKirimBaruForm({ judul: '', mapel: '', bab: '', bentuk: 'File', file: null, link: '' });
+  };
+
+  // Menyelesaikan request materi + mengaitkan file materi (materi_file_id) yang menjawabnya,
+  // lalu memberi notifikasi ke siswa. Dipakai oleh kedua mode (pilih arsip / upload baru).
+  const selesaikanRequestDenganMateri = async (request, materiFileId, materiNama) => {
+    const catatan = `Materi "${materiNama}" telah dikirimkan.${kirimMateriNote ? ` Catatan: ${kirimMateriNote}` : ''}`;
+    const { error } = await supabase
+      .from('materi_request')
+      .update({
+        status: 'selesai',
+        catatan_guru: catatan,
+        responded_at: new Date().toISOString(),
+        materi_file_id: materiFileId,
+      })
+      .eq('id', request.id);
+    if (error) throw error;
+    if (request.siswa_id) {
+      await supabase.from('notifikasi').insert({
+        user_id: request.siswa_id,
+        pesan: `Guru telah mengirimkan materi "${materiNama}" untuk permintaan "${request.judul_materi}". Silakan cek materi di dashboard Anda.`,
+        link: null,
+      });
     }
+    setMateriRequestList(list => list.map(m => (
+      m.id === request.id ? { ...m, status: 'selesai', catatan_guru: catatan, materi_file_id: materiFileId } : m
+    )));
+  };
+
+  const submitKirimMateri = async () => {
+    const request = materiRequestList.find(m => m.id === selectedRequestId);
+    if (!request) { alert('Data permintaan tidak ditemukan.'); return; }
+
+    setKirimMateriSubmitting(true);
     try {
-      const request = materiRequestList.find(m => m.id === selectedRequestId);
-      const materi = materiArsip.find(m => m.id === selectedMateriId);
-      if (!request || !materi) throw new Error('Data tidak ditemukan.');
-      const { error } = await supabase
-        .from('materi_request')
-        .update({
-          status: 'selesai',
-          catatan_guru: `Materi "${materi.nama}" telah dikirimkan.${kirimMateriNote ? ` Catatan: ${kirimMateriNote}` : ''}`,
-          responded_at: new Date().toISOString(),
-        })
-        .eq('id', selectedRequestId);
-      if (error) throw error;
-      if (request?.siswa_id) {
-        await supabase.from('notifikasi').insert({
-          user_id: request.siswa_id,
-          pesan: `Guru telah mengirimkan materi "${materi.nama}" untuk permintaan "${request.judul_materi}". Silakan cek materi di dashboard Anda.`,
-          link: null,
-        });
+      if (kirimMateriMode === 'arsip') {
+        if (!selectedMateriId) { alert('Pilih materi yang akan dikirim.'); return; }
+        const materi = materiArsip.find(m => m.id === selectedMateriId);
+        if (!materi) throw new Error('Materi tidak ditemukan di arsip.');
+        await selesaikanRequestDenganMateri(request, materi.id, materi.nama);
+      } else {
+        // Mode upload baru: guru mengunggah file/link baru khusus untuk request ini.
+        // File ini otomatis tersimpan ke materi_file dengan kategori 'Request', sehingga
+        // langsung muncul juga di halaman Arsip Materi (TeacherArsipMateri.js).
+        if (!kirimBaruForm.judul.trim()) { alert('Isi judul materi.'); return; }
+        if (kirimBaruForm.bentuk === 'File' && !kirimBaruForm.file) { alert('Pilih file untuk diunggah.'); return; }
+        if (kirimBaruForm.bentuk === 'Link' && !kirimBaruForm.link.trim()) { alert('Isi tautan (link) materi.'); return; }
+
+        let finalUrl = '';
+        let tipe = 'link';
+        if (kirimBaruForm.bentuk === 'File') {
+          finalUrl = await uploadMateriFile(kirimBaruForm.file, profileId);
+          tipe = kirimBaruForm.file.type || kirimBaruForm.file.name.split('.').pop();
+        } else {
+          finalUrl = kirimBaruForm.link.trim();
+          tipe = 'link';
+        }
+
+        const { data: inserted, error: insertError } = await supabase
+          .from('materi_file')
+          .insert({
+            mapel: kirimBaruForm.mapel.trim() || null,
+            bab: kirimBaruForm.bab.trim() || null,
+            sub_bab: null,
+            user_id: profileId,
+            nama: kirimBaruForm.judul.trim(),
+            tipe,
+            diupload_oleh: guru?.nama || '',
+            tanggal: new Date().toISOString(),
+            url: finalUrl,
+            kelas: request.kelas || null,
+            deskripsi: request.deskripsi || null,
+            status: 'Dipublish',
+            kategori: 'Request',
+            folder_id: null,
+            bentuk: kirimBaruForm.bentuk,
+            pengajar: null,
+            jenis: null,
+          })
+          .select('id, nama, mapel, bab, sub_bab, kategori, kelas, tipe, url, status')
+          .single();
+        if (insertError) throw insertError;
+
+        setMateriArsip(prev => [inserted, ...prev]);
+        await selesaikanRequestDenganMateri(request, inserted.id, inserted.nama);
       }
-      setMateriRequestList(list => list.map(m =>
-        m.id === selectedRequestId
-          ? { ...m, status: 'selesai', catatan_guru: `Materi "${materi.nama}" telah dikirimkan.${kirimMateriNote ? ` Catatan: ${kirimMateriNote}` : ''}` }
-          : m
-      ));
-      setShowKirimMateri(false);
-      setSelectedRequestId(null);
-      setSelectedMateriId('');
-      setKirimMateriNote('');
+      closeKirimMateri();
     } catch (err) {
       console.error(err);
       alert('Gagal mengirim materi: ' + err.message);
+    } finally {
+      setKirimMateriSubmitting(false);
     }
   };
 
@@ -631,70 +676,6 @@ const TeacherHome = () => {
       .from('materi')
       .getPublicUrl(filePath);
     return urlData.publicUrl;
-  };
-
-  const submitMateri = async () => {
-    setSubmittingMateri(true);
-    setErrorMsg('');
-    try {
-      let mapelId = materiForm.mapel_id;
-      if (materiForm.mapel_id === 'new' && materiForm.mapel_nama) {
-        const { data: newMapel, error: mapelError } = await supabase
-          .from('materi_mapel')
-          .insert({ nama: materiForm.mapel_nama })
-          .select();
-        if (mapelError) throw mapelError;
-        mapelId = newMapel[0].id;
-        await loadMapel();
-      } else if (!materiForm.mapel_id) {
-        throw new Error('Pilih atau tambahkan mapel.');
-      }
-      let babId = materiForm.bab_id;
-      if (materiForm.bab_id === 'new' && materiForm.bab_nama) {
-        const { data: newBab, error: babError } = await supabase
-          .from('materi_bab')
-          .insert({ nama: materiForm.bab_nama, mapel_id: mapelId })
-          .select();
-        if (babError) throw babError;
-        babId = newBab[0].id;
-      } else if (!materiForm.bab_id) {
-        throw new Error('Pilih atau tambahkan bab.');
-      }
-      let fileUrl = null;
-      let fileTipe = null;
-      let fileNama = '';
-      if (materiForm.file) {
-        fileUrl = await uploadMateriFile(materiForm.file, guru.profile_id);
-        fileTipe = materiForm.file.type.startsWith('image/') ? 'image' : 'pdf';
-        fileNama = materiForm.file.name;
-      } else if (materiForm.link) {
-        fileUrl = materiForm.link;
-        fileTipe = 'link';
-        fileNama = 'Link Materi';
-      } else {
-        throw new Error('Pilih file atau masukkan link.');
-      }
-      const { error: fileError } = await supabase
-        .from('materi_file')
-        .insert({
-          bab_id: babId,
-          user_id: guru.profile_id,
-          nama: fileNama,
-          tipe: fileTipe,
-          diupload_oleh: guru.nama,
-          tanggal: new Date().toISOString().split('T')[0],
-          url: fileUrl,
-        });
-      if (fileError) throw fileError;
-      setShowMateriForm(false);
-      setMateriForm({ mapel_id: '', mapel_nama: '', bab_id: '', bab_nama: '', file: null, link: '' });
-      await refreshMateriArsip(guru.profile_id);
-    } catch (err) {
-      console.error(err);
-      setErrorMsg(err.message || 'Gagal menyimpan materi.');
-    } finally {
-      setSubmittingMateri(false);
-    }
   };
 
   // ========== RENDER ==========
@@ -1018,7 +999,9 @@ const TeacherHome = () => {
           <h3 style={{ margin: 0, color: C.dark, fontSize: isMobile ? '1rem' : '1.17rem' }}>
             Materi Request ({materiRequestList.filter(m => m.status !== 'selesai' && m.status !== 'ditolak').length})
           </h3>
-          <button style={{ ...linkBtn, fontSize: isMobile ? '1rem' : '0.9rem', padding: '8px 0' }} onClick={() => setShowMateriForm(true)}>+ Tambah Materi</button>
+          <span style={{ fontSize: isMobile ? '0.78rem' : '0.8rem', color: C.gray }}>
+            Untuk mengunggah materi baru (bukan menjawab request), buka menu <strong>Arsip Materi</strong>.
+          </span>
         </div>
         {loading ? (
           <p style={{ fontSize: '0.85rem', color: C.gray }}>Memuat...</p>
@@ -1108,28 +1091,122 @@ const TeacherHome = () => {
         )}
       </div>
 
-      {/* Modal Kirim Materi dari Arsip */}
+      {/* Modal Kirim Materi: pilih dari arsip yang sudah ada, atau upload baru
+          (yang otomatis tersimpan ke arsip dengan kategori 'Request'). */}
       {showKirimMateri && (
         <div style={modalOverlayStyle}>
           <div style={{ ...modalContentStyle }}>
-            <h3 style={{ margin: '0 0 1rem 0', color: C.dark, fontSize: isMobile ? '1.2rem' : '1.17rem' }}>Kirim Materi dari Arsip</h3>
-            <p style={{ fontSize: '0.85rem', color: C.gray, margin: '-0.5rem 0 0.5rem 0' }}>
-              Pilih materi yang sudah pernah Anda unggah untuk dikirim ke siswa.
-            </p>
-            <label style={{ fontSize: isMobile ? '0.95rem' : '0.85rem', color: C.gray }}>Pilih Materi</label>
-            <select
-              value={selectedMateriId}
-              onChange={(e) => setSelectedMateriId(e.target.value)}
-              style={{ padding: isMobile ? '12px' : '8px', borderRadius: '8px', border: `1px solid ${C.border}`, fontSize: isMobile ? '16px' : '0.9rem' }}
-            >
-              <option value="">-- Pilih Materi --</option>
-              {materiArsip.length === 0 && <option value="" disabled>Belum ada materi di arsip.</option>}
-              {materiArsip.map(m => (
-                <option key={m.id} value={m.id}>
-                  {m.nama} - {m.bab_id?.nama} ({m.bab_id?.mapel_id?.nama})
-                </option>
+            <h3 style={{ margin: '0 0 0.75rem 0', color: C.dark, fontSize: isMobile ? '1.2rem' : '1.17rem' }}>Kirim Materi</h3>
+
+            <div style={{ display: 'flex', gap: '6px', background: C.cream, padding: '4px', borderRadius: '10px', marginBottom: '0.75rem' }}>
+              {[{ v: 'arsip', l: 'Pilih dari Arsip' }, { v: 'baru', l: 'Upload Materi Baru' }].map(opt => (
+                <button
+                  key={opt.v}
+                  type="button"
+                  onClick={() => setKirimMateriMode(opt.v)}
+                  style={{
+                    flex: 1, padding: '8px 10px', borderRadius: '7px', border: 'none', cursor: 'pointer',
+                    fontFamily: 'inherit', fontSize: isMobile ? '0.85rem' : '0.82rem',
+                    fontWeight: kirimMateriMode === opt.v ? 'bold' : 'normal',
+                    background: kirimMateriMode === opt.v ? C.white : 'transparent',
+                    color: kirimMateriMode === opt.v ? C.dark : C.gray,
+                  }}
+                >
+                  {opt.l}
+                </button>
               ))}
-            </select>
+            </div>
+
+            {kirimMateriMode === 'arsip' ? (
+              <>
+                <p style={{ fontSize: '0.85rem', color: C.gray, margin: '0 0 0.5rem 0' }}>
+                  Pilih materi yang sudah pernah Anda unggah untuk dikirim ke siswa.
+                </p>
+                <label style={{ fontSize: isMobile ? '0.95rem' : '0.85rem', color: C.gray }}>Pilih Materi</label>
+                <select
+                  value={selectedMateriId}
+                  onChange={(e) => setSelectedMateriId(e.target.value)}
+                  style={{ padding: isMobile ? '12px' : '8px', borderRadius: '8px', border: `1px solid ${C.border}`, fontSize: isMobile ? '16px' : '0.9rem' }}
+                >
+                  <option value="">-- Pilih Materi --</option>
+                  {materiArsip.length === 0 && <option value="" disabled>Belum ada materi di arsip.</option>}
+                  {materiArsip.map(m => (
+                    <option key={m.id} value={m.id}>
+                      {m.nama}{m.mapel ? ` - ${m.mapel}` : ''}{m.bab ? ` (${m.bab})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </>
+            ) : (
+              <>
+                <p style={{ fontSize: '0.85rem', color: C.gray, margin: '0 0 0.5rem 0' }}>
+                  File/link ini akan otomatis tersimpan juga di Arsip Materi (kategori "Dari Request").
+                </p>
+                <label style={{ fontSize: isMobile ? '0.95rem' : '0.85rem', color: C.gray }}>Judul Materi</label>
+                <input
+                  type="text"
+                  value={kirimBaruForm.judul}
+                  onChange={(e) => setKirimBaruForm({ ...kirimBaruForm, judul: e.target.value })}
+                  style={{ padding: isMobile ? '12px' : '8px', borderRadius: '8px', border: `1px solid ${C.border}`, fontSize: isMobile ? '16px' : '0.9rem' }}
+                />
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ fontSize: isMobile ? '0.95rem' : '0.85rem', color: C.gray }}>Mapel (opsional)</label>
+                    <input
+                      type="text"
+                      value={kirimBaruForm.mapel}
+                      onChange={(e) => setKirimBaruForm({ ...kirimBaruForm, mapel: e.target.value })}
+                      style={{ width: '100%', padding: isMobile ? '12px' : '8px', borderRadius: '8px', border: `1px solid ${C.border}`, fontSize: isMobile ? '16px' : '0.9rem', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ fontSize: isMobile ? '0.95rem' : '0.85rem', color: C.gray }}>Bab (opsional)</label>
+                    <input
+                      type="text"
+                      value={kirimBaruForm.bab}
+                      onChange={(e) => setKirimBaruForm({ ...kirimBaruForm, bab: e.target.value })}
+                      style={{ width: '100%', padding: isMobile ? '12px' : '8px', borderRadius: '8px', border: `1px solid ${C.border}`, fontSize: isMobile ? '16px' : '0.9rem', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '6px', background: C.cream, padding: '4px', borderRadius: '10px', marginTop: '0.4rem' }}>
+                  {[{ v: 'File', l: '📁 Unggah File' }, { v: 'Link', l: '🔗 Tautan (Link)' }].map(opt => (
+                    <button
+                      key={opt.v}
+                      type="button"
+                      onClick={() => setKirimBaruForm({ ...kirimBaruForm, bentuk: opt.v })}
+                      style={{
+                        flex: 1, padding: '8px 10px', borderRadius: '7px', border: 'none', cursor: 'pointer',
+                        fontFamily: 'inherit', fontSize: isMobile ? '0.85rem' : '0.82rem',
+                        fontWeight: kirimBaruForm.bentuk === opt.v ? 'bold' : 'normal',
+                        background: kirimBaruForm.bentuk === opt.v ? C.white : 'transparent',
+                        color: kirimBaruForm.bentuk === opt.v ? C.dark : C.gray,
+                      }}
+                    >
+                      {opt.l}
+                    </button>
+                  ))}
+                </div>
+
+                {kirimBaruForm.bentuk === 'File' ? (
+                  <input
+                    type="file"
+                    onChange={(e) => setKirimBaruForm({ ...kirimBaruForm, file: e.target.files?.[0] || null })}
+                    style={{ fontSize: isMobile ? '0.9rem' : '0.85rem' }}
+                  />
+                ) : (
+                  <input
+                    type="url"
+                    placeholder="https://..."
+                    value={kirimBaruForm.link}
+                    onChange={(e) => setKirimBaruForm({ ...kirimBaruForm, link: e.target.value })}
+                    style={{ padding: isMobile ? '12px' : '8px', borderRadius: '8px', border: `1px solid ${C.border}`, fontSize: isMobile ? '16px' : '0.9rem' }}
+                  />
+                )}
+              </>
+            )}
+
             <label style={{ fontSize: isMobile ? '0.95rem' : '0.85rem', color: C.gray, marginTop: '0.5rem' }}>Catatan (opsional)</label>
             <textarea
               value={kirimMateriNote}
@@ -1139,8 +1216,10 @@ const TeacherHome = () => {
               style={{ padding: '8px', borderRadius: '8px', border: `1px solid ${C.border}`, resize: 'vertical', fontFamily: 'inherit', fontSize: isMobile ? '16px' : '0.85rem' }}
             />
             <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem', justifyContent: 'flex-end' }}>
-              <button onClick={() => setShowKirimMateri(false)} style={buttonBatal}>Batal</button>
-              <button onClick={submitKirimMateri} style={{ ...buttonKirim, background: C.green }}>Kirim</button>
+              <button onClick={closeKirimMateri} style={buttonBatal} disabled={kirimMateriSubmitting}>Batal</button>
+              <button onClick={submitKirimMateri} disabled={kirimMateriSubmitting} style={{ ...buttonKirim, background: C.green, opacity: kirimMateriSubmitting ? 0.6 : 1 }}>
+                {kirimMateriSubmitting ? 'Mengirim...' : 'Kirim'}
+              </button>
             </div>
           </div>
         </div>
@@ -1215,82 +1294,6 @@ const TeacherHome = () => {
             <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem', justifyContent: 'flex-end' }}>
               <button onClick={() => { setShowUjianForm(false); setUjianBabOptions([]); }} style={buttonBatal}>Batal</button>
               <button onClick={submitUjian} disabled={submittingUjian} style={{ ...buttonKirim, opacity: submittingUjian ? 0.6 : 1 }}>{submittingUjian ? 'Mengirim...' : 'Simpan'}</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal Form Materi */}
-      {showMateriForm && (
-        <div style={modalOverlayStyle}>
-          <div style={{ ...modalContentStyle }}>
-            <h3 style={{ margin: '0 0 1rem 0', fontSize: isMobile ? '1.2rem' : '1.17rem' }}>Tambah Materi yang Diajarkan</h3>
-            <label style={{ fontSize: isMobile ? '0.95rem' : '0.85rem', color: C.gray }}>Pilih Mapel</label>
-            <select
-              value={materiForm.mapel_id}
-              onChange={(e) => {
-                const val = e.target.value;
-                setMateriForm({ ...materiForm, mapel_id: val });
-                if (val && val !== 'new') loadBab(val);
-                else setBabOptions([]);
-              }}
-              style={{ padding: isMobile ? '12px' : '8px', borderRadius: '8px', border: `1px solid ${C.border}`, fontSize: isMobile ? '16px' : '0.9rem' }}
-            >
-              <option value="">-- Pilih --</option>
-              {mapelOptions.map(m => <option key={m.id} value={m.id}>{m.nama}</option>)}
-              <option value="new">+ Tambah Baru</option>
-            </select>
-            {materiForm.mapel_id === 'new' && (
-              <input
-                type="text"
-                placeholder="Nama Mapel Baru"
-                value={materiForm.mapel_nama}
-                onChange={(e) => setMateriForm({ ...materiForm, mapel_nama: e.target.value })}
-                style={{ padding: isMobile ? '12px' : '8px', borderRadius: '8px', border: `1px solid ${C.border}`, fontSize: isMobile ? '16px' : '0.9rem' }}
-              />
-            )}
-
-            <label style={{ fontSize: isMobile ? '0.95rem' : '0.85rem', color: C.gray }}>Pilih Bab</label>
-            <select
-              value={materiForm.bab_id}
-              onChange={(e) => setMateriForm({ ...materiForm, bab_id: e.target.value })}
-              style={{ padding: isMobile ? '12px' : '8px', borderRadius: '8px', border: `1px solid ${C.border}`, fontSize: isMobile ? '16px' : '0.9rem' }}
-              disabled={!materiForm.mapel_id || materiForm.mapel_id === 'new'}
-            >
-              <option value="">-- Pilih --</option>
-              {babOptions.map(b => <option key={b.id} value={b.id}>{b.nama}</option>)}
-              <option value="new">+ Tambah Baru</option>
-            </select>
-            {materiForm.bab_id === 'new' && (
-              <input
-                type="text"
-                placeholder="Nama Bab Baru"
-                value={materiForm.bab_nama}
-                onChange={(e) => setMateriForm({ ...materiForm, bab_nama: e.target.value })}
-                style={{ padding: isMobile ? '12px' : '8px', borderRadius: '8px', border: `1px solid ${C.border}`, fontSize: isMobile ? '16px' : '0.9rem' }}
-              />
-            )}
-
-            <label style={{ fontSize: isMobile ? '0.95rem' : '0.85rem', color: C.gray }}>File Materi (PDF/Gambar)</label>
-            <input
-              type="file"
-              accept=".pdf,image/*"
-              onChange={(e) => setMateriForm({ ...materiForm, file: e.target.files[0], link: '' })}
-              style={{ padding: '4px', fontSize: isMobile ? '16px' : '0.9rem' }}
-            />
-            <div style={{ margin: '0.5rem 0', textAlign: 'center', color: C.gray }}>atau</div>
-            <label style={{ fontSize: isMobile ? '0.95rem' : '0.85rem', color: C.gray }}>Link Video YouTube</label>
-            <input
-              type="url"
-              placeholder="https://youtube.com/..."
-              value={materiForm.link}
-              onChange={(e) => setMateriForm({ ...materiForm, link: e.target.value, file: null })}
-              style={{ padding: isMobile ? '12px' : '8px', borderRadius: '8px', border: `1px solid ${C.border}`, fontSize: isMobile ? '16px' : '0.9rem' }}
-            />
-
-            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem', justifyContent: 'flex-end' }}>
-              <button onClick={() => setShowMateriForm(false)} style={buttonBatal}>Batal</button>
-              <button onClick={submitMateri} disabled={submittingMateri} style={{ ...buttonKirim, opacity: submittingMateri ? 0.6 : 1 }}>{submittingMateri ? 'Menyimpan...' : 'Simpan'}</button>
             </div>
           </div>
         </div>

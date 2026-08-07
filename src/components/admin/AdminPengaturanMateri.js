@@ -184,7 +184,7 @@ const AdminPengaturanMateri = () => {
   const [page, setPage] = useState(1);
   const [editItem, setEditItem] = useState(null);
   const [savingEdit, setSavingEdit] = useState(false);
-  const [babList, setBabList] = useState([]); // bab_ajar: { id, mapel, judul_bab }
+  const [babList, setBabList] = useState([]); // materi_bab: { id, nama, mapel_id, materi_mapel: { nama } }
 
   // ── Sesi Pembelajaran (sesi_pembelajaran) ───────────────────────────────
   const [sesiRows, setSesiRows] = useState([]);
@@ -213,11 +213,22 @@ const AdminPengaturanMateri = () => {
   const fetchAllSources = useCallback(async () => {
     setLoading(true);
     const [materiRes, babRes, sesiRes, bankRes, profilesRes] = await Promise.allSettled([
+      // Catatan perbaikan (Temuan Kritis #2): tabel 'bab_ajar' tidak pernah ada
+      // di database (nama sebenarnya 'materi_bab'), dan 'sub_bab_ajar' juga tidak
+      // ada tabelnya sama sekali. Setelah dicek skema aslinya, 'materi_file' sudah
+      // punya kolom teks langsung (denormalized) mapel/bab/sub_bab, jadi tidak
+      // perlu join ke 'materi_bab' untuk keperluan tampilan — cukup select kolom
+      // flat-nya. Kolom FK yang benar untuk relasi bab adalah 'bab_id' (integer),
+      // bukan 'bab_id_new', dan tidak ada kolom 'sub_bab_id' di skema.
       supabase
         .from('materi_file')
-        .select('id, nama, tipe, tanggal, url, kelas, status, deskripsi, diupload_oleh, user_id, bab_id_new, sub_bab_id, bab_ajar ( id, judul_bab, mapel ), sub_bab_ajar ( id, judul_sub_bab )')
+        .select('id, nama, tipe, tanggal, url, kelas, status, deskripsi, diupload_oleh, user_id, bab_id, mapel, bab, sub_bab')
         .order('tanggal', { ascending: false }),
-      supabase.from('bab_ajar').select('id, mapel, judul_bab').order('mapel').order('judul_bab'),
+      // 'materi_bab' dipakai khusus untuk dropdown pilih bab di modal Edit
+      // (butuh id untuk disimpan sebagai materi_file.bab_id). Nama mapel didapat
+      // lewat join ke materi_mapel karena materi_bab hanya punya mapel_id (FK),
+      // bukan kolom teks 'mapel'.
+      supabase.from('materi_bab').select('id, nama, mapel_id, materi_mapel ( nama )').order('nama'),
       supabase
         .from('sesi_pembelajaran')
         .select('id, tanggal, judul_materi, catatan, bukti_urls, status, siswa_id, guru_id')
@@ -291,9 +302,11 @@ const AdminPengaturanMateri = () => {
 
   const mapelOptions = useMemo(() => {
     const set = new Set();
-    babList.forEach(b => { if (b.mapel) set.add(b.mapel); });
+    // materi_file sudah punya kolom 'mapel' langsung, jadi ambil dari data
+    // materi itu sendiri (bukan dari babList) — konsisten dengan kelasOptions.
+    rows.forEach(r => { if (r.mapel) set.add(r.mapel); });
     return Array.from(set).sort();
-  }, [babList]);
+  }, [rows]);
 
   const materiCounts = useMemo(() => ({
     '': rows.length,
@@ -305,12 +318,12 @@ const AdminPengaturanMateri = () => {
     const q = search.trim().toLowerCase();
     return rows.filter(r => {
       if (statusFilter && r.status !== statusFilter) return false;
-      if (mapelFilter && r.bab_ajar?.mapel !== mapelFilter) return false;
+      if (mapelFilter && r.mapel !== mapelFilter) return false;
       if (guruFilter && r.user_id !== guruFilter) return false;
       if (kelasFilter && r.kelas !== kelasFilter) return false;
       if (q) {
         const hay = [
-          r.nama, r.diupload_oleh, r.bab_ajar?.judul_bab, r.bab_ajar?.mapel, r.sub_bab_ajar?.judul_sub_bab,
+          r.nama, r.diupload_oleh, r.bab, r.mapel, r.sub_bab,
         ].filter(Boolean).join(' ').toLowerCase();
         if (!hay.includes(q)) return false;
       }
@@ -342,7 +355,12 @@ const AdminPengaturanMateri = () => {
         nama: editItem.nama,
         deskripsi: editItem.deskripsi,
         kelas: editItem.kelas,
-        bab_id_new: editItem.bab_id_new,
+        bab_id: editItem.bab_id || null,
+        // 'mapel' dan 'bab' didenormalisasi di materi_file (bukan hasil join),
+        // jadi ikut disinkronkan manual berdasarkan bab yang dipilih supaya
+        // tampilan tabel/export tetap akurat tanpa perlu join ke materi_bab.
+        mapel: editSelectedBab?.materi_mapel?.nama || null,
+        bab: editSelectedBab?.nama || null,
         status: editItem.status,
       })
       .eq('id', editItem.id);
@@ -353,10 +371,14 @@ const AdminPengaturanMateri = () => {
     fetchAllSources();
   };
 
+  const editSelectedBab = editItem
+    ? babList.find(b => b.id === editItem.bab_id)
+    : null;
+
   const editMapelNama = editItem
-    ? (babList.find(b => b.id === editItem.bab_id_new)?.mapel || '')
+    ? (editSelectedBab?.materi_mapel?.nama || '')
     : '';
-  const editBabOptions = editMapelNama ? babList.filter(b => b.mapel === editMapelNama) : babList;
+  const editBabOptions = editMapelNama ? babList.filter(b => b.materi_mapel?.nama === editMapelNama) : babList;
 
   // ════════════════════════════════════════════════════════════════════════
   // SESI PEMBELAJARAN — derived data & handlers
@@ -525,8 +547,8 @@ const AdminPengaturanMateri = () => {
         No: i + 1,
         'Judul Materi': r.nama,
         Deskripsi: r.deskripsi || '',
-        Mapel: r.bab_ajar?.mapel || '-',
-        'Bab / Topik': r.bab_ajar?.judul_bab || '-',
+        Mapel: r.mapel || '-',
+        'Bab / Topik': r.bab || '-',
         Kelas: r.kelas || '-',
         Teacher: r.diupload_oleh || '-',
         'Tanggal Publish': formatTanggal(r.tanggal),
@@ -692,8 +714,8 @@ const AdminPengaturanMateri = () => {
                           <div style={{ fontWeight: 'bold', color: C.dark }}>{item.nama}</div>
                           {item.deskripsi && <div style={{ color: C.gray, fontSize: '0.78rem', marginTop: '2px' }}>{item.deskripsi}</div>}
                         </td>
-                        <td style={{ padding: '12px 16px', color: C.dark }}>{item.bab_ajar?.mapel || '-'}</td>
-                        <td style={{ padding: '12px 16px', color: C.dark }}>{item.bab_ajar?.judul_bab || '-'}</td>
+                        <td style={{ padding: '12px 16px', color: C.dark }}>{item.mapel || '-'}</td>
+                        <td style={{ padding: '12px 16px', color: C.dark }}>{item.bab || '-'}</td>
                         <td style={{ padding: '12px 16px', color: C.dark }}>{item.kelas || '-'}</td>
                         <td style={{ padding: '12px 16px', color: C.dark }}>{item.diupload_oleh || '-'}</td>
                         <td style={{ padding: '12px 16px', color: C.gray, whiteSpace: 'nowrap' }}>{formatTanggal(item.tanggal)}</td>
@@ -936,12 +958,12 @@ const AdminPengaturanMateri = () => {
 
             <label style={{ fontSize: '0.8rem', color: C.gray }}>Bab / Topik</label>
             <select
-              value={editItem.bab_id_new || ''}
-              onChange={e => setEditItem({ ...editItem, bab_id_new: e.target.value })}
+              value={editItem.bab_id || ''}
+              onChange={e => setEditItem({ ...editItem, bab_id: e.target.value ? Number(e.target.value) : '' })}
               style={{ width: '100%', padding: '9px 10px', borderRadius: '8px', border: `1.5px solid ${C.border}`, marginTop: '4px', marginBottom: '10px', fontFamily: 'inherit' }}
             >
               <option value="">Pilih bab...</option>
-              {editBabOptions.map(b => <option key={b.id} value={b.id}>{b.mapel} — {b.judul_bab}</option>)}
+              {editBabOptions.map(b => <option key={b.id} value={b.id}>{b.materi_mapel?.nama || '-'} — {b.nama}</option>)}
             </select>
 
             <label style={{ fontSize: '0.8rem', color: C.gray }}>Status</label>

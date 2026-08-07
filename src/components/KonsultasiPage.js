@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import bgPeople from '../Resource/bg_people.png';
@@ -173,6 +173,112 @@ const SectionTitle = ({ number, title, subtitle }) => (
   </div>
 );
 
+// ─── Input Kode Referral (dengan validasi ke tabel profiles) ────────────────
+// Kode referral bersifat OPSIONAL — kalau kosong, tidak ada validasi & tidak
+// menghalangi pengguna lanjut ke step berikutnya. Kalau diisi, kita cek ke
+// tabel profiles (kolom referral_code, unique) supaya kita tahu kode itu
+// benar milik guru/siswa terdaftar sebelum konsultasi masuk.
+const ReferralInput = ({ value, onChange }) => {
+  // status: 'idle' | 'checking' | 'valid' | 'invalid'
+  const [status, setStatus] = useState('idle');
+  const [referrerName, setReferrerName] = useState('');
+  const debounceRef = useRef(null);
+
+  useEffect(() => {
+    const code = (value || '').trim();
+
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+
+    if (!code) {
+      setStatus('idle');
+      setReferrerName('');
+      return;
+    }
+
+    setStatus('checking');
+
+    debounceRef.current = setTimeout(async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('referral_code', code)
+        .maybeSingle();
+
+      // Kalau ada error jaringan/lainnya, jangan blokir pengguna — anggap
+      // saja belum bisa diverifikasi, cukup diamkan (biarkan 'checking'
+      // hilang dan kembali idle) supaya form tidak terasa rusak.
+      if (error) {
+        setStatus('idle');
+        setReferrerName('');
+        return;
+      }
+
+      if (data) {
+        setStatus('valid');
+        setReferrerName(data.full_name || '');
+      } else {
+        setStatus('invalid');
+        setReferrerName('');
+      }
+    }, 500);
+
+    return () => clearTimeout(debounceRef.current);
+  }, [value]);
+
+  const borderColor =
+    status === 'valid'   ? C.green :
+    status === 'invalid' ? '#e74c3c' :
+    C.border;
+
+  return (
+    <div>
+      <Label>Kode Referral (opsional)</Label>
+      <div style={{ position: 'relative' }}>
+        <input
+          type="text"
+          placeholder="Contoh: BRIAN7K2Q"
+          value={value}
+          onChange={e => onChange(e.target.value.toUpperCase())}
+          style={{
+            width: '100%', padding: '10px 40px 10px 14px', borderRadius: '10px',
+            border: `1.5px solid ${borderColor}`, fontSize: '0.92rem',
+            fontFamily: 'inherit', color: C.dark, background: C.white,
+            outline: 'none', boxSizing: 'border-box',
+            transition: 'border-color 0.2s'
+          }}
+          onFocus={e => { if (status === 'idle') e.target.style.borderColor = C.gold; }}
+          onBlur={e => { e.target.style.borderColor = borderColor; }}
+        />
+        {/* Indikator status di dalam input */}
+        <span style={{
+          position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)',
+          fontSize: '1rem', lineHeight: 1,
+        }}>
+          {status === 'checking' && <span style={{ color: C.gray, fontSize: '0.8rem' }}>⏳</span>}
+          {status === 'valid' && <span style={{ color: C.green }}>✓</span>}
+          {status === 'invalid' && <span style={{ color: '#e74c3c' }}>✕</span>}
+        </span>
+      </div>
+
+      {status === 'valid' && (
+        <p style={{ margin: '6px 0 0', fontSize: '0.78rem', color: C.green, fontWeight: 'bold' }}>
+          ✓ Kode valid{referrerName ? ` — direferensikan oleh ${referrerName}` : ''}.
+        </p>
+      )}
+      {status === 'invalid' && (
+        <p style={{ margin: '6px 0 0', fontSize: '0.78rem', color: '#e74c3c' }}>
+          Kode referral tidak ditemukan. Kamu tetap bisa lanjut tanpa kode referral yang valid.
+        </p>
+      )}
+      {status === 'idle' && (
+        <p style={{ margin: '6px 0 0', fontSize: '0.78rem', color: C.gray }}>
+          Punya kode referral dari guru atau teman? Masukkan di sini agar tercatat.
+        </p>
+      )}
+    </div>
+  );
+};
+
 // ─── Step 1: Data Diri ───────────────────────────────────────────────────────
 
 const StepDataDiri = ({ data, setData, onNext }) => {
@@ -242,17 +348,10 @@ const StepDataDiri = ({ data, setData, onNext }) => {
           </div>
         )}
 
-        <div>
-          <Label>Kode Referral (opsional)</Label>
-          <Input
-            placeholder="Contoh: BRIAN7K2Q"
-            value={data.kodeReferral}
-            onChange={e => setData({ ...data, kodeReferral: e.target.value.toUpperCase() })}
-          />
-          <p style={{ margin: '6px 0 0', fontSize: '0.78rem', color: C.gray }}>
-            Punya kode referral dari guru atau teman? Masukkan di sini agar tercatat.
-          </p>
-        </div>
+        <ReferralInput
+          value={data.kodeReferral}
+          onChange={(val) => setData({ ...data, kodeReferral: val })}
+        />
       </div>
 
       <NavButtons showBack={false} onNext={handleNext} />

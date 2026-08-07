@@ -13,6 +13,17 @@ const C = {
   goldBg: 'rgba(180,150,75,0.08)',
 };
 
+// Mapping value dropdown (label Indonesia di UI) -> value role yang
+// dipakai konsisten di seluruh sistem (LoginPage, AdminConfirmUser, RLS,
+// dll). Root cause Temuan Kritis #1: sebelumnya value dropdown mentah
+// ('siswa'/'guru'/'wali_siswa') dikirim ke user_metadata.role, padahal
+// seluruh sistem lain memakai 'student'/'teacher'/'parent'/'admin'.
+const ROLE_MAP = {
+  siswa: 'student',
+  guru: 'teacher',
+  wali_siswa: 'parent',
+};
+
 const RegisterPage = () => {
   const navigate = useNavigate();
 
@@ -49,6 +60,16 @@ const RegisterPage = () => {
       return;
     }
 
+    // Terjemahkan value dropdown (Indonesia) ke value role standar sistem
+    // (Inggris) sebelum dikirim. Kalau suatu saat ada option baru yang lupa
+    // dimasukkan ke ROLE_MAP, kita gagal cepat di sini alih-alih mengirim
+    // role yang salah/asing ke database.
+    const mappedRole = ROLE_MAP[role];
+    if (!mappedRole) {
+      setError('Peran yang dipilih tidak valid. Silakan pilih ulang.');
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
@@ -59,7 +80,7 @@ const RegisterPage = () => {
         data: {
           full_name: nama.trim(),
           whatsapp: whatsapp.trim() || null,
-          role: role,
+          role: mappedRole,
         },
       },
     });

@@ -8,8 +8,8 @@ import { supabase } from '../../supabaseClient';
    Sumber data:
      - sesi_pembelajaran  -> daftar "Pertemuan" (tanggal + judul_materi
        + status per siswa, diisi guru lewat TeacherAbsensiMateri.js)
-     - materi_file         -> file materi per pertemuan (skema baru:
-       bab_ajar / sub_bab_ajar, bucket storage "materi"), dicocokkan
+     - materi_file         -> file materi per pertemuan (kolom mapel/bab/
+       sub_bab sudah flat di materi_file, bucket storage "materi"), dicocokkan
        ke pertemuan lewat kombinasi (guru yang sama + tanggal yang sama)
        karena tidak ada FK langsung dari sesi_pembelajaran ke materi_file.
      - materi_request      -> tab "Materi Request Saya" (siswa minta
@@ -249,7 +249,7 @@ const StudentMateri = () => {
       let guruRows = [];
       if (guruIds.length > 0) {
         const { data: guruData, error: guruErr } = await supabase
-          .from('guru').select('id, nama, profile_id').in('id', guruIds);
+          .from('guru').select('id, nama, profile_id, mapel').in('id', guruIds);
         if (guruErr) throw guruErr;
         guruRows = guruData || [];
       }
@@ -266,20 +266,18 @@ const StudentMateri = () => {
 
       const profileIds = guruRows.map(g => g.profile_id).filter(Boolean);
 
-      // Mapel yang diajar tiap guru (dari bab_ajar), untuk kartu "Guru Mapel"
-      if (profileIds.length > 0) {
-        const { data: babAjarData } = await supabase
-          .from('bab_ajar').select('guru_id, mapel').in('guru_id', profileIds);
-        const mMap = {};
-        (babAjarData || []).forEach(b => {
-          if (!b.mapel) return;
-          if (!mMap[b.guru_id]) mMap[b.guru_id] = new Set();
-          mMap[b.guru_id].add(b.mapel);
-        });
-        const mMapArr = {};
-        Object.keys(mMap).forEach(k => { mMapArr[k] = Array.from(mMap[k]); });
-        setGuruMapelMap(mMapArr);
-      }
+      // Mapel yang diajar tiap guru, untuk kartu "Guru Mapel".
+      // Perbaikan (Temuan Kritis #2): tabel 'bab_ajar' tidak ada di database,
+      // dan materi_bab (nama aslinya) tidak punya kolom guru_id maupun mapel
+      // teks sama sekali — jadi query lama ini tidak akan pernah bisa berhasil
+      // meski nama tabelnya dibetulkan. Sumber yang benar untuk mapel yang
+      // diajar seorang guru adalah kolom 'mapel' di tabel 'guru' itu sendiri
+      // (sudah ikut di-select di atas), jadi tidak perlu query tambahan.
+      const mMapArr = {};
+      guruRows.forEach(g => {
+        if (g.profile_id && g.mapel) mMapArr[g.profile_id] = [g.mapel];
+      });
+      setGuruMapelMap(mMapArr);
 
       // Pertemuan (sesi_pembelajaran) milik siswa ini
       const { data: sesiData, error: sesiErr } = await supabase
@@ -294,7 +292,10 @@ const StudentMateri = () => {
       if (profileIds.length > 0) {
         let fileQuery = supabase
           .from('materi_file')
-          .select('id, nama, tipe, tanggal, url, kelas, status, deskripsi, bab_id, sub_bab_id, user_id, diupload_oleh, bab_ajar ( id, judul_bab, mapel ), sub_bab_ajar ( id, judul_sub_bab )')
+          // Perbaikan (Temuan Kritis #2): 'bab_ajar'/'sub_bab_ajar' tidak ada
+          // di database. materi_file sudah punya kolom teks flat mapel/bab/
+          // sub_bab, jadi cukup select langsung tanpa join.
+          .select('id, nama, tipe, tanggal, url, kelas, status, deskripsi, bab_id, user_id, diupload_oleh, mapel, bab, sub_bab')
           .in('user_id', profileIds)
           .eq('status', 'Dipublish')
           .order('tanggal', { ascending: false });
@@ -340,7 +341,7 @@ const StudentMateri = () => {
     const built = ascending.map((sesi, idx) => {
       const key = `${sesi.guru_id}|${dateKey(sesi.tanggal)}`;
       const files = fileMap[key] || [];
-      const mapelDariFile = files.find(f => f.bab_ajar?.mapel)?.bab_ajar?.mapel;
+      const mapelDariFile = files.find(f => f.mapel)?.mapel;
       const guruInfo = guruByProfileId[sesi.guru_id];
       return {
         id: sesi.id,
@@ -362,7 +363,7 @@ const StudentMateri = () => {
   // Mapel unik untuk dropdown filter
   const mapelOptionsList = useMemo(() => {
     const set = new Set();
-    materiFileAll.forEach(f => { if (f.bab_ajar?.mapel) set.add(f.bab_ajar.mapel); });
+    materiFileAll.forEach(f => { if (f.mapel) set.add(f.mapel); });
     return ['Semua Mapel', ...Array.from(set).sort()];
   }, [materiFileAll]);
 

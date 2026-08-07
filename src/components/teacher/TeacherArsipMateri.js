@@ -41,14 +41,28 @@ const STATUS_STYLE = {
   Diarsipkan: { bg: C.goldBg, color: C.gold },
 };
 
-// Kategori sumber materi: milik pribadi guru, atau materi resmi sekolah tempat mengajar
+// Kategori sumber materi: milik pribadi guru, materi resmi sekolah tempat mengajar,
+// atau materi yang lahir dari menjawab request siswa (kategori ini TIDAK dipilih manual
+// oleh guru saat upload -- hanya diisi otomatis oleh alur "Kirim Materi" di TeacherHome.js
+// saat guru menjawab request dengan mengunggah file baru, lalu langsung tersimpan di arsip ini).
 const KATEGORI_OPTIONS = [
   { value: 'Pribadi', label: 'Pribadi' },
   { value: 'Sekolah', label: 'Sekolah yang Diajar' },
 ];
+// Dipakai khusus untuk tab filter di halaman arsip (baca-saja, termasuk Request)
+const KATEGORI_FILTER_OPTIONS = [
+  ...KATEGORI_OPTIONS,
+  { value: 'Request', label: 'Dari Request Siswa' },
+];
 const KATEGORI_STYLE = {
   Pribadi: { bg: C.grayBg, color: C.gray },
   Sekolah: { bg: C.greenBg, color: C.green },
+  Request: { bg: C.blueBg, color: C.blue },
+};
+const KATEGORI_LABEL = {
+  Pribadi: 'Pribadi',
+  Sekolah: 'Sekolah',
+  Request: 'Dari Request',
 };
 
 // Jenis materi khusus untuk kategori Sekolah
@@ -208,7 +222,7 @@ const NewMateriFolderModal = ({ kategori, creating, onCreate, onClose }) => {
       <div style={{ background: C.white, padding: '1.4rem', width: '320px', maxWidth: '100%', borderRadius: '16px', boxSizing: 'border-box' }}>
         <div style={{ fontWeight: 'bold', fontSize: '1.05rem', marginBottom: '4px', color: C.dark }}>Folder Baru</div>
         <div style={{ fontSize: '0.78rem', color: C.gray, marginBottom: '12px' }}>
-          Folder akan dibuat untuk kategori "{kategori === 'Sekolah' ? 'Sekolah yang Diajar' : 'Pribadi'}".
+          Folder akan dibuat untuk kategori "{KATEGORI_LABEL[kategori] || 'Pribadi'}".
         </div>
         <input
           autoFocus
@@ -272,7 +286,7 @@ const MateriCard = ({ item, badge, icon, onView, onEdit, onArchive, onDelete }) 
           <div style={{ color: C.gray, fontSize: '0.78rem', marginTop: '2px', wordBreak: 'break-word' }}>{item.deskripsi}</div>
         )}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginTop: '6px' }}>
-          {item.kategori && <Badge label={item.kategori === 'Sekolah' ? 'Sekolah' : 'Pribadi'} style={KATEGORI_STYLE[item.kategori] || KATEGORI_STYLE.Pribadi} />}
+          {item.kategori && <Badge label={KATEGORI_LABEL[item.kategori] || 'Pribadi'} style={KATEGORI_STYLE[item.kategori] || KATEGORI_STYLE.Pribadi} />}
           {item.jenis && <Badge label={item.jenis} style={JENIS_STYLE[item.jenis] || JENIS_STYLE.Materi} />}
           {item.folder_materi?.nama && <Badge label={`📂 ${item.folder_materi.nama}`} style={{ bg: C.grayBg, color: C.gray }} />}
         </div>
@@ -873,10 +887,12 @@ const TeacherArsipMateri = () => {
       {/* Kolom kiri: tabs, filter, tabel/kartu */}
       <div style={{ order: 1, flex: isMobile ? '1 1 100%' : '1 1 560px', minWidth: 0, width: isMobile ? '100%' : 'auto', boxSizing: 'border-box' }}>
 
-      {/* Kategori sumber materi — menentukan set folder mana yang ditampilkan di grid */}
+      {/* Kategori sumber materi — menentukan set folder mana yang ditampilkan di grid.
+          Pakai KATEGORI_FILTER_OPTIONS (termasuk "Request") karena ini cuma untuk menyaring
+          tampilan, bukan untuk memilih kategori saat upload manual. */}
       <div style={{ marginBottom: '0.9rem' }}>
         <SegmentedControl
-          options={KATEGORI_OPTIONS}
+          options={KATEGORI_FILTER_OPTIONS}
           value={filterKategori}
           onChange={setFilterKategori}
         />
@@ -1012,7 +1028,7 @@ const TeacherArsipMateri = () => {
                     </td>
                     <td style={{ padding: '12px 16px' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
-                        <Badge label={item.kategori === 'Sekolah' ? 'Sekolah' : 'Pribadi'} style={KATEGORI_STYLE[item.kategori] || KATEGORI_STYLE.Pribadi} />
+                        <Badge label={KATEGORI_LABEL[item.kategori] || 'Pribadi'} style={KATEGORI_STYLE[item.kategori] || KATEGORI_STYLE.Pribadi} />
                         {item.jenis && <Badge label={item.jenis} style={JENIS_STYLE[item.jenis] || JENIS_STYLE.Materi} />}
                         {item.folder_materi?.nama && (
                           <span style={{ fontSize: '0.72rem', color: C.gray }}>📂 {item.folder_materi.nama}</span>
@@ -1105,7 +1121,7 @@ const TeacherArsipMateri = () => {
 
             <label style={{ fontSize: '0.8rem', color: C.gray }}>Kategori</label>
             <div style={{ marginBottom: '10px' }}>
-              <Badge label={editItem.kategori === 'Sekolah' ? 'Sekolah yang Diajar' : 'Pribadi'} style={KATEGORI_STYLE[editItem.kategori] || KATEGORI_STYLE.Pribadi} />
+              <Badge label={KATEGORI_LABEL[editItem.kategori] || 'Pribadi'} style={KATEGORI_STYLE[editItem.kategori] || KATEGORI_STYLE.Pribadi} />
             </div>
 
             <label style={{ fontSize: '0.8rem', color: C.gray }}>Folder</label>
