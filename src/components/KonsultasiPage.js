@@ -12,8 +12,14 @@ const STEPS = [
   { number: 4, label: 'Konfirmasi' },
 ];
 
-const STATUS_OPTIONS   = ['SMP', 'SMA', 'Alumni', 'Orang Tua'];
-const KELAS_OPTIONS    = ['Kelas 7', 'Kelas 8', 'Kelas 9', 'Kelas 10', 'Kelas 11', 'Kelas 12'];
+const STATUS_OPTIONS   = ['SD', 'SMP', 'SMA', 'Alumni', 'Orang Tua'];
+// Kelas per jenjang, memakai penomoran romawi (I - XII) sesuai konvensi
+// SD-SMP-SMA di Indonesia.
+const KELAS_BY_STATUS = {
+  SD:  ['Kelas I', 'Kelas II', 'Kelas III', 'Kelas IV', 'Kelas V', 'Kelas VI'],
+  SMP: ['Kelas VII', 'Kelas VIII', 'Kelas IX'],
+  SMA: ['Kelas X', 'Kelas XI', 'Kelas XII'],
+};
 const TUJUAN_OPTIONS   = ['Naik nilai sekolah', 'Persiapan UTBK', 'Persiapan Olimpiade', 'Persiapan Ujian', 'Belajar dari nol', 'Konsultasi jurusan', 'Lainnya'];
 const MAPEL_OPTIONS    = ['Matematika', 'Fisika', 'Kimia', 'Biologi', 'Informatika', 'Bahasa Inggris', 'Lainnya'];
 const METODE_OPTIONS   = [
@@ -320,11 +326,11 @@ const StepDataDiri = ({ data, setData, onNext }) => {
           </div>
         </div>
 
-        {(data.status === 'SMP' || data.status === 'SMA') && (
+        {(data.status === 'SD' || data.status === 'SMP' || data.status === 'SMA') && (
           <div className="two-col-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
             <div>
               <Label>Asal Sekolah</Label>
-              <Input placeholder="Contoh: SMA Negeri 1 Surabaya" value={data.sekolah} onChange={update('sekolah')} />
+              <Input placeholder="Contoh: SDN 1 Sidoarjo / SMPN 2 Sidoarjo / SMAN 1 Sidoarjo" value={data.sekolah} onChange={update('sekolah')} />
             </div>
             <div>
               <Label>Kelas</Label>
@@ -339,10 +345,7 @@ const StepDataDiri = ({ data, setData, onNext }) => {
                 }}
               >
                 <option value="">Pilih kelas</option>
-                {KELAS_OPTIONS.filter(k =>
-                  data.status === 'SMP' ? k.includes('7') || k.includes('8') || k.includes('9')
-                  : k.includes('10') || k.includes('11') || k.includes('12')
-                ).map(k => <option key={k} value={k}>{k}</option>)}
+                {(KELAS_BY_STATUS[data.status] || []).map(k => <option key={k} value={k}>{k}</option>)}
               </select>
             </div>
           </div>
