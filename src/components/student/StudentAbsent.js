@@ -1,6 +1,7 @@
 // StudentAbsent.js (dengan header dihapus)
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../supabaseClient';
+import { checkedUpdate } from '../../utils/supabaseUpdateGuard';
 
 const C = {
   gold: '#b4964b',
@@ -299,12 +300,14 @@ const StudentAbsent = () => {
   const handleKonfirmasi = async (id) => {
     setConfirming((prev) => ({ ...prev, [id]: true }));
     try {
-      const { error } = await supabase
-        .from(TABLE)
-        .update({ status: 'Disetujui' })
-        .eq('id', id)
-        .eq('siswa_id', studentProfile.id)
-        .eq('status', 'Menunggu');
+      const { error } = await checkedUpdate(
+        supabase
+          .from(TABLE)
+          .update({ status: 'Disetujui' })
+          .eq('id', id)
+          .eq('siswa_id', studentProfile.id)
+          .eq('status', 'Menunggu')
+      );
 
       if (error) throw error;
 

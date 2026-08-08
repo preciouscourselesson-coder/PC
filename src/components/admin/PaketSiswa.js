@@ -1,7 +1,9 @@
 // src/components/admin/PaketSiswa.js
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../supabaseClient';
+import { checkedUpdate } from '../../utils/supabaseUpdateGuard';
 import InvoicePaketSiswa from './InvoicePaketSiswa';
+import Toast, { useToast } from '../../components/Toast';
 
 // ============================================================
 // PALET WARNA
@@ -174,7 +176,7 @@ const PAGE_SIZE = 8;
 // ============================================================
 // KOMPONEN FORM TAMBAH / EDIT PAKET SISWA
 // ============================================================
-const FormTambahSiswa = ({ onSuccess, onCancelEdit, userRole, guruId, editingItem }) => {
+const FormTambahSiswa = ({ onSuccess, onCancelEdit, userRole, guruId, editingItem, onError }) => {
   const isEditing = !!editingItem;
 
   const [loading, setLoading] = useState(false);
@@ -307,7 +309,7 @@ const FormTambahSiswa = ({ onSuccess, onCancelEdit, userRole, guruId, editingIte
       // untuk admin pakai guru yang dipilih di form.
       const guru_id = userRole === 'admin' ? form.guru_id : guruId;
       if (!guru_id) {
-        alert('Guru penanggung jawab belum ditentukan. Silakan pilih guru terlebih dahulu.');
+        onError && onError('warning', 'Guru penanggung jawab belum ditentukan. Silakan pilih guru terlebih dahulu.');
         setLoading(false);
         return;
       }
@@ -337,7 +339,7 @@ const FormTambahSiswa = ({ onSuccess, onCancelEdit, userRole, guruId, editingIte
       };
 
       const { error } = isEditing
-        ? await supabase.from('paket_siswa').update(payload).eq('id', editingItem.id)
+        ? await checkedUpdate(supabase.from('paket_siswa').update(payload).eq('id', editingItem.id))
         : await supabase.from('paket_siswa').insert(payload);
 
       if (error) throw error;
@@ -345,7 +347,7 @@ const FormTambahSiswa = ({ onSuccess, onCancelEdit, userRole, guruId, editingIte
       resetForm();
       onSuccess && onSuccess();
     } catch (err) {
-      alert('Gagal menyimpan: ' + err.message);
+      onError && onError('error', 'Gagal menyimpan: ' + err.message);
     } finally {
       setLoading(false);
     }
@@ -589,6 +591,7 @@ const PaketSiswa = () => {
   const [selectedId, setSelectedId] = useState(null);
   const [editingItem, setEditingItem] = useState(null); // untuk edit
   const [invoiceItem, setInvoiceItem] = useState(null); // paket siswa yang sedang dibuatkan invoice
+  const { toast, showToast } = useToast();
 
   const [search, setSearch] = useState('');
   const [filterKelas, setFilterKelas] = useState('Semua');
@@ -755,7 +758,7 @@ const PaketSiswa = () => {
       await loadPaketSiswa();
       if (selectedId === id) setSelectedId(null);
     } catch (err) {
-      alert('Gagal menghapus: ' + err.message);
+      showToast('error', 'Gagal menghapus: ' + err.message);
     } finally {
       setLoading(false);
     }
@@ -783,6 +786,8 @@ const PaketSiswa = () => {
             : 'Daftar paket les'}
         </p>
       </div>
+
+      <Toast toast={toast} />
 
       {/* Konten utama: tabel (kiri) + form tambah/edit paket (kanan) */}
       <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'flex-start', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
@@ -1117,6 +1122,7 @@ const PaketSiswa = () => {
           userRole={userRole}
           guruId={guruId}
           editingItem={editingItem}
+          onError={(type, msg) => showToast(type, msg)}
         />
       </div>
 

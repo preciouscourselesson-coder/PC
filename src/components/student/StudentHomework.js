@@ -1,6 +1,7 @@
 // src/components/student/StudentHomework.js
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '../../supabaseClient';
+import { checkedUpdate } from '../../utils/supabaseUpdateGuard';
 
 // ---------------------------------------------------------------------------
 // Warna biru sebagai tema utama
@@ -1021,14 +1022,16 @@ const StudentHomework = () => {
         .from('tugas-siswa')
         .getPublicUrl(fileName);
 
-      const { error: updateError } = await supabase
-        .from('pengumpulan_tugas')
-        .update({
-          status: 'Sudah',
-          file_name: uploadFile.name,
-          file_url: publicUrlData.publicUrl,
-        })
-        .eq('id', task.submission_id);
+      const { error: updateError } = await checkedUpdate(
+        supabase
+          .from('pengumpulan_tugas')
+          .update({
+            status: 'Sudah',
+            file_name: uploadFile.name,
+            file_url: publicUrlData.publicUrl,
+          })
+          .eq('id', task.submission_id)
+      );
 
       if (updateError) throw updateError;
 

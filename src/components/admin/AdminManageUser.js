@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '../../supabaseClient';
+import { checkedUpdate } from '../../utils/supabaseUpdateGuard';
 import * as XLSX from 'xlsx';
 
 const C = {
@@ -180,10 +181,12 @@ const AdminManageUser = () => {
 
   const handleRoleChange = async (id, name, newRole) => {
     setBusyId(id);
-    const { error: updateError } = await supabase
-      .from('profiles')
-      .update({ role: newRole })
-      .eq('id', id);
+    const { error: updateError } = await checkedUpdate(
+      supabase
+        .from('profiles')
+        .update({ role: newRole })
+        .eq('id', id)
+    );
     setBusyId(null);
 
     if (updateError) {
@@ -196,10 +199,12 @@ const AdminManageUser = () => {
 
   const handleGenderChange = async (id, name, newGender) => {
     setBusyId(id);
-    const { error: updateError } = await supabase
-      .from('profiles')
-      .update({ gender: newGender || null })
-      .eq('id', id);
+    const { error: updateError } = await checkedUpdate(
+      supabase
+        .from('profiles')
+        .update({ gender: newGender || null })
+        .eq('id', id)
+    );
     setBusyId(null);
 
     if (updateError) {
@@ -212,10 +217,12 @@ const AdminManageUser = () => {
 
   const handleKelasChange = async (id, name, newKelas) => {
     setBusyId(id);
-    const { error: updateError } = await supabase
-      .from('profiles')
-      .update({ kelas: newKelas || null })
-      .eq('id', id);
+    const { error: updateError } = await checkedUpdate(
+      supabase
+        .from('profiles')
+        .update({ kelas: newKelas || null })
+        .eq('id', id)
+    );
     setBusyId(null);
 
     if (updateError) {
@@ -248,10 +255,12 @@ const AdminManageUser = () => {
 
   const handleStatusChange = async (id, name, newStatus) => {
     setBusyId(id);
-    const { error: updateError } = await supabase
-      .from('profiles')
-      .update({ status: newStatus })
-      .eq('id', id);
+    const { error: updateError } = await checkedUpdate(
+      supabase
+        .from('profiles')
+        .update({ status: newStatus })
+        .eq('id', id)
+    );
     setBusyId(null);
 
     if (updateError) {
@@ -316,10 +325,12 @@ const AdminManageUser = () => {
   const handleGenerateReferral = async (id, name) => {
     setBusyId(id);
     const code = generateReferralCode(name);
-    const { error: updateError } = await supabase
-      .from('profiles')
-      .update({ referral_code: code })
-      .eq('id', id);
+    const { error: updateError } = await checkedUpdate(
+      supabase
+        .from('profiles')
+        .update({ referral_code: code })
+        .eq('id', id)
+    );
     setBusyId(null);
 
     if (updateError) {
@@ -349,10 +360,12 @@ const AdminManageUser = () => {
     let success = 0, fail = 0;
     for (const u of targets) {
       const code = generateReferralCode(u.full_name || u.email);
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .update({ referral_code: code })
-        .eq('id', u.id);
+      const { error: updateError } = await checkedUpdate(
+        supabase
+          .from('profiles')
+          .update({ referral_code: code })
+          .eq('id', u.id)
+      );
       if (updateError) fail++;
       else success++;
     }

@@ -6,6 +6,8 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../../supabaseClient';
+import { checkedUpdate } from '../../utils/supabaseUpdateGuard';
+import Toast, { useToast } from '../../components/Toast';
 
 const C = {
   gold: '#b4964b',
@@ -72,6 +74,7 @@ const TeacherHome = () => {
   const isMobile = useIsMobile();
   const [loading, setLoading] = useState(true);
   const [guru, setGuru] = useState(null);
+  const { toast, showToast } = useToast();
   const [jadwalList, setJadwalList] = useState([]);
   const [pengajuanMasuk, setPengajuanMasuk] = useState([]);
   const [pengajuanSaya, setPengajuanSaya] = useState([]);
@@ -396,10 +399,12 @@ const TeacherHome = () => {
     setRespondingId(p.id);
     try {
       const newStatus = setuju ? 'disetujui_menunggu_admin' : 'ditolak';
-      const { error } = await supabase
-        .from('pengajuan_perubahan_jadwal')
-        .update({ status: newStatus })
-        .eq('id', p.id);
+      const { error } = await checkedUpdate(
+        supabase
+          .from('pengajuan_perubahan_jadwal')
+          .update({ status: newStatus })
+          .eq('id', p.id)
+      );
       if (error) throw error;
       if (setuju) {
         const { data: adminUsers, error: adminError } = await supabase
@@ -452,14 +457,16 @@ const TeacherHome = () => {
     setErrorMsg('');
     try {
       const item = materiRequestList.find(m => m.id === materiRespondId);
-      const { error } = await supabase
-        .from('materi_request')
-        .update({
-          status: materiRespondAksi,
-          catatan_guru: materiCatatan || null,
-          responded_at: new Date().toISOString(),
-        })
-        .eq('id', materiRespondId);
+      const { error } = await checkedUpdate(
+        supabase
+          .from('materi_request')
+          .update({
+            status: materiRespondAksi,
+            catatan_guru: materiCatatan || null,
+            responded_at: new Date().toISOString(),
+          })
+          .eq('id', materiRespondId)
+      );
       if (error) throw error;
       setMateriRequestList(list => list.map(m => (
         m.id === materiRespondId
@@ -510,15 +517,17 @@ const TeacherHome = () => {
   // lalu memberi notifikasi ke siswa. Dipakai oleh kedua mode (pilih arsip / upload baru).
   const selesaikanRequestDenganMateri = async (request, materiFileId, materiNama) => {
     const catatan = `Materi "${materiNama}" telah dikirimkan.${kirimMateriNote ? ` Catatan: ${kirimMateriNote}` : ''}`;
-    const { error } = await supabase
-      .from('materi_request')
-      .update({
-        status: 'selesai',
-        catatan_guru: catatan,
-        responded_at: new Date().toISOString(),
-        materi_file_id: materiFileId,
-      })
-      .eq('id', request.id);
+    const { error } = await checkedUpdate(
+      supabase
+        .from('materi_request')
+        .update({
+          status: 'selesai',
+          catatan_guru: catatan,
+          responded_at: new Date().toISOString(),
+          materi_file_id: materiFileId,
+        })
+        .eq('id', request.id)
+    );
     if (error) throw error;
     if (request.siswa_id) {
       await supabase.from('notifikasi').insert({
@@ -534,12 +543,12 @@ const TeacherHome = () => {
 
   const submitKirimMateri = async () => {
     const request = materiRequestList.find(m => m.id === selectedRequestId);
-    if (!request) { alert('Data permintaan tidak ditemukan.'); return; }
+    if (!request) { showToast('warning', 'Data permintaan tidak ditemukan.'); return; }
 
     setKirimMateriSubmitting(true);
     try {
       if (kirimMateriMode === 'arsip') {
-        if (!selectedMateriId) { alert('Pilih materi yang akan dikirim.'); return; }
+        if (!selectedMateriId) { showToast('warning', 'Pilih materi yang akan dikirim.'); return; }
         const materi = materiArsip.find(m => m.id === selectedMateriId);
         if (!materi) throw new Error('Materi tidak ditemukan di arsip.');
         await selesaikanRequestDenganMateri(request, materi.id, materi.nama);
@@ -547,9 +556,9 @@ const TeacherHome = () => {
         // Mode upload baru: guru mengunggah file/link baru khusus untuk request ini.
         // File ini otomatis tersimpan ke materi_file dengan kategori 'Request', sehingga
         // langsung muncul juga di halaman Arsip Materi (TeacherArsipMateri.js).
-        if (!kirimBaruForm.judul.trim()) { alert('Isi judul materi.'); return; }
-        if (kirimBaruForm.bentuk === 'File' && !kirimBaruForm.file) { alert('Pilih file untuk diunggah.'); return; }
-        if (kirimBaruForm.bentuk === 'Link' && !kirimBaruForm.link.trim()) { alert('Isi tautan (link) materi.'); return; }
+        if (!kirimBaruForm.judul.trim()) { showToast('warning', 'Isi judul materi.'); return; }
+        if (kirimBaruForm.bentuk === 'File' && !kirimBaruForm.file) { showToast('warning', 'Pilih file untuk diunggah.'); return; }
+        if (kirimBaruForm.bentuk === 'Link' && !kirimBaruForm.link.trim()) { showToast('warning', 'Isi tautan (link) materi.'); return; }
 
         let finalUrl = '';
         let tipe = 'link';
@@ -592,7 +601,7 @@ const TeacherHome = () => {
       closeKirimMateri();
     } catch (err) {
       console.error(err);
-      alert('Gagal mengirim materi: ' + err.message);
+      showToast('error', 'Gagal mengirim materi: ' + err.message);
     } finally {
       setKirimMateriSubmitting(false);
     }
@@ -724,6 +733,7 @@ const TeacherHome = () => {
 
   return (
     <div style={{ maxWidth: '1200px', margin: '0 auto', fontFamily: 'inherit' }}>
+      <Toast toast={toast} style={{ position: 'fixed', top: '20px', right: '20px', zIndex: 200, width: 'auto', maxWidth: '320px' }} />
       {/* Sapaan */}
       <div style={{ marginBottom: isMobile ? '1rem' : '1.5rem' }}>
         <h1 style={{ fontSize: isMobile ? '1.3rem' : '1.8rem', fontWeight: '700', color: C.dark, margin: '0' }}>

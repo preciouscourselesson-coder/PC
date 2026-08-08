@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../../supabaseClient';
+import { checkedUpdate } from '../../utils/supabaseUpdateGuard';
+import Toast, { useToast } from '../../components/Toast';
 
 const C = {
   gold: '#b4964b',
@@ -175,6 +177,7 @@ const AdminHome = () => {
   const [respondingPengajuanId, setRespondingPengajuanId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
+  const { toast, showToast } = useToast();
 
   const [filterType, setFilterType] = useState('guru');
   const [filterValue, setFilterValue] = useState('');
@@ -391,7 +394,7 @@ const AdminHome = () => {
       setTaskForm({ judul: '', kelas: '', tanggal: '', type: 'Tugas' });
       setShowTaskForm(false);
     } catch (err) {
-      alert('Gagal menyimpan tugas: ' + err.message);
+      showToast('error', 'Gagal menyimpan tugas: ' + err.message);
     }
   };
 
@@ -402,7 +405,7 @@ const AdminHome = () => {
       if (error) throw error;
       setTasks(prev => prev.filter(t => t.id !== id));
     } catch (err) {
-      alert('Gagal menghapus: ' + err.message);
+      showToast('error', 'Gagal menghapus: ' + err.message);
     }
   };
 
@@ -410,19 +413,19 @@ const AdminHome = () => {
     e.preventDefault();
     try {
       if (scheduleForm.siswa_ids.length === 0) {
-        alert('Pilih minimal satu siswa.');
+        showToast('warning', 'Pilih minimal satu siswa.');
         return;
       }
       let kelasValue = scheduleForm.kelas;
       if (scheduleForm.jenis === 'Group') {
         if (!scheduleForm.nama_group.trim()) {
-          alert('Nama Group wajib diisi.');
+          showToast('warning', 'Nama Group wajib diisi.');
           return;
         }
         kelasValue = scheduleForm.nama_group.trim();
       } else {
         if (!scheduleForm.kelas.trim()) {
-          alert('Kelas wajib diisi.');
+          showToast('warning', 'Kelas wajib diisi.');
           return;
         }
         kelasValue = scheduleForm.kelas.trim();
@@ -454,7 +457,7 @@ const AdminHome = () => {
         nama_group: '',
       });
     } catch (err) {
-      alert('Gagal menyimpan jadwal guru: ' + err.message);
+      showToast('error', 'Gagal menyimpan jadwal guru: ' + err.message);
     }
   };
 
@@ -465,7 +468,7 @@ const AdminHome = () => {
       if (error) throw error;
       setSchedules(prev => prev.filter(s => s.id !== id));
     } catch (err) {
-      alert('Gagal menghapus jadwal: ' + err.message);
+      showToast('error', 'Gagal menghapus jadwal: ' + err.message);
     }
   };
 
@@ -476,11 +479,13 @@ const AdminHome = () => {
       if (!original) throw new Error('Jadwal asal tidak ditemukan');
 
       if (changeForm.jenis === 'Permanen') {
-        const { data, error } = await supabase.from('jadwal_les').update({
-          hari: changeForm.hari_baru || original.hari,
-          jam_mulai: changeForm.jam_mulai_baru || original.jam_mulai,
-          jam_selesai: changeForm.jam_selesai_baru || original.jam_selesai,
-        }).eq('id', original.id).select();
+        const { data, error } = await checkedUpdate(
+          supabase.from('jadwal_les').update({
+            hari: changeForm.hari_baru || original.hari,
+            jam_mulai: changeForm.jam_mulai_baru || original.jam_mulai,
+            jam_selesai: changeForm.jam_selesai_baru || original.jam_selesai,
+          }).eq('id', original.id)
+        );
         if (error) throw error;
         setSchedules(prev => prev.map(s => (s.id === original.id ? data[0] : s)));
       } else {
@@ -504,7 +509,7 @@ const AdminHome = () => {
       setChangeForm({ jadwal_id: '', jenis: 'Permanen', hari_baru: '', jam_mulai_baru: '', jam_selesai_baru: '', tanggal_temporary: '', alasan: '' });
       setShowChangeForm(false);
     } catch (err) {
-      alert('Gagal menyimpan perubahan jadwal: ' + err.message);
+      showToast('error', 'Gagal menyimpan perubahan jadwal: ' + err.message);
     }
   };
 
@@ -515,7 +520,7 @@ const AdminHome = () => {
       if (error) throw error;
       setSchedules(prev => prev.filter(s => s.id !== id));
     } catch (err) {
-      alert('Gagal menghapus perubahan jadwal: ' + err.message);
+      showToast('error', 'Gagal menghapus perubahan jadwal: ' + err.message);
     }
   };
 
@@ -542,16 +547,15 @@ const AdminHome = () => {
     setErrorMsg('');
     try {
       const newStatus = setuju ? 'disetujui_admin' : 'ditolak_admin';
-      const { data, error } = await supabase
-        .from('pengajuan_perubahan_jadwal')
-        .update({ status: newStatus })
-        .eq('id', p.id)
-        .select('id, status');
+      const { error } = await checkedUpdate(
+        supabase
+          .from('pengajuan_perubahan_jadwal')
+          .update({ status: newStatus })
+          .eq('id', p.id),
+        { notFoundMessage: 'Perubahan tidak tersimpan (kemungkinan dibatasi oleh policy keamanan database).' }
+      );
 
       if (error) throw error;
-      if (!data || data.length === 0) {
-        throw new Error('Perubahan tidak tersimpan (kemungkinan dibatasi oleh policy keamanan database).');
-      }
 
       setPengajuanJadwal((prev) => prev.filter((item) => item.id !== p.id));
     } catch (err) {
@@ -571,6 +575,8 @@ const AdminHome = () => {
         </h1>
         <p style={{ fontSize: '0.95rem', color: C.gray, margin: 0 }}>{formatHariTanggal(today)}</p>
       </div>
+
+      <Toast toast={toast} />
 
       {errorMsg && (
         <div style={{ background: '#fdecea', color: '#a33', borderRadius: '10px', padding: '0.75rem 1rem', marginBottom: '1rem', fontSize: '0.85rem' }}>

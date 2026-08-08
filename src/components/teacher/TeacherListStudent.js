@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../supabaseClient';
+import { checkedUpdate } from '../../utils/supabaseUpdateGuard';
 
 const C = {
   gold: '#b4964b',
@@ -263,11 +264,13 @@ const TeacherListStudent = () => {
   const removeStudentFromSchedule = async (source, siswaId) => {
     if (!source.isGroup) {
       // Jadwal privat: kosongkan siswa_id (kolomnya memang nullable untuk kasus ini)
-      const { error } = await supabase
-        .from('jadwal_les')
-        .update({ siswa_id: null })
-        .eq('id', source.jadwalId)
-        .eq('siswa_id', siswaId);
+      const { error } = await checkedUpdate(
+        supabase
+          .from('jadwal_les')
+          .update({ siswa_id: null })
+          .eq('id', source.jadwalId)
+          .eq('siswa_id', siswaId)
+      );
       if (error) throw error;
       return;
     }
@@ -281,10 +284,12 @@ const TeacherListStudent = () => {
     if (fetchErr) throw fetchErr;
 
     const updatedIds = (row?.siswa_ids || []).filter((id) => id !== siswaId);
-    const { error: updateErr } = await supabase
-      .from('jadwal_les')
-      .update({ siswa_ids: updatedIds })
-      .eq('id', source.jadwalId);
+    const { error: updateErr } = await checkedUpdate(
+      supabase
+        .from('jadwal_les')
+        .update({ siswa_ids: updatedIds })
+        .eq('id', source.jadwalId)
+    );
     if (updateErr) throw updateErr;
   };
 

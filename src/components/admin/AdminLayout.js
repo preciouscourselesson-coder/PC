@@ -165,6 +165,9 @@ const AdminLayout = () => {
   const [user, setUser] = useState(null);
   const [avatarUrl, setAvatarUrl] = useState(null);
   const [notifCounts, setNotifCounts] = useState({ updates: 0, messages: 0, konsultasi: 0 });
+  // Gerbang render: mencegah shell UI admin (sidebar/menu) sempat tampil
+  // sebelum role user terverifikasi benar-benar 'admin'.
+  const [checkingAccess, setCheckingAccess] = useState(true);
 
   // Helper aman: jika tabel tidak ada, return 0 tanpa error mengganggu
   const fetchCount = useCallback(async (table, filter = null) => {
@@ -201,11 +204,48 @@ const AdminLayout = () => {
   }, [fetchCount]);
 
   useEffect(() => {
+    let cancelled = false;
+
     const getUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { navigate('/login'); return; }
+
+      // Verifikasi role lewat tabel profiles -- BUKAN dari
+      // session.user.user_metadata, karena user_metadata bisa diubah
+      // sendiri oleh user lewat supabase.auth.updateUser() dan tidak
+      // boleh dipercaya sebagai sumber kebenaran untuk otorisasi.
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('role, status')
+        .eq('id', session.user.id)
+        .single();
+
+      if (cancelled) return;
+
+      if (profileError || !profile) {
+        await supabase.auth.signOut();
+        navigate('/login');
+        return;
+      }
+
+      if (profile.status === 'pending' || profile.status === 'rejected') {
+        await supabase.auth.signOut();
+        navigate('/login');
+        return;
+      }
+
+      if (profile.role !== 'admin') {
+        // Bukan admin -- jangan biarkan shell UI admin ter-render sama
+        // sekali, langsung lempar ke area yang sesuai role-nya.
+        const redirectByRole = { student: '/siswa', teacher: '/guru', parent: '/wali' };
+        navigate(redirectByRole[profile.role] || '/login');
+        return;
+      }
+
       const userMeta = session.user.user_metadata;
       setUser(userMeta);
+      setCheckingAccess(false);
+
       const uid = session.user.id;
       if (uid) {
         const path = `${uid}/avatar.jpg`;
@@ -228,10 +268,21 @@ const AdminLayout = () => {
     });
 
     return () => {
+      cancelled = true;
       window.removeEventListener('notif-updated', fetchNotifCounts);
       listener.subscription.unsubscribe();
     };
   }, [navigate, fetchNotifCounts]);
+
+  // Jangan render shell admin (sidebar, menu, konten) sampai role
+  // terverifikasi. Mencegah "kelip" UI admin sebelum redirect terjadi.
+  if (checkingAccess) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: C.cream, color: C.gray, fontFamily: 'inherit' }}>
+        Memeriksa akses...
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: C.cream, fontFamily: 'inherit' }}>

@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { supabase } from '../../supabaseClient';
+import Toast, { useToast } from '../../components/Toast';
 
 const C = {
   gold: '#b4964b',
@@ -105,6 +106,7 @@ const TeacherAbsensiMateri = () => {
   const [students, setStudents] = useState([]);
   const [loadingStudents, setLoadingStudents] = useState(true);
   const [studentsError, setStudentsError] = useState('');
+  const { toast, showToast } = useToast();
 
   const [jadwalLes, setJadwalLes] = useState([]);
   const [loadingJadwal, setLoadingJadwal] = useState(true);
@@ -332,7 +334,7 @@ const TeacherAbsensiMateri = () => {
     const { error } = await supabase.from(TABLE).delete().eq('id', id);
     if (error) {
       setEntries(prevEntries);
-      window.alert('Gagal menghapus: ' + error.message);
+      showToast('error', 'Gagal menghapus: ' + error.message);
     }
   };
 
@@ -394,6 +396,7 @@ const TeacherAbsensiMateri = () => {
 
   return (
     <div style={{ maxWidth: '1200px', margin: '0 auto', fontFamily: 'inherit' }}>
+      <Toast toast={toast} />
       {/* Form Input Pertemuan - kartu elegan bertema gelap */}
       <div
         style={{

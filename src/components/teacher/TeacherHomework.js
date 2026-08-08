@@ -26,6 +26,7 @@ import {
   Mic,
 } from "lucide-react";
 import { supabase } from "../../supabaseClient";
+import { checkedUpdate } from "../../utils/supabaseUpdateGuard";
 
 // ---------------------------------------------------------------------------
 // Integrasi Supabase
@@ -1304,10 +1305,12 @@ function PublishedHomeworkModal({ homeworkId, onClose, onSaved, onEdit }) {
     setSaving(true);
     setSaveMessage("");
     try {
-      const { error: updateError } = await supabase
-        .from("homework")
-        .update({ due_date: dueDateInput })
-        .eq("id", homeworkId);
+      const { error: updateError } = await checkedUpdate(
+        supabase
+          .from("homework")
+          .update({ due_date: dueDateInput })
+          .eq("id", homeworkId)
+      );
       if (updateError) throw updateError;
 
       setHomework((prev) =>
@@ -2181,11 +2184,13 @@ function GradingPanel({ homeworkId, questions }) {
     try {
       // Hanya kolom `score` yang ditimpa guru — `max_score` &
       // `submitted_at` tetap milik data asli siswa, tidak disentuh.
-      const { error } = await supabase
-        .from("homework_submissions")
-        .update({ score: value === "" ? null : Number(value) })
-        .eq("homework_id", homeworkId)
-        .eq("student_id", studentId);
+      const { error } = await checkedUpdate(
+        supabase
+          .from("homework_submissions")
+          .update({ score: value === "" ? null : Number(value) })
+          .eq("homework_id", homeworkId)
+          .eq("student_id", studentId)
+      );
       if (error) throw error;
       await load();
     } catch (err) {
@@ -2665,10 +2670,12 @@ function HomeworkEditor({ initialHomework, onBack, onSaved }) {
     setStatus("unpublishing");
     setSaveMessage("");
     try {
-      const { error } = await supabase
-        .from("homework")
-        .update({ status: "draft" })
-        .eq("id", homework.id);
+      const { error } = await checkedUpdate(
+        supabase
+          .from("homework")
+          .update({ status: "draft" })
+          .eq("id", homework.id)
+      );
       if (error) throw error;
 
       setHomework((prev) => ({ ...prev, status: "draft" }));
@@ -2757,10 +2764,12 @@ function HomeworkEditor({ initialHomework, onBack, onSaved }) {
     setUpdatingDueDate(true);
     setDueDateMessage("");
     try {
-      const { error } = await supabase
-        .from("homework")
-        .update({ due_date: dueDateInput })
-        .eq("id", homework.id);
+      const { error } = await checkedUpdate(
+        supabase
+          .from("homework")
+          .update({ due_date: dueDateInput })
+          .eq("id", homework.id)
+      );
       if (error) throw error;
 
       setHomework((prev) => ({ ...prev, dueDate: dueDateInput }));
@@ -2812,10 +2821,12 @@ function HomeworkEditor({ initialHomework, onBack, onSaved }) {
     setAssigning(true);
     setAssignMessage("");
     try {
-      const { error: updateError } = await supabase
-        .from("homework")
-        .update({ due_date: dueDateInput })
-        .eq("id", homework.id);
+      const { error: updateError } = await checkedUpdate(
+        supabase
+          .from("homework")
+          .update({ due_date: dueDateInput })
+          .eq("id", homework.id)
+      );
       if (updateError) throw updateError;
 
       if (newStudents.length > 0) {

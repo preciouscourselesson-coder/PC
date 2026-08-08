@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../../supabaseClient';
+import { checkedUpdate } from '../../utils/supabaseUpdateGuard';
+import Toast, { useToast } from '../../components/Toast';
 
 const ROLE_LABEL = {
   student: 'Siswa',
@@ -116,6 +118,7 @@ const AdminConsulPage = () => {
   const [filterStatus, setFilterStatus] = useState('semua');
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
+  const { toast, showToast } = useToast();
   const [selectedId, setSelectedId] = useState(null);
   const [detailData, setDetailData] = useState(null);
   const [showDetail, setShowDetail] = useState(false);
@@ -236,10 +239,12 @@ const AdminConsulPage = () => {
     };
 
     try {
-      const { error } = await supabase
-        .from('konsultasi')
-        .update(updateData)
-        .eq('id', selectedId);
+      const { error } = await checkedUpdate(
+        supabase
+          .from('konsultasi')
+          .update(updateData)
+          .eq('id', selectedId)
+      );
 
       if (error) throw error;
 
@@ -257,7 +262,7 @@ const AdminConsulPage = () => {
       // 🔔 Trigger badge di topbar untuk refresh
       window.dispatchEvent(new Event('notif-updated'));
 
-      alert('✅ Data berhasil diperbarui!');
+      showToast('success', 'Data berhasil diperbarui!');
       closeDetail();
     } catch (err) {
       console.error('❌ Error updating:', err);
@@ -297,6 +302,8 @@ const AdminConsulPage = () => {
           ↻ Refresh
         </button>
       </div>
+
+      <Toast toast={toast} />
 
       {errorMsg && (
         <div style={{

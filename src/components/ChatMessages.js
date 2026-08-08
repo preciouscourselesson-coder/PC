@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
+import Toast, { useToast } from './Toast';
 
 // ─── Warna ───────────────────────────────────────────────────────────────────
 const C = {
@@ -127,6 +128,7 @@ const ChatMessages = () => {
 
   const [loading, setLoading] = useState(true);
   const [me, setMe] = useState(null); // { id, full_name, email, role }
+  const { toast, showToast } = useToast();
 
   const [sidebarTab, setSidebarTab] = useState('chats'); // 'chats' | 'contacts'
   const [conversations, setConversations] = useState([]);
@@ -322,7 +324,7 @@ const ChatMessages = () => {
         .single();
       if (createErr) {
         console.error('Gagal membuat percakapan:', createErr);
-        alert('Gagal memulai percakapan.');
+        showToast('error', 'Gagal memulai percakapan.');
         return;
       }
       convRow = created;
@@ -340,7 +342,7 @@ const ChatMessages = () => {
     e.target.value = ''; // supaya bisa pilih file yang sama lagi setelah dihapus
     if (!file) return;
     if (file.size > MAX_ATTACHMENT_SIZE) {
-      alert(`Ukuran file maksimal ${formatFileSize(MAX_ATTACHMENT_SIZE)}.`);
+      showToast('warning', `Ukuran file maksimal ${formatFileSize(MAX_ATTACHMENT_SIZE)}.`);
       return;
     }
     if (filePreviewUrl) URL.revokeObjectURL(filePreviewUrl);
@@ -384,7 +386,7 @@ const ChatMessages = () => {
       } catch (uploadErr) {
         console.error('Gagal mengunggah lampiran:', uploadErr);
         setUploadingFile(false);
-        alert('Gagal mengunggah lampiran.');
+        showToast('error', 'Gagal mengunggah lampiran.');
         return;
       }
       setUploadingFile(false);
@@ -406,7 +408,7 @@ const ChatMessages = () => {
     setSending(false);
     if (error) {
       console.error('Gagal mengirim pesan:', error);
-      alert('Gagal mengirim pesan.');
+      showToast('error', 'Gagal mengirim pesan.');
       return;
     }
     setChatMessages((prev) => [...prev, data]);
@@ -480,7 +482,7 @@ const ChatMessages = () => {
 
     if (error) {
       console.error('Gagal menghapus pesan:', error);
-      alert('Gagal menghapus pesan.');
+      showToast('error', 'Gagal menghapus pesan.');
       return;
     }
 
@@ -945,6 +947,7 @@ const ChatMessages = () => {
 
   return (
     <div style={{ minHeight: '100vh', background: C.cream, padding: isMobile ? '0' : '1.5rem 5%', boxSizing: 'border-box' }}>
+      <Toast toast={toast} style={{ position: 'fixed', top: '20px', right: '20px', zIndex: 400, width: 'auto', maxWidth: '320px' }} />
       {!isMobile && (
         <h1 style={{ fontSize: '1.8rem', color: C.dark, marginBottom: '1rem' }}>💬 Pesan</h1>
       )}

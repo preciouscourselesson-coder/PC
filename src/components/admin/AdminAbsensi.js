@@ -1,7 +1,9 @@
 // src/components/admin/AdminAbsensi.js
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '../../supabaseClient';
+import { checkedUpdate } from '../../utils/supabaseUpdateGuard';
 import logo from '../../Resource/PC_Horisontal.png';
+import Toast, { useToast } from '../../components/Toast';
 
 const C = {
   gold: '#b4964b',
@@ -134,6 +136,7 @@ const AdminAbsensi = () => {
   const [entries, setEntries] = useState([]);
   const [loadingEntries, setLoadingEntries] = useState(true);
   const [entriesError, setEntriesError] = useState('');
+  const { toast, showToast } = useToast();
 
   const [guruList, setGuruList] = useState([]);
   const [studentList, setStudentList] = useState([]);
@@ -276,10 +279,12 @@ const AdminAbsensi = () => {
     setUpdatingId(id);
     const prevEntries = entries;
     setEntries((prev) => prev.map((e) => (e.id === id ? { ...e, status: newStatus } : e)));
-    const { error } = await supabase.from(TABLE).update({ status: newStatus }).eq('id', id);
+    const { error } = await checkedUpdate(
+      supabase.from(TABLE).update({ status: newStatus }).eq('id', id)
+    );
     if (error) {
       setEntries(prevEntries);
-      window.alert('Gagal mengubah status: ' + error.message);
+      showToast('error', 'Gagal mengubah status: ' + error.message);
     }
     setUpdatingId(null);
   };
@@ -297,10 +302,12 @@ const AdminAbsensi = () => {
     setUpdatingId(editDateId);
     const prevEntries = entries;
     setEntries((prev) => prev.map((e) => (e.id === editDateId ? { ...e, tanggal: editDateValue } : e)));
-    const { error } = await supabase.from(TABLE).update({ tanggal: editDateValue }).eq('id', editDateId);
+    const { error } = await checkedUpdate(
+      supabase.from(TABLE).update({ tanggal: editDateValue }).eq('id', editDateId)
+    );
     if (error) {
       setEntries(prevEntries);
-      alert('Gagal update tanggal: ' + error.message);
+      showToast('error', 'Gagal update tanggal: ' + error.message);
     }
     setUpdatingId(null);
     setShowEditDateModal(false);
@@ -323,7 +330,7 @@ const AdminAbsensi = () => {
     const { error } = await supabase.from(TABLE).delete().eq('id', deleteId);
     if (error) {
       setEntries(prevEntries);
-      alert('Gagal menghapus pertemuan: ' + error.message);
+      showToast('error', 'Gagal menghapus pertemuan: ' + error.message);
     }
     setUpdatingId(null);
     setShowDeleteModal(false);
@@ -333,7 +340,7 @@ const AdminAbsensi = () => {
   // ---------- Rekap siswa dengan pengelompokan per guru ----------
   const loadRekap = async () => {
     if (!rekapSiswaId || !rekapBulan) {
-      alert('Pilih siswa dan bulan terlebih dahulu.');
+      showToast('warning', 'Pilih siswa dan bulan terlebih dahulu.');
       return;
     }
     setLoadingRekap(true);
@@ -353,7 +360,7 @@ const AdminAbsensi = () => {
       .order('tanggal', { ascending: true });
 
     if (error) {
-      alert('Gagal mengambil rekap: ' + error.message);
+      showToast('error', 'Gagal mengambil rekap: ' + error.message);
     } else {
       setRekapData(data || []);
       const siswa = studentList.find(s => s.id === rekapSiswaId);
@@ -388,7 +395,7 @@ const AdminAbsensi = () => {
     document.title = `Rekap ${siswaName} ${rekapBulan}`;
     const printWindow = window.open('', '_blank', 'width=900,height=700');
     if (!printWindow) {
-      alert('Mohon izinkan popup untuk mencetak PDF.');
+      showToast('warning', 'Mohon izinkan popup untuk mencetak PDF.');
       return;
     }
     const styles = `
@@ -498,6 +505,8 @@ const AdminAbsensi = () => {
           Pantau pertemuan yang dilaporkan oleh setiap guru dan yang diikuti tiap siswa.
         </p>
       </div>
+
+      <Toast toast={toast} />
 
       {/* Statistik ringkas */}
       <div style={{ display: 'flex', gap: '0.9rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>

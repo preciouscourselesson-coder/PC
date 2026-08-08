@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import bgPeople from '../Resource/bg_people.png';
+import Toast, { useToast } from '../components/Toast';
 
 // ─── Konstanta & Data ────────────────────────────────────────────────────────
 
@@ -287,12 +288,12 @@ const ReferralInput = ({ value, onChange }) => {
 
 // ─── Step 1: Data Diri ───────────────────────────────────────────────────────
 
-const StepDataDiri = ({ data, setData, onNext }) => {
+const StepDataDiri = ({ data, setData, onNext, onError }) => {
   const update = (key) => (e) => setData({ ...data, [key]: e.target.value });
 
   const handleNext = () => {
     if (!data.nama || !data.whatsapp || !data.status) {
-      alert('Mohon lengkapi Nama, Nomor WhatsApp, dan Status terlebih dahulu.');
+      onError && onError('Mohon lengkapi Nama, Nomor WhatsApp, dan Status terlebih dahulu.');
       return;
     }
     onNext();
@@ -364,7 +365,7 @@ const StepDataDiri = ({ data, setData, onNext }) => {
 
 // ─── Step 2: Kebutuhan Belajar ───────────────────────────────────────────────
 
-const StepKebutuhan = ({ data, setData, onBack, onNext }) => {
+const StepKebutuhan = ({ data, setData, onBack, onNext, onError }) => {
   const toggleMulti = (key, val) => {
     const arr = data[key] || [];
     setData({ ...data, [key]: arr.includes(val) ? arr.filter(x => x !== val) : [...arr, val] });
@@ -372,7 +373,7 @@ const StepKebutuhan = ({ data, setData, onBack, onNext }) => {
 
   const handleNext = () => {
     if (!data.tujuan?.length || !data.mapel?.length) {
-      alert('Mohon pilih tujuan belajar dan mata pelajaran terlebih dahulu.');
+      onError && onError('Mohon pilih tujuan belajar dan mata pelajaran terlebih dahulu.');
       return;
     }
     onNext();
@@ -422,7 +423,7 @@ const StepKebutuhan = ({ data, setData, onBack, onNext }) => {
 
 // ─── Step 3: Jadwal & Preferensi ────────────────────────────────────────────
 
-const StepJadwal = ({ data, setData, onBack, onNext }) => {
+const StepJadwal = ({ data, setData, onBack, onNext, onError }) => {
   const toggleMulti = (key, val) => {
     const arr = data[key] || [];
     setData({ ...data, [key]: arr.includes(val) ? arr.filter(x => x !== val) : [...arr, val] });
@@ -430,7 +431,7 @@ const StepJadwal = ({ data, setData, onBack, onNext }) => {
 
   const handleNext = () => {
     if (!data.metode || !data.hari?.length || !data.jam?.length) {
-      alert('Mohon pilih metode belajar, hari, dan jam yang tersedia.');
+      onError && onError('Mohon pilih metode belajar, hari, dan jam yang tersedia.');
       return;
     }
     onNext();
@@ -528,14 +529,14 @@ const ConfirmRow = ({ icon, label, value, onEdit }) => (
   </div>
 );
 
-const StepKonfirmasi = ({ dataDiri, kebutuhan, jadwal, onEdit, onSubmit }) => {
+const StepKonfirmasi = ({ dataDiri, kebutuhan, jadwal, onEdit, onSubmit, onError }) => {
   const [setuju, setSetuju]     = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState(null);
 
   const handleSubmit = async () => {
-    if (!setuju) { alert('Mohon centang persetujuan terlebih dahulu.'); return; }
+    if (!setuju) { onError && onError('Mohon centang persetujuan terlebih dahulu.'); return; }
 
     setLoading(true);
     setError(null);
@@ -749,6 +750,7 @@ const KonsultasiPage = () => {
   const [kebutuhan, setKebutuhan] = useState({ tujuan: [], mapel: [], kesulitan: '' });
   const [jadwal, setJadwal]       = useState({ metode: '', hari: [], jam: [], budget: '' });
   const navigate                  = useNavigate();
+  const { toast, showToast }      = useToast();
 
   return (
     <div style={{ minHeight: '100vh', background: C.cream, fontFamily: 'inherit' }}>
@@ -806,6 +808,8 @@ const KonsultasiPage = () => {
           {/* Step Indicator */}
           <StepIndicator current={step} />
 
+          <Toast toast={toast} />
+
           {/* Card Form */}
           <div style={{
             background: C.white, borderRadius: '24px',
@@ -814,13 +818,13 @@ const KonsultasiPage = () => {
             boxSizing: 'border-box'
           }}>
             {step === 1 && (
-              <StepDataDiri data={dataDiri} setData={setDataDiri} onNext={() => setStep(2)} />
+              <StepDataDiri data={dataDiri} setData={setDataDiri} onNext={() => setStep(2)} onError={(msg) => showToast('warning', msg)} />
             )}
             {step === 2 && (
-              <StepKebutuhan data={kebutuhan} setData={setKebutuhan} onBack={() => setStep(1)} onNext={() => setStep(3)} />
+              <StepKebutuhan data={kebutuhan} setData={setKebutuhan} onBack={() => setStep(1)} onNext={() => setStep(3)} onError={(msg) => showToast('warning', msg)} />
             )}
             {step === 3 && (
-              <StepJadwal data={jadwal} setData={setJadwal} onBack={() => setStep(2)} onNext={() => setStep(4)} />
+              <StepJadwal data={jadwal} setData={setJadwal} onBack={() => setStep(2)} onNext={() => setStep(4)} onError={(msg) => showToast('warning', msg)} />
             )}
             {step === 4 && (
               <StepKonfirmasi
@@ -829,6 +833,7 @@ const KonsultasiPage = () => {
                 jadwal={jadwal}
                 onEdit={(s) => setStep(s)}
                 onSubmit={() => console.log('Submit:', { dataDiri, kebutuhan, jadwal })}
+                onError={(msg) => showToast('warning', msg)}
               />
             )}
           </div>

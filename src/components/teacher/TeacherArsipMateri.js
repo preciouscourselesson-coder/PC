@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../supabaseClient';
+import { checkedUpdate } from '../../utils/supabaseUpdateGuard';
+import Toast, { useToast } from '../../components/Toast';
 
 const C = {
   gold: '#b4964b',
@@ -706,6 +708,7 @@ const TeacherUploadMateriModal = ({ userId, onUploaded }) => {
 const TeacherArsipMateri = () => {
   const isMobile = useIsMobile();
   const [userId, setUserId] = useState(null);
+  const { toast, showToast } = useToast();
   const [activeTab, setActiveTab] = useState('Dipublish');
   const [search, setSearch] = useState('');
   // Kategori sumber materi yang sedang ditampilkan (folder tersimpan terpisah per kategori)
@@ -833,25 +836,27 @@ const TeacherArsipMateri = () => {
       setMateriList(prev => prev.map(m => (m.folder_id === deleteFolderTarget.id ? { ...m, folder_id: null, folder_materi: null } : m)));
       setDeleteFolderTarget(null);
     } catch (err) {
-      alert('Gagal menghapus folder: ' + err.message);
+      showToast('error', 'Gagal menghapus folder: ' + err.message);
     }
   };
 
 
   const handleArchiveToggle = async (item) => {
     const nextStatus = item.status === 'Diarsipkan' ? 'Dipublish' : 'Diarsipkan';
-    const { error } = await supabase
-      .from('materi_file')
-      .update({ status: nextStatus })
-      .eq('id', item.id);
-    if (error) { alert('Gagal mengubah status: ' + error.message); return; }
+    const { error } = await checkedUpdate(
+      supabase
+        .from('materi_file')
+        .update({ status: nextStatus })
+        .eq('id', item.id)
+    );
+    if (error) { showToast('error', 'Gagal mengubah status: ' + error.message); return; }
     fetchMateri();
   };
 
   const handleDelete = async () => {
     if (!deleteItem) return;
     const { error } = await supabase.from('materi_file').delete().eq('id', deleteItem.id);
-    if (error) { alert('Gagal menghapus: ' + error.message); return; }
+    if (error) { showToast('error', 'Gagal menghapus: ' + error.message); return; }
     setDeleteItem(null);
     fetchMateri();
   };
@@ -859,29 +864,32 @@ const TeacherArsipMateri = () => {
   const handleSaveEdit = async () => {
     if (!editItem) return;
     setSavingEdit(true);
-    const { error } = await supabase
-      .from('materi_file')
-      .update({
-        nama: editItem.nama,
-        deskripsi: editItem.deskripsi,
-        kelas: editItem.kelas,
-        mapel: editItem.mapel,
-        bab: editItem.bab,
-        sub_bab: editItem.sub_bab || null,
-        status: editItem.status,
-        folder_id: editItem.folder_id || null,
-        pengajar: editItem.kategori === 'Sekolah' ? (editItem.pengajar || null) : null,
-        jenis: editItem.kategori === 'Sekolah' ? (editItem.jenis || null) : null,
-      })
-      .eq('id', editItem.id);
+    const { error } = await checkedUpdate(
+      supabase
+        .from('materi_file')
+        .update({
+          nama: editItem.nama,
+          deskripsi: editItem.deskripsi,
+          kelas: editItem.kelas,
+          mapel: editItem.mapel,
+          bab: editItem.bab,
+          sub_bab: editItem.sub_bab || null,
+          status: editItem.status,
+          folder_id: editItem.folder_id || null,
+          pengajar: editItem.kategori === 'Sekolah' ? (editItem.pengajar || null) : null,
+          jenis: editItem.kategori === 'Sekolah' ? (editItem.jenis || null) : null,
+        })
+        .eq('id', editItem.id)
+    );
     setSavingEdit(false);
-    if (error) { alert('Gagal menyimpan: ' + error.message); return; }
+    if (error) { showToast('error', 'Gagal menyimpan: ' + error.message); return; }
     setEditItem(null);
     fetchMateri();
   };
 
   return (
     <div style={{ fontFamily: 'inherit' }}>
+      <Toast toast={toast} />
       <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? '16px' : '24px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
 
       {/* Kolom kiri: tabs, filter, tabel/kartu */}

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../../supabaseClient';
+import { checkedUpdate } from '../../utils/supabaseUpdateGuard';
 
 const C = {
   gold:   '#b4964b',
@@ -58,10 +59,12 @@ const AdminTestimoni = () => {
 
   const handleApprove = async (id) => {
     setActionId(id);
-    const { error: updateError } = await supabase
-      .from('testimoni')
-      .update({ approved: true })
-      .eq('id', id);
+    const { error: updateError } = await checkedUpdate(
+      supabase
+        .from('testimoni')
+        .update({ approved: true })
+        .eq('id', id)
+    );
     setActionId(null);
 
     if (updateError) {
@@ -73,10 +76,12 @@ const AdminTestimoni = () => {
 
   const handleUnapprove = async (id) => {
     setActionId(id);
-    const { error: updateError } = await supabase
-      .from('testimoni')
-      .update({ approved: false })
-      .eq('id', id);
+    const { error: updateError } = await checkedUpdate(
+      supabase
+        .from('testimoni')
+        .update({ approved: false })
+        .eq('id', id)
+    );
     setActionId(null);
 
     if (updateError) {

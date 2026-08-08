@@ -1,5 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../../supabaseClient';
+import { checkedUpdate } from '../../utils/supabaseUpdateGuard';
+import Toast, { useToast } from '../../components/Toast';
 
 const C = {
   gold:   '#b4964b',
@@ -27,7 +29,7 @@ const AdminConfirmUser = () => {
   const [loading, setLoading]       = useState(true);
   const [error, setError]           = useState(null);
   const [processingId, setProcessingId] = useState(null);
-  const [toast, setToast]           = useState(null);
+  const { toast, showToast } = useToast();
 
   const fetchPending = useCallback(async () => {
     setLoading(true);
@@ -52,34 +54,30 @@ const AdminConfirmUser = () => {
     fetchPending();
   }, [fetchPending]);
 
-  useEffect(() => {
-    if (!toast) return;
-    const t = setTimeout(() => setToast(null), 3000);
-    return () => clearTimeout(t);
-  }, [toast]);
-
   const handleDecision = async (id, name, decision) => {
     setProcessingId(id);
 
-    const { error: updateError } = await supabase
-      .from('profiles')
-      .update({ status: decision })
-      .eq('id', id);
+    const { error: updateError } = await checkedUpdate(
+      supabase
+        .from('profiles')
+        .update({ status: decision })
+        .eq('id', id)
+    );
 
     setProcessingId(null);
 
     if (updateError) {
-      setToast({ type: 'error', message: `Gagal memproses akun ${name}. Coba lagi.` });
+      showToast('error', `Gagal memproses akun ${name}. Coba lagi.`);
       return;
     }
 
     setUsers(prev => prev.filter(u => u.id !== id));
-    setToast({
-      type: 'success',
-      message: decision === 'approved'
+    showToast(
+      'success',
+      decision === 'approved'
         ? `Akun ${name} telah disetujui.`
-        : `Akun ${name} telah ditolak.`,
-    });
+        : `Akun ${name} telah ditolak.`
+    );
   };
 
   const formatDate = (iso) => {
@@ -105,17 +103,7 @@ const AdminConfirmUser = () => {
         </div>
 
         {/* Toast */}
-        {toast && (
-          <div style={{
-            background: toast.type === 'success' ? C.successBg : C.dangerBg,
-            border: `1.5px solid ${toast.type === 'success' ? C.success : C.danger}`,
-            color: toast.type === 'success' ? C.success : C.danger,
-            borderRadius: '12px', padding: '10px 16px', fontSize: '0.88rem',
-            marginBottom: '1.25rem',
-          }}>
-            {toast.type === 'success' ? '✓ ' : '⚠️ '}{toast.message}
-          </div>
-        )}
+        <Toast toast={toast} />
 
         {/* Error state */}
         {error && (

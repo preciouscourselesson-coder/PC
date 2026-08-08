@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { supabase } from '../../supabaseClient';
+import { checkedUpdate } from '../../utils/supabaseUpdateGuard';
 import * as XLSX from 'xlsx';
 
 const C = {
@@ -339,7 +340,9 @@ const AdminPengaturanMateri = () => {
   const handleArchiveToggle = async (item) => {
     const nextStatus = item.status === 'Diarsipkan' ? 'Dipublish' : 'Diarsipkan';
     setBusyId(item.id);
-    const { error } = await supabase.from('materi_file').update({ status: nextStatus }).eq('id', item.id);
+    const { error } = await checkedUpdate(
+      supabase.from('materi_file').update({ status: nextStatus }).eq('id', item.id)
+    );
     setBusyId(null);
     if (error) { setToast({ type: 'error', message: 'Gagal mengubah status: ' + error.message }); return; }
     setRows(prev => prev.map(r => r.id === item.id ? { ...r, status: nextStatus } : r));
@@ -349,21 +352,23 @@ const AdminPengaturanMateri = () => {
   const handleSaveEdit = async () => {
     if (!editItem) return;
     setSavingEdit(true);
-    const { error } = await supabase
-      .from('materi_file')
-      .update({
-        nama: editItem.nama,
-        deskripsi: editItem.deskripsi,
-        kelas: editItem.kelas,
-        bab_id: editItem.bab_id || null,
-        // 'mapel' dan 'bab' didenormalisasi di materi_file (bukan hasil join),
-        // jadi ikut disinkronkan manual berdasarkan bab yang dipilih supaya
-        // tampilan tabel/export tetap akurat tanpa perlu join ke materi_bab.
-        mapel: editSelectedBab?.materi_mapel?.nama || null,
-        bab: editSelectedBab?.nama || null,
-        status: editItem.status,
-      })
-      .eq('id', editItem.id);
+    const { error } = await checkedUpdate(
+      supabase
+        .from('materi_file')
+        .update({
+          nama: editItem.nama,
+          deskripsi: editItem.deskripsi,
+          kelas: editItem.kelas,
+          bab_id: editItem.bab_id || null,
+          // 'mapel' dan 'bab' didenormalisasi di materi_file (bukan hasil join),
+          // jadi ikut disinkronkan manual berdasarkan bab yang dipilih supaya
+          // tampilan tabel/export tetap akurat tanpa perlu join ke materi_bab.
+          mapel: editSelectedBab?.materi_mapel?.nama || null,
+          bab: editSelectedBab?.nama || null,
+          status: editItem.status,
+        })
+        .eq('id', editItem.id)
+    );
     setSavingEdit(false);
     if (error) { setToast({ type: 'error', message: 'Gagal menyimpan perubahan: ' + error.message }); return; }
     setToast({ type: 'success', message: 'Materi berhasil diperbarui.' });
@@ -422,7 +427,9 @@ const AdminPengaturanMateri = () => {
 
   const handleSesiStatusChange = async (item, newStatus) => {
     setSesiBusyId(item.id);
-    const { error } = await supabase.from('sesi_pembelajaran').update({ status: newStatus }).eq('id', item.id);
+    const { error } = await checkedUpdate(
+      supabase.from('sesi_pembelajaran').update({ status: newStatus }).eq('id', item.id)
+    );
     setSesiBusyId(null);
     if (error) { setToast({ type: 'error', message: 'Gagal mengubah status: ' + error.message }); return; }
     setSesiRows(prev => prev.map(r => r.id === item.id ? { ...r, status: newStatus } : r));

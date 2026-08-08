@@ -1,6 +1,7 @@
 // StudentArsip.js
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../../supabaseClient';
+import Toast, { useToast } from '../../components/Toast';
 
 const C = {
   gold: '#b4964b',
@@ -147,6 +148,7 @@ const StudentArsip = () => {
   const [entries, setEntries] = useState([]);
   const [loadingEntries, setLoadingEntries] = useState(true);
   const [entriesError, setEntriesError] = useState('');
+  const { toast, showToast } = useToast();
 
   // Form upload
   const [jenis, setJenis] = useState('Ulangan');
@@ -326,7 +328,7 @@ const StudentArsip = () => {
 
       setEntries((prev) => prev.filter((e) => e.id !== item.id));
     } catch (err) {
-      alert('Gagal menghapus: ' + err.message);
+      showToast('error', 'Gagal menghapus: ' + err.message);
     } finally {
       setDeleting((prev) => ({ ...prev, [item.id]: false }));
     }
@@ -393,6 +395,7 @@ const StudentArsip = () => {
 
   return (
     <div style={{ maxWidth: '1200px', margin: '0 auto', fontFamily: 'inherit' }}>
+      <Toast toast={toast} />
       {/* Form Upload */}
       <div style={card}>
         <h2 style={{ fontSize: '1.15rem', fontWeight: 700, color: C.dark, margin: '0 0 1.25rem' }}>

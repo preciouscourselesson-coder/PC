@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../supabaseClient';
+import { checkedUpdate } from '../../utils/supabaseUpdateGuard';
 
 const C = {
   gold: '#b4964b',
@@ -116,10 +117,12 @@ const RecapPerubahanJadwal = () => {
     setErrorMsg('');
     try {
       const newStatus = setuju ? 'disetujui_admin' : 'ditolak_admin';
-      const { error } = await supabase
-        .from('pengajuan_perubahan_jadwal')
-        .update({ status: newStatus })
-        .eq('id', id);
+      const { error } = await checkedUpdate(
+        supabase
+          .from('pengajuan_perubahan_jadwal')
+          .update({ status: newStatus })
+          .eq('id', id)
+      );
 
       if (error) throw error;
 

@@ -1,6 +1,7 @@
 // src/components/student/StudentProfile.js
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../../supabaseClient';
+import { checkedUpdate } from '../../utils/supabaseUpdateGuard';
 
 const C = {
   gold: '#b4964b',
@@ -201,13 +202,15 @@ const StudentProfile = () => {
     setSaving(true);
     setMessage({ type: '', text: '' });
     try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({
-          full_name: form.full_name.trim(),
-          gender: form.gender || null,
-        })
-        .eq('id', profile.id);
+      const { error } = await checkedUpdate(
+        supabase
+          .from('profiles')
+          .update({
+            full_name: form.full_name.trim(),
+            gender: form.gender || null,
+          })
+          .eq('id', profile.id)
+      );
 
       if (error) throw error;
 

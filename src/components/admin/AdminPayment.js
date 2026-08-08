@@ -36,6 +36,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import { supabase } from '../../supabaseClient';
+import { checkedUpdate } from '../../utils/supabaseUpdateGuard';
+import Toast, { useToast } from '../../components/Toast';
 
 // Palet terang (tabel & kartu ringkasan) -- disamakan dengan Pricelist.js / PaketSiswa.js
 const C = {
@@ -194,7 +196,7 @@ const emptyForm = {
   siswa_referral_id: '',
 };
 
-const FormPembayaran = ({ onSuccess, onCancelEdit, editingItem }) => {
+const FormPembayaran = ({ onSuccess, onCancelEdit, editingItem, onError }) => {
   const isEditing = !!editingItem;
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
@@ -334,7 +336,7 @@ const FormPembayaran = ({ onSuccess, onCancelEdit, editingItem }) => {
       }
 
       const { error } = isEditing
-        ? await supabase.from(TABLE).update(payload).eq('id', editingItem.id)
+        ? await checkedUpdate(supabase.from(TABLE).update(payload).eq('id', editingItem.id))
         : await supabase.from(TABLE).insert(payload);
 
       if (error) throw error;
@@ -342,7 +344,7 @@ const FormPembayaran = ({ onSuccess, onCancelEdit, editingItem }) => {
       setForm(emptyForm);
       onSuccess && onSuccess();
     } catch (err) {
-      alert('Gagal menyimpan: ' + err.message);
+      onError && onError('Gagal menyimpan: ' + err.message);
     } finally {
       setLoading(false);
     }
@@ -606,19 +608,13 @@ const AdminPayment = () => {
   const [editingItem, setEditingItem] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [busyId, setBusyId] = useState(null);
-  const [toast, setToast] = useState(null);
+  const { toast, showToast } = useToast();
 
   const [search, setSearch] = useState('');
   const [filterJenis, setFilterJenis] = useState('semua');
   const [dariBulan, setDariBulan] = useState('');   // format YYYY-MM (dari <input type="month">)
   const [sampaiBulan, setSampaiBulan] = useState('');
   const [page, setPage] = useState(1);
-
-  useEffect(() => {
-    if (!toast) return;
-    const t = setTimeout(() => setToast(null), 3000);
-    return () => clearTimeout(t);
-  }, [toast]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -713,7 +709,7 @@ const AdminPayment = () => {
 
   const handleModalSuccess = () => {
     setEditingItem(null);
-    setToast({ type: 'success', message: editingItem ? 'Transaksi berhasil diperbarui.' : 'Transaksi berhasil dicatat.' });
+    showToast('success', editingItem ? 'Transaksi berhasil diperbarui.' : 'Transaksi berhasil dicatat.');
     loadData();
   };
 
@@ -724,11 +720,11 @@ const AdminPayment = () => {
     setConfirmDelete(null);
 
     if (deleteError) {
-      setToast({ type: 'error', message: 'Gagal menghapus transaksi.' });
+      showToast('error', 'Gagal menghapus transaksi.');
       return;
     }
     setList((prev) => prev.filter((i) => i.id !== item.id));
-    setToast({ type: 'success', message: 'Transaksi berhasil dihapus.' });
+    showToast('success', 'Transaksi berhasil dihapus.');
   };
 
   const handleExport = () => {
@@ -753,20 +749,7 @@ const AdminPayment = () => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', fontFamily: 'inherit' }}>
       {/* Toast */}
-      {toast && (
-        <div
-          style={{
-            position: 'fixed', top: '20px', right: '20px', zIndex: 300,
-            padding: '12px 20px', borderRadius: '10px',
-            background: toast.type === 'success' ? C.greenBg : C.redBg,
-            color: toast.type === 'success' ? C.green : C.red,
-            fontWeight: 600, fontSize: '0.85rem',
-            boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
-          }}
-        >
-          {toast.message}
-        </div>
-      )}
+      <Toast toast={toast} style={{ position: 'fixed', top: '20px', right: '20px', zIndex: 300, width: 'auto' }} />
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
         <h2 style={{ margin: 0, color: C.dark }}>Pembayaran</h2>
@@ -949,6 +932,7 @@ const AdminPayment = () => {
             onSuccess={handleModalSuccess}
             onCancelEdit={() => setEditingItem(null)}
             editingItem={editingItem}
+            onError={(msg) => showToast('error', msg)}
           />
         </div>
       </div>

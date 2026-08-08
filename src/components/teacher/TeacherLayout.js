@@ -393,23 +393,69 @@ const TeacherLayout = () => {
   const [user, setUser] = useState(null);
   const isMobile = useIsMobile();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [checkingAccess, setCheckingAccess] = useState(true);
 
   useEffect(() => {
+    let cancelled = false;
+
     const getUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { navigate('/login'); return; }
+
+      // Verifikasi role lewat tabel profiles -- BUKAN dari
+      // session.user.user_metadata, karena user_metadata bisa diubah
+      // sendiri oleh user lewat supabase.auth.updateUser() dan tidak
+      // boleh dipercaya sebagai sumber kebenaran untuk otorisasi.
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('role, status')
+        .eq('id', session.user.id)
+        .single();
+
+      if (cancelled) return;
+
+      if (profileError || !profile) {
+        await supabase.auth.signOut();
+        navigate('/login');
+        return;
+      }
+
+      if (profile.status === 'pending' || profile.status === 'rejected') {
+        await supabase.auth.signOut();
+        navigate('/login');
+        return;
+      }
+
+      if (profile.role !== 'teacher') {
+        const redirectByRole = { student: '/siswa', admin: '/admin', parent: '/wali' };
+        navigate(redirectByRole[profile.role] || '/login');
+        return;
+      }
+
       setUser(session.user.user_metadata);
+      setCheckingAccess(false);
     };
     getUser();
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!session) navigate('/login');
     });
-    return () => listener.subscription.unsubscribe();
+    return () => {
+      cancelled = true;
+      listener.subscription.unsubscribe();
+    };
   }, [navigate]);
 
   useEffect(() => {
     if (!isMobile) setSidebarOpen(false);
   }, [isMobile]);
+
+  if (checkingAccess) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: C.cream, color: C.gray, fontFamily: 'inherit' }}>
+        Memeriksa akses...
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: C.cream, fontFamily: 'inherit' }}>

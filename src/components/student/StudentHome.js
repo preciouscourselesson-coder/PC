@@ -1,6 +1,7 @@
 // src/components/student/StudentHome.js
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from '../../supabaseClient';
+import { checkedUpdate } from '../../utils/supabaseUpdateGuard';
 
 const C = {
   gold: '#b4964b',
@@ -373,20 +374,15 @@ const StudentHome = () => {
     setRespondingId(p.id);
     try {
       const newStatus = setuju ? 'disetujui_siswa' : 'ditolak';
-      const { data, error } = await supabase
-        .from('pengajuan_perubahan_jadwal')
-        .update({ status: newStatus })
-        .eq('id', p.id)
-        .eq('siswa_id', profile.id)
-        .select('id, status');
+      const { error } = await checkedUpdate(
+        supabase
+          .from('pengajuan_perubahan_jadwal')
+          .update({ status: newStatus })
+          .eq('id', p.id)
+          .eq('siswa_id', profile.id),
+        { notFoundMessage: 'Perubahan tidak tersimpan (kemungkinan dibatasi oleh policy keamanan database). Hubungi admin.' }
+      );
       if (error) throw error;
-
-      // Kalau tidak ada baris yang benar-benar terupdate, biasanya berarti
-      // RLS memblokir UPDATE ini (bukan error, tapi 0 baris match) —
-      // jangan diam-diam anggap sukses.
-      if (!data || data.length === 0) {
-        throw new Error('Perubahan tidak tersimpan (kemungkinan dibatasi oleh policy keamanan database). Hubungi admin.');
-      }
 
       if (setuju) {
         try {

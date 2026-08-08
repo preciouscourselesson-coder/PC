@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import * as XLSX from 'xlsx';
 import { supabase } from '../../supabaseClient';
+import { checkedUpdate } from '../../utils/supabaseUpdateGuard';
+import Toast, { useToast } from '../../components/Toast';
 
 // Palet terang (tabel & kartu putih)
 const C = {
@@ -240,6 +242,7 @@ const Pricelist = () => {
   const [items, setItems] = useState([]);
   const [loadingItems, setLoadingItems] = useState(true);
   const [itemsError, setItemsError] = useState('');
+  const { toast, showToast } = useToast();
 
   const [selectedId, setSelectedId] = useState(null);
   const [riwayat, setRiwayat] = useState([]);
@@ -411,10 +414,12 @@ const Pricelist = () => {
 
       if (wasEditingId) {
         const oldRow = items.find((i) => i.id === wasEditingId);
-        const { error: updateError } = await supabase
-          .from(PRICELIST_TABLE)
-          .update({ ...payload, updated_by: adminId })
-          .eq('id', wasEditingId);
+        const { error: updateError } = await checkedUpdate(
+          supabase
+            .from(PRICELIST_TABLE)
+            .update({ ...payload, updated_by: adminId })
+            .eq('id', wasEditingId)
+        );
         if (updateError) throw updateError;
 
         const diffLines = buildDiffText(oldRow, payload);
@@ -460,7 +465,7 @@ const Pricelist = () => {
     const { error } = await supabase.from(PRICELIST_TABLE).delete().eq('id', id);
     setDeleting(false);
     if (error) {
-      window.alert('Gagal menghapus: ' + error.message);
+      showToast('error', 'Gagal menghapus: ' + error.message);
       return;
     }
     setDeleteTarget(null);
@@ -673,6 +678,7 @@ const Pricelist = () => {
 
   return (
     <div style={{ maxWidth: '1280px', margin: '0 auto', fontFamily: 'inherit' }}>
+      <Toast toast={toast} />
       {/* Kartu Tabel */}
       <div style={{ background: C.white, borderRadius: '16px', border: `1.5px solid ${C.border}`, padding: '1.5rem', marginBottom: '1.5rem' }}>
         {/* Toolbar import / export */}
