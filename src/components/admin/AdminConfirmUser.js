@@ -2,20 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../../supabaseClient';
 import { checkedUpdate } from '../../utils/supabaseUpdateGuard';
 import Toast, { useToast } from '../../components/Toast';
-
-const C = {
-  gold:   '#b4964b',
-  dark:   '#171411',
-  gray:   '#444242',
-  cream:  '#f7f6f0',
-  white:  '#ffffff',
-  border: '#e0ddd6',
-  goldBg: 'rgba(180,150,75,0.08)',
-  danger: '#e74c3c',
-  dangerBg: '#fff0f0',
-  success: '#2e9e5b',
-  successBg: '#eefaf2',
-};
+import { C } from '../Theme';
 
 const ROLE_LABEL = {
   student: 'Siswa',

@@ -38,45 +38,7 @@ import * as XLSX from 'xlsx';
 import { supabase } from '../../supabaseClient';
 import { checkedUpdate } from '../../utils/supabaseUpdateGuard';
 import Toast, { useToast } from '../../components/Toast';
-
-// Palet terang (tabel & kartu ringkasan) -- disamakan dengan Pricelist.js / PaketSiswa.js
-const C = {
-  gold: '#b4964b',
-  goldDark: '#96793a',
-  green: '#2d6a4f',
-  greenBg: 'rgba(45,106,79,0.10)',
-  amber: '#a3760f',
-  amberBg: 'rgba(180,150,75,0.14)',
-  red: '#b0413e',
-  redBg: 'rgba(176,65,62,0.10)',
-  blue: '#3f7ea6',
-  blueBg: 'rgba(63,126,166,0.12)',
-  dark: '#171411',
-  gray: '#726d66',
-  grayBg: 'rgba(114,109,102,0.12)',
-  grayLight: '#a8a29a',
-  cream: '#f7f6f0',
-  white: '#ffffff',
-  border: '#e6e2d8',
-};
-
-// Palet gelap untuk panel form input (konsisten dengan halaman lain)
-const D = {
-  bg: '#12141c',
-  bgSoft: '#181b26',
-  field: '#1c2030',
-  fieldBorder: '#2c3145',
-  fieldBorderFocus: '#c9a24b',
-  gold: '#d4ac52',
-  goldSoft: 'rgba(212,172,82,0.14)',
-  text: '#f2efe6',
-  textMuted: '#9a9fb0',
-  textFaint: '#5f6577',
-  red: '#e0574f',
-  green: '#7fbf9e',
-  blue: '#4f8fdb',
-  danger: '#e0574f',
-};
+import { C, D } from '../Theme';
 
 // ============================================================
 // KONSTANTA

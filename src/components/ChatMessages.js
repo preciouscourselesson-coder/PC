@@ -2,20 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import Toast, { useToast } from './Toast';
-
-// ─── Warna ───────────────────────────────────────────────────────────────────
-const C = {
-  gold: '#b4964b',
-  green: '#2d6a4f',
-  dark: '#171411',
-  gray: '#444242',
-  grayLight: '#8a8782',
-  cream: '#f7f6f0',
-  white: '#ffffff',
-  border: '#e0ddd6',
-  goldBg: 'rgba(180,150,75,0.10)',
-  goldLight: 'rgba(180,150,75,0.06)',
-};
+import { C } from './Theme';
 
 const MOBILE_BREAKPOINT = 768;
 

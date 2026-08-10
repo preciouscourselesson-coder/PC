@@ -8,20 +8,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../../supabaseClient';
 import { checkedUpdate } from '../../utils/supabaseUpdateGuard';
 import Toast, { useToast } from '../../components/Toast';
-
-const C = {
-  gold: '#b4964b',
-  goldBg: '#f6efdc',
-  green: '#2d6a4f',
-  greenBg: '#e4efe9',
-  red: '#b3423a',
-  redBg: '#fbeceb',
-  dark: '#171411',
-  gray: '#444242',
-  cream: '#f7f6f0',
-  white: '#ffffff',
-  border: '#e0ddd6',
-};
+import { C } from '../Theme';
 
 const HARI_LIST = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
 

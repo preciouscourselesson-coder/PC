@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import bgPeople from '../Resource/bg_people.png';
 import Toast, { useToast } from '../components/Toast';
+import { C } from './Theme';
 
 // ─── Konstanta & Data ────────────────────────────────────────────────────────
 
@@ -31,18 +32,6 @@ const METODE_OPTIONS   = [
 const HARI_OPTIONS     = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
 const JAM_OPTIONS      = ['08.00 – 10.00', '10.00 – 12.00', '13.00 – 15.00', '15.00 – 17.00', '17.00 – 19.00', '19.00 – 21.00'];
 const BUDGET_OPTIONS   = ['< Rp 500.000', 'Rp 500.000 – Rp 1.000.000', 'Rp 1.000.000 – Rp 2.000.000', '> Rp 2.000.000', 'Belum tahu'];
-
-// ─── Warna ───────────────────────────────────────────────────────────────────
-const C = {
-  gold:    '#b4964b',
-  green:   '#2d6a4f',
-  dark:    '#171411',
-  gray:    '#444242',
-  cream:   '#f7f6f0',
-  white:   '#ffffff',
-  border:  '#e0ddd6',
-  goldBg:  'rgba(180,150,75,0.08)',
-};
 
 // ─── Komponen Kecil ──────────────────────────────────────────────────────────
 

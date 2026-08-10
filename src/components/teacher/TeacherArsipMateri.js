@@ -2,23 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../supabaseClient';
 import { checkedUpdate } from '../../utils/supabaseUpdateGuard';
 import Toast, { useToast } from '../../components/Toast';
-
-const C = {
-  gold: '#b4964b',
-  green: '#2d6a4f',
-  dark: '#171411',
-  gray: '#444242',
-  cream: '#f7f6f0',
-  white: '#ffffff',
-  border: '#e0ddd6',
-  goldBg: 'rgba(180,150,75,0.10)',
-  red: '#e74c3c',
-  redBg: 'rgba(231,76,60,0.10)',
-  blue: '#2f6fed',
-  blueBg: 'rgba(47,111,237,0.10)',
-  greenBg: 'rgba(45,106,79,0.10)',
-  grayBg: 'rgba(68,66,66,0.08)',
-};
+import { C } from '../Theme';
 
 const MOBILE_BREAKPOINT = 768;
 

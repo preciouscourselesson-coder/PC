@@ -1,39 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { supabase } from '../../supabaseClient';
 import Toast, { useToast } from '../../components/Toast';
-
-const C = {
-  gold: '#b4964b',
-  goldDark: '#96793a',
-  green: '#2d6a4f',
-  greenBg: 'rgba(45,106,79,0.10)',
-  amber: '#a3760f',
-  amberBg: 'rgba(180,150,75,0.14)',
-  red: '#b0413e',
-  redBg: 'rgba(176,65,62,0.10)',
-  dark: '#171411',
-  gray: '#726d66',
-  grayLight: '#a8a29a',
-  cream: '#f7f6f0',
-  white: '#ffffff',
-  border: '#e6e2d8',
-};
-
-const D = {
-  bg: '#12141c',
-  bgSoft: '#181b26',
-  field: '#1c2030',
-  fieldBorder: '#2c3145',
-  fieldBorderFocus: '#c9a24b',
-  gold: '#d4ac52',
-  goldSoft: 'rgba(212,172,82,0.14)',
-  text: '#f2efe6',
-  textMuted: '#9a9fb0',
-  textFaint: '#5f6577',
-  red: '#e0574f',
-  blue: '#4f8fdb',
-  danger: '#e0574f',
-};
+import { C, D } from '../Theme';
 
 const MOBILE_BREAKPOINT = 768;
 

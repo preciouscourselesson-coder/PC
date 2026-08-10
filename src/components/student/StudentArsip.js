@@ -2,25 +2,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../../supabaseClient';
 import Toast, { useToast } from '../../components/Toast';
-
-const C = {
-  gold: '#b4964b',
-  goldDark: '#96793a',
-  green: '#2d6a4f',
-  greenBg: 'rgba(45,106,79,0.10)',
-  amber: '#a3760f',
-  amberBg: 'rgba(180,150,75,0.14)',
-  red: '#b0413e',
-  redBg: 'rgba(176,65,62,0.10)',
-  blue: '#3f7ea6',
-  blueBg: 'rgba(63,126,166,0.10)',
-  dark: '#171411',
-  gray: '#726d66',
-  grayLight: '#a8a29a',
-  cream: '#f7f6f0',
-  white: '#ffffff',
-  border: '#e6e2d8',
-};
+import { C } from '../Theme';
 
 const TABLE = 'bank_soal_siswa';
 const BUCKET = 'bank-soal';

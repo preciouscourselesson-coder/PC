@@ -2,28 +2,13 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../../supabaseClient';
 import { checkedUpdate } from '../../utils/supabaseUpdateGuard';
 import Toast, { useToast } from '../../components/Toast';
+import { C } from '../Theme';
 
 const ROLE_LABEL = {
   student: 'Siswa',
   teacher: 'Guru',
   parent:  'Wali Siswa',
   admin:   'Admin',
-};
-
-// ─── Warna ───────────────────────────────────────────────────────────────────
-const C = {
-  gold:    '#b4964b',
-  green:   '#2d6a4f',
-  dark:    '#171411',
-  gray:    '#444242',
-  cream:   '#f7f6f0',
-  white:   '#ffffff',
-  border:  '#e0ddd6',
-  goldBg:  'rgba(180,150,75,0.08)',
-  red:     '#e74c3c',
-  lightRed: '#fff0f0',
-  orange:  '#ff9800',
-  orangeBg: 'rgba(255,152,0,0.10)',
 };
 
 // ─── Komponen Badge ─────────────────────────────────────────────────────────
