@@ -1,23 +1,23 @@
 // src/components/admin/AdminHome.js
 import React, { useRef } from 'react';
-import Toast, { useToast } from '../../components/Toast';
-import { C } from '../Theme';
+import Toast, { useToast } from '../shared/Toast';
+import { C } from '../shared/Theme';
 
-import { useAdminProfile } from './adminHome/use-admin-profile';
-import { useAdminHomeData } from './adminHome/use-admin-home-data';
-import { useAcademicCalendar } from './adminHome/use-academic-calendar';
-import { useScheduleFilter } from './adminHome/use-schedule-filter';
-import { useTaskForm } from './adminHome/use-task-form';
-import { useScheduleForm } from './adminHome/use-schedule-form';
-import { useScheduleChangeForm } from './adminHome/use-schedule-change-form';
-import { usePengajuanJadwal } from './adminHome/use-pengajuan-jadwal';
+import { useAdminProfile } from './home/use-admin-profile';
+import { useAdminHomeData } from './home/use-admin-home-data';
+import { useAcademicCalendar } from './home/use-academic-calendar';
+import { useScheduleFilter } from './home/use-schedule-filter';
+import { useTaskForm } from './home/use-task-form';
+import { useScheduleForm } from './home/use-schedule-form';
+import { useScheduleChangeForm } from './home/use-schedule-change-form';
+import { usePengajuanJadwal } from './home/use-pengajuan-jadwal';
 
-import AdminHomeHeader from './adminHome/admin-home-header';
-import AcademicCalendarCard from './adminHome/academic-calendar-card';
-import TaskPanel from './adminHome/task-panel';
-import ScheduleChangePanel from './adminHome/schedule-change-panel';
-import SchedulePanel from './adminHome/schedule-panel';
-import AddScheduleForm from './adminHome/add-schedule-form';
+import AdminHomeHeader from './home/admin-home-header';
+import AcademicCalendarCard from './home/academic-calendar-card';
+import TaskPanel from './home/task-panel';
+import ScheduleChangePanel from './home/schedule-change-panel';
+import SchedulePanel from './home/schedule-panel';
+import AddScheduleForm from './home/add-schedule-form';
 
 const AdminHome = () => {
   const today = useRef(new Date()).current;

@@ -1,4 +1,4 @@
-import Updates from '../Updates';
+import Updates from '../shared/Updates';
 
 // Guru, siswa, dan admin sekarang berbagi satu komponen updates generik
 // (lihat Updates.js) — file ini dipertahankan supaya import/routing

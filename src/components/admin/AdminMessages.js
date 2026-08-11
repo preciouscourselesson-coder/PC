@@ -1,4 +1,4 @@
-import ChatMessages from '../ChatMessages';
+import ChatMessages from '../shared/ChatMessages';
 
 // Guru, siswa, dan admin sekarang berbagi satu komponen chat generik
 // (lihat ChatMessages.js) — file ini dipertahankan supaya import/routing

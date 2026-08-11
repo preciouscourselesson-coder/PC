@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { supabase } from '../../supabaseClient';
-import Toast, { useToast } from '../../components/Toast';
-import { C, D } from '../Theme';
+import Toast, { useToast } from '../shared/Toast';
+import { C, D } from '../shared/Theme';
 
 const MOBILE_BREAKPOINT = 768;
 

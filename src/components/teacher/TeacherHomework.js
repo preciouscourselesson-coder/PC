@@ -5,8 +5,8 @@ import {
   NewAssignmentModal,
   NewFolderModal,
   PublishedHomeworkModal,
-} from "./TeacherHomework/components";
-import { useHomeworkDashboard } from "./TeacherHomework/hooks/useHomeworkDashboard";
+} from "./homework/components";
+import { useHomeworkDashboard } from "./homework/hooks/useHomeworkDashboard";
 
 // ---------------------------------------------------------------------------
 // Integrasi Supabase

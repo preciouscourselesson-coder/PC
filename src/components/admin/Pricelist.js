@@ -1,5 +1,5 @@
 import React from 'react';
-import Toast, { useToast } from '../../components/Toast';
+import Toast, { useToast } from '../shared/Toast';
 import { C } from './Pricelist/constants';
 
 import { useAdmin } from './Pricelist/hooks/useAdmin';

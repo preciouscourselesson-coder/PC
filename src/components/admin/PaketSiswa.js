@@ -1,14 +1,14 @@
 // src/components/admin/PaketSiswa.js
 import React, { useState, useEffect } from 'react';
 import InvoicePaketSiswa from './InvoicePaketSiswa';
-import Toast, { useToast } from '../../components/Toast';
-import { C } from '../Theme';
-import { usePaketSiswaData } from './paketSiswa/use-paket-siswa-data';
-import FormTambahSiswa from './paketSiswa/form-tambah-siswa';
-import PaketSiswaFilterBar from './paketSiswa/paket-siswa-filter-bar';
-import PaketSiswaTable from './paketSiswa/paket-siswa-table';
-import PaketSiswaDetailPanel from './paketSiswa/paket-siswa-detail-panel';
-import { PAGE_SIZE } from './paketSiswa/paket-siswa-helpers';
+import Toast, { useToast } from '../shared/Toast';
+import { C } from '../shared/Theme';
+import { usePaketSiswaData } from './paket-siswa/use-paket-siswa-data';
+import FormTambahSiswa from './paket-siswa/form-tambah-siswa';
+import PaketSiswaFilterBar from './paket-siswa/paket-siswa-filter-bar';
+import PaketSiswaTable from './paket-siswa/paket-siswa-table';
+import PaketSiswaDetailPanel from './paket-siswa/paket-siswa-detail-panel';
+import { PAGE_SIZE } from './paket-siswa/paket-siswa-helpers';
 
 const PaketSiswa = () => {
   const {

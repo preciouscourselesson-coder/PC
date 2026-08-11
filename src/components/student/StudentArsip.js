@@ -1,8 +1,8 @@
 // StudentArsip.js
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../../supabaseClient';
-import Toast, { useToast } from '../../components/Toast';
-import { C } from '../Theme';
+import Toast, { useToast } from '../shared/Toast';
+import { C } from '../shared/Theme';
 
 const TABLE = 'bank_soal_siswa';
 const BUCKET = 'bank-soal';

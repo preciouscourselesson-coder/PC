@@ -1,22 +1,22 @@
 import React, { useState } from 'react';
 
-import { C } from './AdminPengaturanMateri/theme';
+import { C } from './pengaturan-materi/theme';
 
-import { useToast } from './AdminPengaturanMateri/hooks/useToast';
-import { useMateriSourcesData } from './AdminPengaturanMateri/hooks/useMateriSourcesData';
-import { useMateriGuru } from './AdminPengaturanMateri/hooks/useMateriGuru';
-import { useSesiPembelajaran } from './AdminPengaturanMateri/hooks/useSesiPembelajaran';
-import { useBankSoal } from './AdminPengaturanMateri/hooks/useBankSoal';
-import { useDeleteItem } from './AdminPengaturanMateri/hooks/useDeleteItem';
-import { useExportExcel } from './AdminPengaturanMateri/hooks/useExportExcel';
+import { useToast } from './pengaturan-materi/hooks/useToast';
+import { useMateriSourcesData } from './pengaturan-materi/hooks/useMateriSourcesData';
+import { useMateriGuru } from './pengaturan-materi/hooks/useMateriGuru';
+import { useSesiPembelajaran } from './pengaturan-materi/hooks/useSesiPembelajaran';
+import { useBankSoal } from './pengaturan-materi/hooks/useBankSoal';
+import { useDeleteItem } from './pengaturan-materi/hooks/useDeleteItem';
+import { useExportExcel } from './pengaturan-materi/hooks/useExportExcel';
 
-import { Toast } from './AdminPengaturanMateri/components/Toast';
-import { SourceTabBar } from './AdminPengaturanMateri/components/SourceTabBar';
-import { MateriGuruTab } from './AdminPengaturanMateri/components/MateriGuruTab';
-import { SesiPembelajaranTab } from './AdminPengaturanMateri/components/SesiPembelajaranTab';
-import { BankSoalTab } from './AdminPengaturanMateri/components/BankSoalTab';
-import { EditMateriModal } from './AdminPengaturanMateri/components/EditMateriModal';
-import { DeleteConfirmModal } from './AdminPengaturanMateri/components/DeleteConfirmModal';
+import { Toast } from './pengaturan-materi/components/Toast';
+import { SourceTabBar } from './pengaturan-materi/components/SourceTabBar';
+import { MateriGuruTab } from './pengaturan-materi/components/MateriGuruTab';
+import { SesiPembelajaranTab } from './pengaturan-materi/components/SesiPembelajaranTab';
+import { BankSoalTab } from './pengaturan-materi/components/BankSoalTab';
+import { EditMateriModal } from './pengaturan-materi/components/EditMateriModal';
+import { DeleteConfirmModal } from './pengaturan-materi/components/DeleteConfirmModal';
 
 // ─────────────────────────────────────────────────────────────────────────
 // AdminPengaturanMateri — komponen "orkestrator".

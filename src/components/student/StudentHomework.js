@@ -1,20 +1,20 @@
 // src/components/student/StudentHomework.js
 import React from 'react';
-import { C } from './StudentHomework/constants';
+import { C } from './homework/constants';
 
-import { useIsMobile } from './StudentHomework/hooks/useIsMobile';
-import { useStudentTasks } from './StudentHomework/hooks/useStudentTasks';
-import { useUploadAnswer } from './StudentHomework/hooks/useUploadAnswer';
-import { useInteractiveWork } from './StudentHomework/hooks/useInteractiveWork';
-import { useJoinByCode } from './StudentHomework/hooks/useJoinByCode';
+import { useIsMobile } from './homework/hooks/useIsMobile';
+import { useStudentTasks } from './homework/hooks/useStudentTasks';
+import { useUploadAnswer } from './homework/hooks/useUploadAnswer';
+import { useInteractiveWork } from './homework/hooks/useInteractiveWork';
+import { useJoinByCode } from './homework/hooks/useJoinByCode';
 
-import { JoinByCodeCard } from './StudentHomework/components/JoinByCodeCard';
-import { Sidebar } from './StudentHomework/components/Sidebar';
-import { FilterChipsBar } from './StudentHomework/components/FilterChipsBar';
-import { SortControls } from './StudentHomework/components/SortControls';
-import { TaskList } from './StudentHomework/components/TaskList';
-import { UploadAnswerModal } from './StudentHomework/components/UploadAnswerModal';
-import { InteractiveWorkModal } from './StudentHomework/components/InteractiveWorkModal';
+import { JoinByCodeCard } from './homework/components/JoinByCodeCard';
+import { Sidebar } from './homework/components/Sidebar';
+import { FilterChipsBar } from './homework/components/FilterChipsBar';
+import { SortControls } from './homework/components/SortControls';
+import { TaskList } from './homework/components/TaskList';
+import { UploadAnswerModal } from './homework/components/UploadAnswerModal';
+import { InteractiveWorkModal } from './homework/components/InteractiveWorkModal';
 
 // ─── Halaman Utama ────────────────────────────────────────────────────────────
 const StudentHomework = () => {

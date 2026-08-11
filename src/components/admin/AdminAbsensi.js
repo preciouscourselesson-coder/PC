@@ -6,24 +6,24 @@
 // lihat masing-masing file use-*.js; untuk detail tampilan, lihat
 // masing-masing file komponen di folder adminAbsensi/.
 import React, { useState, useRef } from 'react';
-import Toast, { useToast } from '../../components/Toast';
-import { C } from '../Theme';
+import Toast, { useToast } from '../shared/Toast';
+import { C } from '../shared/Theme';
 
-import { useIsMobile } from './adminAbsensi/use-is-mobile';
-import { useMasterData } from './adminAbsensi/use-master-data';
-import { useAbsensiEntries } from './adminAbsensi/use-absensi-entries';
-import { useEntriesFilter } from './adminAbsensi/use-entries-filter';
-import { useRekapSummary } from './adminAbsensi/use-rekap-summary';
-import { useRekapSiswa } from './adminAbsensi/use-rekap-siswa';
+import { useIsMobile } from './absensi/use-is-mobile';
+import { useMasterData } from './absensi/use-master-data';
+import { useAbsensiEntries } from './absensi/use-absensi-entries';
+import { useEntriesFilter } from './absensi/use-entries-filter';
+import { useRekapSummary } from './absensi/use-rekap-summary';
+import { useRekapSiswa } from './absensi/use-rekap-siswa';
 
-import StatCard from './adminAbsensi/stat-card';
-import RekapSummaryTable from './adminAbsensi/rekap-summary-table';
-import FilterBar from './adminAbsensi/filter-bar';
-import EntriesTableDesktop from './adminAbsensi/entries-table-desktop';
-import EntriesCardsMobile from './adminAbsensi/entries-cards-mobile';
-import EditDateModal from './adminAbsensi/edit-date-modal';
-import DeleteConfirmModal from './adminAbsensi/delete-confirm-modal';
-import RekapSiswaModal from './adminAbsensi/rekap-siswa-modal';
+import StatCard from './absensi/stat-card';
+import RekapSummaryTable from './absensi/rekap-summary-table';
+import FilterBar from './absensi/filter-bar';
+import EntriesTableDesktop from './absensi/entries-table-desktop';
+import EntriesCardsMobile from './absensi/entries-cards-mobile';
+import EditDateModal from './absensi/edit-date-modal';
+import DeleteConfirmModal from './absensi/delete-confirm-modal';
+import RekapSiswaModal from './absensi/rekap-siswa-modal';
 
 const AdminAbsensi = () => {
   const isMobile = useIsMobile();

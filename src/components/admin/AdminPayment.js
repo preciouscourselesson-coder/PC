@@ -37,8 +37,8 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import { supabase } from '../../supabaseClient';
 import { checkedUpdate } from '../../utils/supabaseUpdateGuard';
-import Toast, { useToast } from '../../components/Toast';
-import { C, D } from '../Theme';
+import Toast, { useToast } from '../shared/Toast';
+import { C, D } from '../shared/Theme';
 
 // ============================================================
 // KONSTANTA

@@ -1,21 +1,21 @@
 import React from 'react';
-import { C } from './AdminManageUser/constants';
+import { C } from './manage-user/constants';
 
-import useUsers from './AdminManageUser/hooks/useUsers';
-import useToast from './AdminManageUser/hooks/useToast';
-import useUserFilters from './AdminManageUser/hooks/useUserFilters';
-import useMapelDropdown from './AdminManageUser/hooks/useMapelDropdown';
-import useUserActions from './AdminManageUser/hooks/useUserActions';
-import useAddUserForm from './AdminManageUser/hooks/useAddUserForm';
-import useImportExport from './AdminManageUser/hooks/useImportExport';
+import useUsers from './manage-user/hooks/useUsers';
+import useToast from './manage-user/hooks/useToast';
+import useUserFilters from './manage-user/hooks/useUserFilters';
+import useMapelDropdown from './manage-user/hooks/useMapelDropdown';
+import useUserActions from './manage-user/hooks/useUserActions';
+import useAddUserForm from './manage-user/hooks/useAddUserForm';
+import useImportExport from './manage-user/hooks/useImportExport';
 
-import Toast from './AdminManageUser/components/Toast';
-import ErrorBanner from './AdminManageUser/components/ErrorBanner';
-import Toolbar from './AdminManageUser/components/Toolbar';
-import FiltersBar from './AdminManageUser/components/FiltersBar';
-import UsersTable from './AdminManageUser/components/UsersTable';
-import DeleteConfirmModal from './AdminManageUser/components/DeleteConfirmModal';
-import AddUserModal from './AdminManageUser/components/AddUserModal';
+import Toast from './manage-user/components/Toast';
+import ErrorBanner from './manage-user/components/ErrorBanner';
+import Toolbar from './manage-user/components/Toolbar';
+import FiltersBar from './manage-user/components/FiltersBar';
+import UsersTable from './manage-user/components/UsersTable';
+import DeleteConfirmModal from './manage-user/components/DeleteConfirmModal';
+import AddUserModal from './manage-user/components/AddUserModal';
 
 const AdminManageUser = () => {
   const { users, setUsers, loading, error, fetchUsers } = useUsers();

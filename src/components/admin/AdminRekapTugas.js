@@ -12,11 +12,11 @@
 //   guru(id, nama, profile_id)              -- profile_id = homework.teacher_id
 //   profiles(id, full_name, kelas)           -- id = homework_assignments.student_id
 import React, { useState } from 'react';
-import { C } from './AdminRekapTugas/constants';
-import { useIsMobile } from './AdminRekapTugas/hooks/useIsMobile';
-import { useRekapTugasData } from './AdminRekapTugas/hooks/useRekapTugasData';
-import { FilterBar } from './AdminRekapTugas/components/FilterBar';
-import { StudentAccordionItem } from './AdminRekapTugas/components/StudentAccordionItem';
+import { C } from './rekap-tugas/constants';
+import { useIsMobile } from './rekap-tugas/hooks/useIsMobile';
+import { useRekapTugasData } from './rekap-tugas/hooks/useRekapTugasData';
+import { FilterBar } from './rekap-tugas/components/FilterBar';
+import { StudentAccordionItem } from './rekap-tugas/components/StudentAccordionItem';
 
 const AdminRekapTugas = () => {
   const isMobile = useIsMobile();

@@ -7,8 +7,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../../supabaseClient';
 import { checkedUpdate } from '../../utils/supabaseUpdateGuard';
-import Toast, { useToast } from '../../components/Toast';
-import { C } from '../Theme';
+import Toast, { useToast } from '../shared/Toast';
+import { C } from '../shared/Theme';
 
 const HARI_LIST = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
 

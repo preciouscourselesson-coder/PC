@@ -2,8 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import bgPeople from '../Resource/bg_people.png';
-import Toast, { useToast } from '../components/Toast';
-import { C } from './Theme';
+import Toast, { useToast } from './shared/Toast';
+import { C } from './shared/Theme';
 
 // ─── Konstanta & Data ────────────────────────────────────────────────────────
 

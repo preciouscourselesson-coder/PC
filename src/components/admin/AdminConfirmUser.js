@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../../supabaseClient';
 import { checkedUpdate } from '../../utils/supabaseUpdateGuard';
-import Toast, { useToast } from '../../components/Toast';
-import { C } from '../Theme';
+import Toast, { useToast } from '../shared/Toast';
+import { C } from '../shared/Theme';
 
 const ROLE_LABEL = {
   student: 'Siswa',
