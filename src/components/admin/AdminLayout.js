@@ -33,6 +33,7 @@ const navItems = [
   { label: 'Payment',                 path: '/admin/payment',              icon: '💳' },
   { label: 'Perubahan Jadwal',        path: '/admin/recap-perubahan-jadwal', icon: '🔄' },
   { label: 'Rekap Absensi',           path: '/admin/rekap-absensi',        icon: '📋' },
+  { label: 'Rekap Tugas',             path: '/admin/rekap-tugas',          icon: '📄' },
 ];
 
 const Sidebar = ({ user }) => {
@@ -78,6 +79,7 @@ const Topbar = ({ user, avatarUrl, notifCounts }) => {
     '/admin/recap-perubahan-jadwal': 'Perubahan Jadwal',
     '/admin/rekap-absensi': 'Rekap Absensi',
     '/admin/profil': 'Profil Admin',
+    '/admin/rekap-tugas': 'Rekap Tugas',
   };
   const pageTitle = pageTitles[location.pathname] || 'Dashboard';
 
