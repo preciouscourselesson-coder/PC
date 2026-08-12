@@ -12,6 +12,15 @@ import { C } from '../shared/Theme';
 
 const HARI_LIST = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
 
+// Daftar mapel tetap, sama seperti yang dipakai di form "Tambah Tugas/Penilaian" milik siswa
+// (StudentHome.js). Dipakai untuk menerjemahkan value teks (mis. 'matematika') jadi label.
+const MAPEL_TUGAS_LIST = [
+  { value: 'matematika', label: 'Matematika' },
+  { value: 'fisika', label: 'Fisika' },
+  { value: 'kimia', label: 'Kimia' },
+  { value: 'bahasa_inggris', label: 'Bahasa Inggris' },
+];
+
 const MOBILE_BREAKPOINT = 768;
 
 const useIsMobile = () => {
@@ -27,6 +36,34 @@ const useIsMobile = () => {
 };
 
 const formatJam = (t) => (t ? t.slice(0, 5) : '');
+
+// Konversi hasil Date.getDay() (0=Minggu..6=Sabtu) ke index HARI_LIST (0=Senin..6=Minggu)
+const HARI_INDEX_FROM_GETDAY = { 1: 0, 2: 1, 3: 2, 4: 3, 5: 4, 6: 5, 0: 6 };
+
+const getHariFromTanggal = (tanggalStr) => {
+  if (!tanggalStr) return '';
+  const d = new Date(`${tanggalStr}T00:00:00`);
+  if (isNaN(d.getTime())) return '';
+  return HARI_LIST[HARI_INDEX_FROM_GETDAY[d.getDay()]];
+};
+
+// Cari tanggal terdekat (hari ini atau setelahnya) yang jatuh pada hari tertentu
+const nextTanggalForHari = (hari) => {
+  const targetIdx = HARI_LIST.indexOf(hari);
+  if (targetIdx === -1) return '';
+  const today = new Date();
+  const todayIdx = HARI_INDEX_FROM_GETDAY[today.getDay()];
+  let diff = targetIdx - todayIdx;
+  if (diff < 0) diff += 7;
+  const hasil = new Date(today);
+  hasil.setDate(today.getDate() + diff);
+  return hasil.toISOString().slice(0, 10);
+};
+
+const formatTanggalPanjang = (tanggalStr) => {
+  if (!tanggalStr) return '';
+  return new Date(`${tanggalStr}T00:00:00`).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+};
 
 const StatusPill = ({ status }) => {
   const map = {
@@ -65,7 +102,11 @@ const TeacherHome = () => {
   const [jadwalList, setJadwalList] = useState([]);
   const [pengajuanMasuk, setPengajuanMasuk] = useState([]);
   const [pengajuanSaya, setPengajuanSaya] = useState([]);
+  const [pengajuanRiwayatAdmin, setPengajuanRiwayatAdmin] = useState([]);
+  const [confirmDeleteRiwayatId, setConfirmDeleteRiwayatId] = useState(null);
+  const [deletingRiwayatId, setDeletingRiwayatId] = useState(null);
   const [showForm, setShowForm] = useState(false);
+  const [tanggalAsal, setTanggalAsal] = useState('');
   const [selectedJadwalId, setSelectedJadwalId] = useState('');
   const [formData, setFormData] = useState({
     hari_baru: '',
@@ -79,6 +120,8 @@ const TeacherHome = () => {
   const [errorMsg, setErrorMsg] = useState('');
   const [respondingId, setRespondingId] = useState(null);
   const [confirmTolakId, setConfirmTolakId] = useState(null);
+  const [confirmDeleteUjianId, setConfirmDeleteUjianId] = useState(null);
+  const [deletingUjianId, setDeletingUjianId] = useState(null);
 
   const [materiRequestList, setMateriRequestList] = useState([]);
   const [ujianTerdekatList, setUjianTerdekatList] = useState([]);
@@ -118,6 +161,63 @@ const TeacherHome = () => {
 
   const now = new Date();
 
+  // ========== HELPER PILIH JADWAL (Tanggal -> Hari -> Yang Berkepentingan) ==========
+  const hariAsal = useMemo(() => getHariFromTanggal(tanggalAsal), [tanggalAsal]);
+
+  const kandidatJadwal = useMemo(() => {
+    if (!tanggalAsal || !hariAsal) return [];
+    return jadwalList.filter(j => (
+      j.is_temporary ? j.tanggal_temporary === tanggalAsal : j.hari === hariAsal
+    ));
+  }, [jadwalList, tanggalAsal, hariAsal]);
+
+  const getPihakLabel = (j) => {
+    let nama = '';
+    if (j.siswa_id) nama = studentNameMap[j.siswa_id] || 'Siswa';
+    else if (Array.isArray(j.siswa_ids) && j.siswa_ids.length > 0) nama = j.siswa_ids.map(id => studentNameMap[id] || id).join(', ');
+    return `${nama || 'Tidak diketahui'}${j.kelas ? ` (${j.kelas})` : ''} - ${formatJam(j.jam_mulai)}-${formatJam(j.jam_selesai)}`;
+  };
+
+  const applyJadwalSelection = (jadwalId) => {
+    const j = jadwalList.find(x => x.id === jadwalId);
+    setSelectedJadwalId(jadwalId);
+    setFormData(prev => ({
+      ...prev,
+      hari_baru: j?.hari || '',
+      jam_mulai_baru: j?.jam_mulai ? formatJam(j.jam_mulai) : '',
+      jam_selesai_baru: j?.jam_selesai ? formatJam(j.jam_selesai) : '',
+    }));
+  };
+
+  const openFormFromCell = (jadwalId) => {
+    const j = jadwalList.find(x => x.id === jadwalId);
+    setTanggalAsal(j?.is_temporary && j?.tanggal_temporary ? j.tanggal_temporary : nextTanggalForHari(j?.hari || ''));
+    setSelectedJadwalId(jadwalId);
+    setFormData({
+      hari_baru: j?.hari || '',
+      jam_mulai_baru: j?.jam_mulai ? formatJam(j.jam_mulai) : '',
+      jam_selesai_baru: j?.jam_selesai ? formatJam(j.jam_selesai) : '',
+      is_temporary_baru: false,
+      tanggal_temporary_baru: '',
+      alasan: '',
+    });
+    setShowForm(true);
+  };
+
+  const openBlankForm = () => {
+    setTanggalAsal('');
+    setSelectedJadwalId('');
+    setFormData({
+      hari_baru: '',
+      jam_mulai_baru: '',
+      jam_selesai_baru: '',
+      is_temporary_baru: false,
+      tanggal_temporary_baru: '',
+      alasan: '',
+    });
+    setShowForm(true);
+  };
+
   const pengajuanSayaGrouped = useMemo(() => {
     const batchMap = new Map();
     const items = [];
@@ -135,6 +235,38 @@ const TeacherHome = () => {
     });
     return items.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
   }, [pengajuanSaya]);
+
+  // Perubahan jadwal yang sudah disetujui ketiganya (siswa, guru, admin) —
+  // dipakai untuk kartu pengingat di bawah. Perubahan sementara yang tanggal
+  // berlakunya sudah lewat ditandai supaya bisa dihapus (dibersihkan) manual.
+  const todayStr = now.toISOString().slice(0, 10);
+  const perubahanDisetujuiList = useMemo(() => {
+    const isTanggalLewat = (tanggalStr) => !!tanggalStr && tanggalStr < todayStr;
+    return pengajuanRiwayatAdmin
+      .filter(p => p.status === 'disetujui_admin')
+      .map(p => ({ ...p, sudahLewat: p.is_temporary_baru ? isTanggalLewat(p.tanggal_temporary_baru) : false }))
+      .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+  }, [pengajuanRiwayatAdmin, todayStr]);
+
+  const hapusPerubahanDisetujui = async (p) => {
+    setDeletingRiwayatId(p.id);
+    setErrorMsg('');
+    try {
+      const { error } = await supabase
+        .from('pengajuan_perubahan_jadwal')
+        .delete()
+        .eq('id', p.id)
+        .eq('guru_id', guru.id);
+      if (error) throw error;
+      setPengajuanRiwayatAdmin(list => list.filter(item => item.id !== p.id));
+      setConfirmDeleteRiwayatId(null);
+    } catch (err) {
+      console.error(err);
+      showToast('error', 'Gagal menghapus pengingat: ' + err.message);
+    } finally {
+      setDeletingRiwayatId(null);
+    }
+  };
 
   const hour = now.getHours();
   const greeting = hour < 11 ? 'Good Morning' : hour < 15 ? 'Good Afternoon' : hour < 18 ? 'Good Evening' : 'Good Night';
@@ -231,9 +363,14 @@ const TeacherHome = () => {
         .order('created_at', { ascending: false });
       if (pengajuanError) throw pengajuanError;
       const all = pengajuanData || [];
-      // 🔥 Hanya tampilkan pengajuan yang belum disetujui admin
+      // 🔥 Hanya tampilkan pengajuan yang belum disetujui admin di antrian aktif
       setPengajuanMasuk(all.filter(p => p.diajukan_oleh === 'siswa' && p.status !== 'disetujui_admin' && p.status !== 'ditolak_admin'));
       setPengajuanSaya(all.filter(p => p.diajukan_oleh === 'guru' && p.status !== 'disetujui_admin' && p.status !== 'ditolak_admin'));
+      // Riwayat: pengajuan yang sudah diputuskan admin (disetujui/ditolak).
+      // Diurutkan terbaru dulu (dari query di atas), cap ditentukan saat render.
+      setPengajuanRiwayatAdmin(
+        all.filter(p => p.status === 'disetujui_admin' || p.status === 'ditolak_admin')
+      );
 
       const { data: materiData, error: materiError } = await supabase
         .from('materi_request')
@@ -308,23 +445,21 @@ const TeacherHome = () => {
   }, []);
 
   // ========== PENGAJUAN PERUBAHAN JADWAL ==========
-  const openForm = (jadwalId) => {
-    const j = jadwalList.find(x => x.id === jadwalId);
-    setSelectedJadwalId(jadwalId);
-    setFormData({
-      hari_baru: j?.hari || '',
-      jam_mulai_baru: j?.jam_mulai ? formatJam(j.jam_mulai) : '',
-      jam_selesai_baru: j?.jam_selesai ? formatJam(j.jam_selesai) : '',
-      is_temporary_baru: false,
-      tanggal_temporary_baru: '',
-      alasan: '',
-    });
-    setShowForm(true);
-  };
-
   const submitPengajuan = async () => {
+    if (!tanggalAsal) {
+      setErrorMsg('Pilih tanggal kelas yang ingin diubah terlebih dahulu.');
+      return;
+    }
     if (!selectedJadwalId) {
-      setErrorMsg('Pilih jadwal yang ingin diubah terlebih dahulu.');
+      setErrorMsg('Pilih siswa/jadwal yang bersangkutan terlebih dahulu.');
+      return;
+    }
+    if (!formData.hari_baru || !formData.jam_mulai_baru || !formData.jam_selesai_baru) {
+      setErrorMsg('Isi hari pengganti beserta jam mulai dan jam selesai.');
+      return;
+    }
+    if (formData.is_temporary_baru && !formData.alasan.trim()) {
+      setErrorMsg('Isi alasan kenapa perubahan ini bersifat sementara.');
       return;
     }
     setSubmitting(true);
@@ -350,7 +485,7 @@ const TeacherHome = () => {
         jam_mulai_baru: formData.jam_mulai_baru || null,
         jam_selesai_baru: formData.jam_selesai_baru || null,
         is_temporary_baru: formData.is_temporary_baru,
-        tanggal_temporary_baru: formData.is_temporary_baru ? (formData.tanggal_temporary_baru || null) : null,
+        tanggal_temporary_baru: formData.is_temporary_baru ? (tanggalAsal || null) : null,
         alasan: formData.alasan || null,
         status: 'menunggu_persetujuan',
       };
@@ -659,6 +794,26 @@ const TeacherHome = () => {
     }
   };
 
+  const deleteUjian = async (item) => {
+    setDeletingUjianId(item.id);
+    setErrorMsg('');
+    try {
+      const { error } = await supabase
+        .from('tugas_penilaian')
+        .delete()
+        .eq('id', item.id)
+        .eq('id_guru', guru.id);
+      if (error) throw error;
+      setConfirmDeleteUjianId(null);
+      await loadAll();
+    } catch (err) {
+      console.error(err);
+      showToast('error', 'Gagal menghapus penilaian/tugas: ' + err.message);
+    } finally {
+      setDeletingUjianId(null);
+    }
+  };
+
   // ========== UPLOAD MATERI ==========
   const uploadMateriFile = async (file, authUid) => {
     const fileExt = file.name.split('.').pop();
@@ -829,7 +984,7 @@ const TeacherHome = () => {
                           <td
                             key={hari}
                             style={{ padding: '8px', textAlign: 'center', cursor: 'pointer' }}
-                            onClick={() => openForm(cell.id)}
+                            onClick={() => openFormFromCell(cell.id)}
                             title="Klik untuk ajukan perubahan jadwal ini"
                           >
                             <div style={{ color: badge.color, fontWeight: 600, fontSize: '0.8rem' }}>
@@ -858,7 +1013,7 @@ const TeacherHome = () => {
               ))}
             </div>
           )}
-          <button style={{ ...linkBtn, marginTop: '1rem', padding: '10px 16px', fontSize: isMobile ? '1rem' : '0.9rem' }} onClick={() => openForm(jadwalList[0]?.id || '')}>
+          <button style={{ ...linkBtn, marginTop: '1rem', padding: '10px 16px', fontSize: isMobile ? '1rem' : '0.9rem' }} onClick={openBlankForm}>
             + Ajukan Perubahan Jadwal
           </button>
         </div>
@@ -875,20 +1030,79 @@ const TeacherHome = () => {
               <div key={item.id} style={{ padding: '0.75rem 0', borderBottom: idx < ujianTerdekatList.length - 1 ? `1px solid ${C.border}` : 'none' }}>
                 <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'flex-start', gap: isMobile ? '0.25rem' : 0 }}>
                   <div>
-                    <div style={{ fontWeight: '600', color: C.dark, fontSize: isMobile ? '1rem' : '0.9rem' }}>{item.materi}</div>
+                    <div style={{ fontWeight: '600', color: C.dark, fontSize: isMobile ? '1rem' : '0.9rem' }}>
+                      {item.judul_bab || item.materi}
+                    </div>
                     <div style={{ fontSize: '0.85rem', color: C.gray }}>
-                      {item.id_mapel?.nama}{item.id_bab?.nama ? ` - ${item.id_bab.nama}` : ''}
+                      {item.mapel
+                        ? (MAPEL_TUGAS_LIST.find(m => m.value === item.mapel)?.label || item.mapel)
+                        : item.id_mapel?.nama}
+                      {item.id_bab?.nama ? ` - ${item.id_bab.nama}` : ''}
                     </div>
                     <div style={{ fontSize: '0.8rem', color: C.gray }}>
                       Dari siswa: {item.nama_siswa || 'Tidak diketahui'}
                     </div>
-                    {item.deskripsi && (
-                      <div style={{ fontSize: '0.78rem', color: C.gray, fontStyle: 'italic' }}>{item.deskripsi}</div>
+                    {item.nama_guru_sekolah && (
+                      <div style={{ fontSize: '0.8rem', color: C.gray }}>
+                        Guru pengajar di sekolah: {item.nama_guru_sekolah}
+                      </div>
+                    )}
+                    {(item.deskripsi || item.catatan_link) && (
+                      <div style={{ fontSize: '0.78rem', color: C.gray, fontStyle: 'italic' }}>
+                        {item.deskripsi}
+                        {item.catatan_link && (
+                          <>
+                            {item.deskripsi ? ' - ' : ''}
+                            <a href={item.catatan_link} target="_blank" rel="noopener noreferrer" style={{ color: C.gold }}>
+                              Lihat link materi ujian
+                            </a>
+                          </>
+                        )}
+                      </div>
+                    )}
+                    {item.catatan_gambar_url && (
+                      <a href={item.catatan_gambar_url} target="_blank" rel="noopener noreferrer">
+                        <img
+                          src={item.catatan_gambar_url}
+                          alt="Catatan"
+                          style={{ marginTop: '4px', width: '56px', height: '56px', objectFit: 'cover', borderRadius: '6px', border: `1px solid ${C.border}` }}
+                        />
+                      </a>
                     )}
                   </div>
-                  <span style={{ fontSize: '0.8rem', color: C.gray, whiteSpace: 'nowrap' }}>
-                    {new Date(item.tanggal).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
-                  </span>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
+                    <span style={{ fontSize: '0.8rem', color: C.gray, whiteSpace: 'nowrap' }}>
+                      {new Date(item.tanggal).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
+                    </span>
+                    {confirmDeleteUjianId === item.id ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
+                        <span style={{ fontSize: '0.72rem', color: C.dark }}>Yakin hapus?</span>
+                        <div style={{ display: 'flex', gap: '0.4rem' }}>
+                          <button
+                            onClick={() => deleteUjian(item)}
+                            disabled={deletingUjianId === item.id}
+                            style={{ background: 'none', border: 'none', color: C.red, fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', padding: '2px 4px', opacity: deletingUjianId === item.id ? 0.6 : 1 }}
+                          >
+                            {deletingUjianId === item.id ? 'Menghapus...' : 'Ya, Hapus'}
+                          </button>
+                          <button
+                            onClick={() => setConfirmDeleteUjianId(null)}
+                            disabled={deletingUjianId === item.id}
+                            style={{ background: 'none', border: 'none', color: C.gray, fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', padding: '2px 4px' }}
+                          >
+                            Batal
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setConfirmDeleteUjianId(item.id)}
+                        style={{ background: 'none', border: 'none', color: C.red, fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', padding: '2px 4px' }}
+                      >
+                        Hapus
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             ))
@@ -983,11 +1197,67 @@ const TeacherHome = () => {
         </div>
       </div>
 
-      {/* Pengingat Perubahan Jadwal dari Admin (statis) */}
+      {/* Pengingat Perubahan Jadwal (disetujui siswa, guru, & admin) */}
       <div style={{ background: C.goldBg, borderRadius: '12px', padding: isMobile ? '0.85rem 1rem' : '1rem 1.5rem', border: `1px solid ${C.gold}`, marginBottom: isMobile ? '1rem' : '1.5rem' }}>
-        <p style={{ margin: 0, color: C.dark, fontSize: isMobile ? '0.85rem' : '0.95rem' }}>
-          ⚠️ <strong>Pengingat Perubahan Jadwal dari Admin:</strong> Tidak ada perubahan jadwal yang diinputkan oleh admin saat ini.
+        <p style={{ margin: '0 0 0.5rem 0', color: C.dark, fontSize: isMobile ? '0.85rem' : '0.95rem', fontWeight: 700 }}>
+          ⚠️ Pengingat Perubahan Jadwal
         </p>
+        {perubahanDisetujuiList.length === 0 ? (
+          <p style={{ margin: 0, color: C.dark, fontSize: isMobile ? '0.85rem' : '0.95rem' }}>
+            Tidak ada perubahan jadwal yang sudah disetujui saat ini.
+          </p>
+        ) : (
+          perubahanDisetujuiList.map((p, idx) => (
+            <div
+              key={p.id}
+              style={{
+                padding: '0.5rem 0',
+                borderTop: idx > 0 ? `1px solid ${C.gold}55` : 'none',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'flex-start',
+                gap: '0.75rem',
+                flexWrap: 'wrap',
+              }}
+            >
+              <div style={{ flex: '1 1 240px' }}>
+                <div style={{ fontSize: isMobile ? '0.8rem' : '0.85rem', color: C.dark }}>
+                  {p.diajukan_oleh === 'siswa' ? (p.nama_pengaju || 'Siswa') : 'Anda'} · disetujui siswa, guru, & admin
+                </div>
+                {renderPerubahanInfo(p)}
+              </div>
+              {p.sudahLewat && (
+                confirmDeleteRiwayatId === p.id ? (
+                  <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.72rem', color: C.dark }}>Hapus?</span>
+                    <button
+                      onClick={() => hapusPerubahanDisetujui(p)}
+                      disabled={deletingRiwayatId === p.id}
+                      style={{ background: 'none', border: 'none', color: C.red, fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', padding: '2px 6px' }}
+                    >
+                      {deletingRiwayatId === p.id ? 'Menghapus...' : 'Ya'}
+                    </button>
+                    <button
+                      onClick={() => setConfirmDeleteRiwayatId(null)}
+                      disabled={deletingRiwayatId === p.id}
+                      style={{ background: 'none', border: 'none', color: C.gray, fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', padding: '2px 6px' }}
+                    >
+                      Batal
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setConfirmDeleteRiwayatId(p.id)}
+                    title="Tanggal berlakunya sudah lewat"
+                    style={{ background: 'none', border: 'none', color: C.red, fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', padding: '2px 6px', whiteSpace: 'nowrap' }}
+                  >
+                    Hapus (sudah lewat)
+                  </button>
+                )
+              )}
+            </div>
+          ))
+        )}
       </div>
 
       {/* Materi Request */}
@@ -1301,28 +1571,52 @@ const TeacherHome = () => {
         <div style={modalOverlayStyle}>
           <div style={modalContentStyle}>
             <h3 style={{ margin: '0 0 1rem 0', color: C.dark, fontSize: isMobile ? '1.2rem' : '1.17rem' }}>Ajukan Perubahan Jadwal</h3>
-            <label style={{ fontSize: isMobile ? '0.95rem' : '0.85rem', color: C.gray }}>Pilih Jadwal</label>
+
+            <div style={{ fontSize: '0.78rem', fontWeight: 700, color: C.gray, textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: '0.5rem' }}>Jadwal yang Ingin Diubah</div>
+
+            <label style={{ fontSize: isMobile ? '0.95rem' : '0.85rem', color: C.gray }}>Tanggal Kelas</label>
+            <input
+              type="date"
+              value={tanggalAsal}
+              onChange={(e) => { setTanggalAsal(e.target.value); setSelectedJadwalId(''); }}
+              style={{ width: '100%', padding: isMobile ? '12px' : '8px', marginBottom: '0.4rem', borderRadius: '8px', border: `1px solid ${C.border}`, fontSize: isMobile ? '16px' : '0.9rem', boxSizing: 'border-box' }}
+            />
+            {tanggalAsal && (
+              <div style={{ fontSize: '0.8rem', color: C.gray, marginBottom: '0.75rem' }}>
+                Hari: <strong style={{ color: C.dark }}>{hariAsal || '-'}</strong>
+              </div>
+            )}
+
+            <label style={{ fontSize: isMobile ? '0.95rem' : '0.85rem', color: C.gray }}>Siswa yang Bersangkutan</label>
             <select
               value={selectedJadwalId}
-              onChange={(e) => openForm(e.target.value)}
-              style={{ width: '100%', padding: isMobile ? '12px' : '8px', marginBottom: '0.75rem', borderRadius: '8px', border: `1px solid ${C.border}`, fontSize: isMobile ? '16px' : '0.9rem' }}
+              onChange={(e) => applyJadwalSelection(e.target.value)}
+              disabled={!tanggalAsal}
+              style={{ width: '100%', padding: isMobile ? '12px' : '8px', marginBottom: '0.25rem', borderRadius: '8px', border: `1px solid ${C.border}`, fontSize: isMobile ? '16px' : '0.9rem', opacity: tanggalAsal ? 1 : 0.6 }}
             >
               <option value="">-- Pilih --</option>
-              {jadwalList.map(j => (
-                <option key={j.id} value={j.id}>
-                  {j.hari} {formatJam(j.jam_mulai)}-{formatJam(j.jam_selesai)} - {j.kelas}
-                </option>
+              {kandidatJadwal.map(j => (
+                <option key={j.id} value={j.id}>{getPihakLabel(j)}</option>
               ))}
             </select>
-            <label style={{ fontSize: isMobile ? '0.95rem' : '0.85rem', color: C.gray }}>Hari Baru</label>
+            {tanggalAsal && kandidatJadwal.length === 0 && (
+              <p style={{ fontSize: '0.78rem', color: C.gray, margin: '0.25rem 0 0.75rem 0' }}>Tidak ada jadwal pada tanggal/hari tersebut.</p>
+            )}
+
+            <div style={{ height: '1rem' }} />
+
+            <div style={{ fontSize: '0.78rem', fontWeight: 700, color: C.gray, textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: '0.5rem' }}>Jadwal Pengganti</div>
+
+            <label style={{ fontSize: isMobile ? '0.95rem' : '0.85rem', color: C.gray }}>Hari Pengganti</label>
             <select
               value={formData.hari_baru}
               onChange={(e) => setFormData({ ...formData, hari_baru: e.target.value })}
               style={{ width: '100%', padding: isMobile ? '12px' : '8px', marginBottom: '0.75rem', borderRadius: '8px', border: `1px solid ${C.border}`, fontSize: isMobile ? '16px' : '0.9rem' }}
             >
+              <option value="">-- Pilih --</option>
               {HARI_LIST.map(h => <option key={h} value={h}>{h}</option>)}
             </select>
-            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem' }}>
+            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
               <div style={{ flex: 1 }}>
                 <label style={{ fontSize: isMobile ? '0.95rem' : '0.85rem', color: C.gray }}>Jam Mulai</label>
                 <input
@@ -1342,32 +1636,58 @@ const TeacherHome = () => {
                 />
               </div>
             </div>
-            <label style={{ fontSize: isMobile ? '0.95rem' : '0.85rem', color: C.gray, display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.75rem' }}>
-              <input
-                type="checkbox"
-                checked={formData.is_temporary_baru}
-                onChange={(e) => setFormData({ ...formData, is_temporary_baru: e.target.checked })}
-              />
-              Ini perubahan sementara (bukan permanen)
-            </label>
+
+            <div style={{ fontSize: '0.78rem', fontWeight: 700, color: C.gray, textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: '0.5rem' }}>Sifat Pengajuan</div>
+            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem' }}>
+              <button
+                type="button"
+                onClick={() => setFormData({ ...formData, is_temporary_baru: false })}
+                style={{
+                  flex: 1, padding: isMobile ? '12px' : '8px', borderRadius: '8px', cursor: 'pointer', fontFamily: 'inherit', fontSize: isMobile ? '0.95rem' : '0.85rem', fontWeight: 600,
+                  border: `1px solid ${!formData.is_temporary_baru ? C.green : C.border}`,
+                  background: !formData.is_temporary_baru ? C.greenBg : 'transparent',
+                  color: !formData.is_temporary_baru ? C.green : C.gray,
+                }}
+              >
+                Permanent
+              </button>
+              <button
+                type="button"
+                onClick={() => setFormData({ ...formData, is_temporary_baru: true })}
+                style={{
+                  flex: 1, padding: isMobile ? '12px' : '8px', borderRadius: '8px', cursor: 'pointer', fontFamily: 'inherit', fontSize: isMobile ? '0.95rem' : '0.85rem', fontWeight: 600,
+                  border: `1px solid ${formData.is_temporary_baru ? C.gold : C.border}`,
+                  background: formData.is_temporary_baru ? C.goldBg : 'transparent',
+                  color: formData.is_temporary_baru ? C.gold : C.gray,
+                }}
+              >
+                Sementara
+              </button>
+            </div>
+
             {formData.is_temporary_baru && (
-              <div style={{ marginBottom: '0.75rem' }}>
-                <label style={{ fontSize: isMobile ? '0.95rem' : '0.85rem', color: C.gray }}>Tanggal</label>
-                <input
-                  type="date"
-                  value={formData.tanggal_temporary_baru}
-                  onChange={(e) => setFormData({ ...formData, tanggal_temporary_baru: e.target.value })}
-                  style={{ width: '100%', padding: isMobile ? '12px' : '8px', borderRadius: '8px', border: `1px solid ${C.border}`, fontSize: isMobile ? '16px' : '0.9rem' }}
+              <>
+                <div style={{ fontSize: '0.78rem', color: C.gray, marginBottom: '0.5rem' }}>
+                  Berlaku khusus tanggal: <strong style={{ color: C.dark }}>{tanggalAsal ? formatTanggalPanjang(tanggalAsal) : '-'}</strong> (jadwal rutin minggu lain tidak berubah)
+                </div>
+                <label style={{ fontSize: isMobile ? '0.95rem' : '0.85rem', color: C.dark, fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>
+                  Alasan (kenapa perubahan ini sementara) <span style={{ color: C.red }}>*</span>
+                </label>
+                <textarea
+                  value={formData.alasan}
+                  onChange={(e) => setFormData({ ...formData, alasan: e.target.value })}
+                  rows={3}
+                  placeholder="Contoh: Ada acara sekolah, siswa berhalangan hadir, dll."
+                  style={{
+                    width: '100%', padding: '12px', marginBottom: '1rem', borderRadius: '10px',
+                    border: `1.5px solid ${C.gold}`, background: C.goldBg, resize: 'vertical',
+                    minHeight: '90px', fontSize: isMobile ? '16px' : '0.9rem', boxSizing: 'border-box',
+                    color: C.dark, fontFamily: 'inherit', lineHeight: 1.5,
+                  }}
                 />
-              </div>
+              </>
             )}
-            <label style={{ fontSize: isMobile ? '0.95rem' : '0.85rem', color: C.gray }}>Alasan</label>
-            <textarea
-              value={formData.alasan}
-              onChange={(e) => setFormData({ ...formData, alasan: e.target.value })}
-              rows={3}
-              style={{ width: '100%', padding: '8px', marginBottom: '1rem', borderRadius: '8px', border: `1px solid ${C.border}`, resize: 'vertical', fontSize: isMobile ? '16px' : '0.85rem' }}
-            />
+
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
               <button onClick={() => setShowForm(false)} style={buttonBatal}>Batal</button>
               <button onClick={submitPengajuan} disabled={submitting} style={{ ...buttonKirim, opacity: submitting ? 0.6 : 1 }}>{submitting ? 'Mengirim...' : 'Kirim Pengajuan'}</button>
