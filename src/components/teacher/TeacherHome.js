@@ -105,6 +105,7 @@ const TeacherHome = () => {
   const [pengajuanRiwayatAdmin, setPengajuanRiwayatAdmin] = useState([]);
   const [confirmDeleteRiwayatId, setConfirmDeleteRiwayatId] = useState(null);
   const [deletingRiwayatId, setDeletingRiwayatId] = useState(null);
+  const [showAllPengingat, setShowAllPengingat] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [tanggalAsal, setTanggalAsal] = useState('');
   const [selectedJadwalId, setSelectedJadwalId] = useState('');
@@ -363,8 +364,10 @@ const TeacherHome = () => {
         .order('created_at', { ascending: false });
       if (pengajuanError) throw pengajuanError;
       const all = pengajuanData || [];
-      // 🔥 Hanya tampilkan pengajuan yang belum disetujui admin di antrian aktif
-      setPengajuanMasuk(all.filter(p => p.diajukan_oleh === 'siswa' && p.status !== 'disetujui_admin' && p.status !== 'ditolak_admin'));
+      // 🔥 Hanya tampilkan pengajuan yang benar-benar masih butuh aksi guru.
+      // Begitu guru klik Setujui/Tolak, statusnya berubah jadi 'disetujui_menunggu_admin'
+      // atau 'ditolak' — keduanya sudah final dari sisi guru, jadi harus hilang dari antrian.
+      setPengajuanMasuk(all.filter(p => p.diajukan_oleh === 'siswa' && p.status === 'menunggu_persetujuan'));
       setPengajuanSaya(all.filter(p => p.diajukan_oleh === 'guru' && p.status !== 'disetujui_admin' && p.status !== 'ditolak_admin'));
       // Riwayat: pengajuan yang sudah diputuskan admin (disetujui/ditolak).
       // Diurutkan terbaru dulu (dari query di atas), cap ditentukan saat render.
@@ -1207,56 +1210,66 @@ const TeacherHome = () => {
             Tidak ada perubahan jadwal yang sudah disetujui saat ini.
           </p>
         ) : (
-          perubahanDisetujuiList.map((p, idx) => (
-            <div
-              key={p.id}
-              style={{
-                padding: '0.5rem 0',
-                borderTop: idx > 0 ? `1px solid ${C.gold}55` : 'none',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'flex-start',
-                gap: '0.75rem',
-                flexWrap: 'wrap',
-              }}
-            >
-              <div style={{ flex: '1 1 240px' }}>
-                <div style={{ fontSize: isMobile ? '0.8rem' : '0.85rem', color: C.dark }}>
-                  {p.diajukan_oleh === 'siswa' ? (p.nama_pengaju || 'Siswa') : 'Anda'} · disetujui siswa, guru, & admin
-                </div>
-                {renderPerubahanInfo(p)}
-              </div>
-              {p.sudahLewat && (
-                confirmDeleteRiwayatId === p.id ? (
-                  <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
-                    <span style={{ fontSize: '0.72rem', color: C.dark }}>Hapus?</span>
-                    <button
-                      onClick={() => hapusPerubahanDisetujui(p)}
-                      disabled={deletingRiwayatId === p.id}
-                      style={{ background: 'none', border: 'none', color: C.red, fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', padding: '2px 6px' }}
-                    >
-                      {deletingRiwayatId === p.id ? 'Menghapus...' : 'Ya'}
-                    </button>
-                    <button
-                      onClick={() => setConfirmDeleteRiwayatId(null)}
-                      disabled={deletingRiwayatId === p.id}
-                      style={{ background: 'none', border: 'none', color: C.gray, fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', padding: '2px 6px' }}
-                    >
-                      Batal
-                    </button>
+          <>
+            {(showAllPengingat ? perubahanDisetujuiList : perubahanDisetujuiList.slice(0, 3)).map((p, idx) => (
+              <div
+                key={p.id}
+                style={{
+                  padding: '0.5rem 0',
+                  borderTop: idx > 0 ? `1px solid ${C.gold}55` : 'none',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'flex-start',
+                  gap: '0.75rem',
+                  flexWrap: 'wrap',
+                }}
+              >
+                <div style={{ flex: '1 1 240px' }}>
+                  <div style={{ fontSize: isMobile ? '0.8rem' : '0.85rem', color: C.dark }}>
+                    {p.diajukan_oleh === 'siswa' ? (p.nama_pengaju || 'Siswa') : 'Anda'} · disetujui siswa, guru, & admin
                   </div>
-                ) : (
-                  <button
-                    onClick={() => setConfirmDeleteRiwayatId(p.id)}
-                    title="Tanggal berlakunya sudah lewat"
-                    style={{ background: 'none', border: 'none', color: C.red, fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', padding: '2px 6px', whiteSpace: 'nowrap' }}
-                  >
-                    Hapus (sudah lewat)
-                  </button>
-                )
-              )}
-            </div>
-          ))
+                  {renderPerubahanInfo(p)}
+                </div>
+                {(p.sudahLewat || p.diajukan_oleh !== 'siswa') && (
+                  confirmDeleteRiwayatId === p.id ? (
+                    <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                      <span style={{ fontSize: '0.72rem', color: C.dark }}>Hapus?</span>
+                      <button
+                        onClick={() => hapusPerubahanDisetujui(p)}
+                        disabled={deletingRiwayatId === p.id}
+                        style={{ background: 'none', border: 'none', color: C.red, fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', padding: '2px 6px' }}
+                      >
+                        {deletingRiwayatId === p.id ? 'Menghapus...' : 'Ya'}
+                      </button>
+                      <button
+                        onClick={() => setConfirmDeleteRiwayatId(null)}
+                        disabled={deletingRiwayatId === p.id}
+                        style={{ background: 'none', border: 'none', color: C.gray, fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', padding: '2px 6px' }}
+                      >
+                        Batal
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setConfirmDeleteRiwayatId(p.id)}
+                      title={p.sudahLewat ? 'Tanggal berlakunya sudah lewat' : 'Hapus pengajuan Anda'}
+                      style={{ background: 'none', border: 'none', color: C.red, fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', padding: '2px 6px', whiteSpace: 'nowrap' }}
+                    >
+                      {p.sudahLewat ? 'Hapus (sudah lewat)' : 'Hapus'}
+                    </button>
+                  )
+                )}
+              </div>
+            ))}
+            {perubahanDisetujuiList.length > 3 && (
+              <button
+                onClick={() => setShowAllPengingat(s => !s)}
+                style={{ background: 'none', border: 'none', color: C.gold, fontWeight: 600, fontSize: '0.78rem', cursor: 'pointer', padding: '6px 2px', marginTop: '0.25rem' }}
+              >
+                {showAllPengingat ? 'Sembunyikan' : `Tampilkan semua (${perubahanDisetujuiList.length})`}
+              </button>
+            )}
+          </>
         )}
       </div>
 

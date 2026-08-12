@@ -139,6 +139,9 @@ const StudentHome = () => {
 
   const [respondingId, setRespondingId] = useState(null);
   const [confirmTolakId, setConfirmTolakId] = useState(null);
+  const [confirmDeletePengingatId, setConfirmDeletePengingatId] = useState(null);
+  const [deletingPengingatId, setDeletingPengingatId] = useState(null);
+  const [showAllPengingat, setShowAllPengingat] = useState(false);
   const [confirmDeleteTugasId, setConfirmDeleteTugasId] = useState(null);
   const [deletingTugasId, setDeletingTugasId] = useState(null);
 
@@ -169,8 +172,45 @@ const StudentHome = () => {
         items.push({ id: p.id, isBatch: false, rows: [p], created_at: p.created_at });
       }
     });
-    return items.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+    return items
+      // Yang sudah disetujui admin dipindahkan ke kartu "Pengingat Perubahan
+      // Jadwal" di bawah, jadi tidak perlu ditampilkan dobel di sini.
+      .filter(item => getAggregateStatus(item.rows) !== 'disetujui_admin')
+      .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
   }, [pengajuanSaya]);
+
+  // Perubahan jadwal yang sudah disetujui ketiganya (siswa, guru, admin) —
+  // dipakai untuk kartu pengingat. Perubahan sementara yang tanggal berlakunya
+  // sudah lewat ditandai supaya bisa dihapus (dibersihkan) manual.
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const perubahanDisetujuiList = useMemo(() => {
+    const isTanggalLewat = (tanggalStr) => !!tanggalStr && tanggalStr < todayStr;
+    const gabungan = [...pengajuanMasuk, ...pengajuanSaya].filter(p => p.status === 'disetujui_admin');
+    return gabungan
+      .map(p => ({ ...p, sudahLewat: p.is_temporary_baru ? isTanggalLewat(p.tanggal_temporary_baru) : false }))
+      .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+  }, [pengajuanMasuk, pengajuanSaya, todayStr]);
+
+  const hapusPerubahanDisetujui = async (p) => {
+    setDeletingPengingatId(p.id);
+    setErrorMsg('');
+    try {
+      const { error } = await supabase
+        .from('pengajuan_perubahan_jadwal')
+        .delete()
+        .eq('id', p.id)
+        .eq('siswa_id', profile.id);
+      if (error) throw error;
+      setPengajuanMasuk(list => list.filter(item => item.id !== p.id));
+      setPengajuanSaya(list => list.filter(item => item.id !== p.id));
+      setConfirmDeletePengingatId(null);
+    } catch (err) {
+      console.error(err);
+      setErrorMsg(err.message || 'Gagal menghapus pengingat.');
+    } finally {
+      setDeletingPengingatId(null);
+    }
+  };
 
   const now = new Date();
   const hour = now.getHours();
@@ -1078,6 +1118,79 @@ const StudentHome = () => {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Pengingat Perubahan Jadwal (disetujui siswa, guru, & admin) */}
+      <div style={{ background: C.goldBg, borderRadius: '12px', padding: isMobile ? '0.85rem 1rem' : '1rem 1.5rem', border: `1px solid ${C.gold}`, marginBottom: isMobile ? '1rem' : '1.5rem' }}>
+        <p style={{ margin: '0 0 0.5rem 0', color: C.dark, fontSize: isMobile ? '0.85rem' : '0.95rem', fontWeight: 700 }}>
+          ⚠️ Pengingat Perubahan Jadwal
+        </p>
+        {perubahanDisetujuiList.length === 0 ? (
+          <p style={{ margin: 0, color: C.dark, fontSize: isMobile ? '0.85rem' : '0.95rem' }}>
+            Tidak ada perubahan jadwal yang sudah disetujui saat ini.
+          </p>
+        ) : (
+          <>
+            {(showAllPengingat ? perubahanDisetujuiList : perubahanDisetujuiList.slice(0, 3)).map((p, idx) => (
+              <div
+                key={p.id}
+                style={{
+                  padding: '0.5rem 0',
+                  borderTop: idx > 0 ? `1px solid ${C.gold}55` : 'none',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'flex-start',
+                  gap: '0.75rem',
+                  flexWrap: 'wrap',
+                }}
+              >
+                <div style={{ flex: '1 1 240px' }}>
+                  <div style={{ fontSize: isMobile ? '0.8rem' : '0.85rem', color: C.dark }}>
+                    {p.diajukan_oleh === 'guru' ? (p.nama_pengaju || 'Guru') : 'Anda'} · disetujui siswa, guru, & admin
+                  </div>
+                  {renderPerubahanInfo(p)}
+                </div>
+                {(p.sudahLewat || p.diajukan_oleh !== 'guru') && (
+                  confirmDeletePengingatId === p.id ? (
+                    <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                      <span style={{ fontSize: '0.72rem', color: C.dark }}>Hapus?</span>
+                      <button
+                        onClick={() => hapusPerubahanDisetujui(p)}
+                        disabled={deletingPengingatId === p.id}
+                        style={{ background: 'none', border: 'none', color: C.red, fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', padding: '2px 6px' }}
+                      >
+                        {deletingPengingatId === p.id ? 'Menghapus...' : 'Ya'}
+                      </button>
+                      <button
+                        onClick={() => setConfirmDeletePengingatId(null)}
+                        disabled={deletingPengingatId === p.id}
+                        style={{ background: 'none', border: 'none', color: C.gray, fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', padding: '2px 6px' }}
+                      >
+                        Batal
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setConfirmDeletePengingatId(p.id)}
+                      title={p.sudahLewat ? 'Tanggal berlakunya sudah lewat' : 'Hapus pengajuan Anda'}
+                      style={{ background: 'none', border: 'none', color: C.red, fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', padding: '2px 6px', whiteSpace: 'nowrap' }}
+                    >
+                      {p.sudahLewat ? 'Hapus (sudah lewat)' : 'Hapus'}
+                    </button>
+                  )
+                )}
+              </div>
+            ))}
+            {perubahanDisetujuiList.length > 3 && (
+              <button
+                onClick={() => setShowAllPengingat(s => !s)}
+                style={{ background: 'none', border: 'none', color: C.gold, fontWeight: 600, fontSize: '0.78rem', cursor: 'pointer', padding: '6px 2px', marginTop: '0.25rem' }}
+              >
+                {showAllPengingat ? 'Sembunyikan' : `Tampilkan semua (${perubahanDisetujuiList.length})`}
+              </button>
+            )}
+          </>
+        )}
       </div>
 
       {/* Permintaan Materi Saya - grid 2 kolom */}
