@@ -1350,11 +1350,11 @@ const TeacherHome = () => {
         </div>
         {loading ? (
           <p style={{ fontSize: '0.85rem', color: C.gray }}>Memuat...</p>
-        ) : materiRequestList.length === 0 ? (
+        ) : materiRequestList.filter(m => m.status !== 'selesai').length === 0 ? (
           <p style={{ fontSize: '0.85rem', color: C.gray }}>Belum ada permintaan materi dari siswa.</p>
         ) : (
-          materiRequestList.map((item, idx) => (
-            <div key={item.id} style={{ padding: '0.75rem 0', borderBottom: idx < materiRequestList.length - 1 ? `1px solid ${C.border}` : 'none' }}>
+          materiRequestList.filter(m => m.status !== 'selesai').map((item, idx, arr) => (
+            <div key={item.id} style={{ padding: '0.75rem 0', borderBottom: idx < arr.length - 1 ? `1px solid ${C.border}` : 'none' }}>
               <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: isMobile ? '0.6rem' : 0 }}>
                 <div>
                   <div style={{ fontWeight: '600', color: C.dark, fontSize: isMobile ? '1rem' : '0.9rem' }}>{item.judul_materi}</div>
