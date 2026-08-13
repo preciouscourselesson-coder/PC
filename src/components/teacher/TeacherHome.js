@@ -105,6 +105,8 @@ const TeacherHome = () => {
   const [pengajuanRiwayatAdmin, setPengajuanRiwayatAdmin] = useState([]);
   const [confirmDeleteRiwayatId, setConfirmDeleteRiwayatId] = useState(null);
   const [deletingRiwayatId, setDeletingRiwayatId] = useState(null);
+  const [confirmDeleteSayaId, setConfirmDeleteSayaId] = useState(null);
+  const [deletingSayaId, setDeletingSayaId] = useState(null);
   const [showAllPengingat, setShowAllPengingat] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [tanggalAsal, setTanggalAsal] = useState('');
@@ -253,12 +255,16 @@ const TeacherHome = () => {
     setDeletingRiwayatId(p.id);
     setErrorMsg('');
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('pengajuan_perubahan_jadwal')
         .delete()
         .eq('id', p.id)
-        .eq('guru_id', guru.id);
+        .eq('guru_id', guru.id)
+        .select('id');
       if (error) throw error;
+      if (!data || data.length === 0) {
+        throw new Error('Data tidak terhapus (kemungkinan diblokir aturan akses/RLS di database).');
+      }
       setPengajuanRiwayatAdmin(list => list.filter(item => item.id !== p.id));
       setConfirmDeleteRiwayatId(null);
     } catch (err) {
@@ -266,6 +272,31 @@ const TeacherHome = () => {
       showToast('error', 'Gagal menghapus pengingat: ' + err.message);
     } finally {
       setDeletingRiwayatId(null);
+    }
+  };
+
+  // Hapus pengajuan milik saya (guru) yang statusnya ditolak, dari daftar
+  // "Pengajuan Saya". Mendukung pengajuan tunggal maupun batch.
+  const hapusPengajuanSaya = async (item) => {
+    setDeletingSayaId(item.id);
+    setErrorMsg('');
+    try {
+      let query = supabase.from('pengajuan_perubahan_jadwal').delete().eq('guru_id', guru.id);
+      query = item.isBatch ? query.eq('batch_id', item.id) : query.eq('id', item.id);
+      const { data, error } = await query.select('id');
+      if (error) throw error;
+      if (!data || data.length === 0) {
+        throw new Error('Data tidak terhapus (kemungkinan diblokir aturan akses/RLS di database).');
+      }
+      const idsTerhapus = new Set(data.map(d => d.id));
+      setPengajuanSaya(list => list.filter(row => !idsTerhapus.has(row.id)));
+      setPengajuanMasuk(list => list.filter(row => !idsTerhapus.has(row.id)));
+      setConfirmDeleteSayaId(null);
+    } catch (err) {
+      console.error(err);
+      showToast('error', 'Gagal menghapus pengajuan: ' + err.message);
+    } finally {
+      setDeletingSayaId(null);
     }
   };
 
@@ -674,7 +705,11 @@ const TeacherHome = () => {
     try {
       if (kirimMateriMode === 'arsip') {
         if (!selectedMateriId) { showToast('warning', 'Pilih materi yang akan dikirim.'); return; }
-        const materi = materiArsip.find(m => m.id === selectedMateriId);
+        // Dibandingkan sebagai string karena <select> selalu mengembalikan
+        // e.target.value berupa string, sedangkan m.id dari database bisa
+        // berupa number (bigint/serial) -- tanpa ini find() selalu gagal
+        // walau item-nya kelihatan sudah terpilih di dropdown.
+        const materi = materiArsip.find(m => String(m.id) === String(selectedMateriId));
         if (!materi) throw new Error('Materi tidak ditemukan di arsip.');
         await selesaikanRequestDenganMateri(request, materi.id, materi.nama);
       } else {
@@ -1182,6 +1217,7 @@ const TeacherHome = () => {
                   const first = item.rows[0];
                   const status = getAggregateStatus(item.rows);
                   const approvedCount = item.rows.filter(r => STATUS_SISWA_SETUJU.includes(r.status)).length;
+                  const bisaDihapus = status === 'ditolak' || status === 'ditolak_admin';
                   return (
                     <div key={item.id} style={{ padding: '0.5rem 0', borderBottom: `1px solid ${C.border}` }}>
                       {renderPerubahanInfo(first)}
@@ -1190,7 +1226,38 @@ const TeacherHome = () => {
                           {approvedCount}/{item.rows.length} siswa menyetujui
                         </div>
                       )}
-                      <StatusPill status={status} />
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        <StatusPill status={status} />
+                        {bisaDihapus && (
+                          confirmDeleteSayaId === item.id ? (
+                            <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                              <span style={{ fontSize: '0.72rem', color: C.dark }}>Hapus?</span>
+                              <button
+                                onClick={() => hapusPengajuanSaya(item)}
+                                disabled={deletingSayaId === item.id}
+                                style={{ background: 'none', border: 'none', color: C.red, fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', padding: '2px 6px' }}
+                              >
+                                {deletingSayaId === item.id ? 'Menghapus...' : 'Ya'}
+                              </button>
+                              <button
+                                onClick={() => setConfirmDeleteSayaId(null)}
+                                disabled={deletingSayaId === item.id}
+                                style={{ background: 'none', border: 'none', color: C.gray, fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', padding: '2px 6px' }}
+                              >
+                                Batal
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => setConfirmDeleteSayaId(item.id)}
+                              title="Hapus pengajuan yang ditolak"
+                              style={{ background: 'none', border: 'none', color: C.red, fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', padding: '2px 6px' }}
+                            >
+                              Hapus
+                            </button>
+                          )
+                        )}
+                      </div>
                     </div>
                   );
                 })
@@ -1230,34 +1297,32 @@ const TeacherHome = () => {
                   </div>
                   {renderPerubahanInfo(p)}
                 </div>
-                {(p.sudahLewat || p.diajukan_oleh !== 'siswa') && (
-                  confirmDeleteRiwayatId === p.id ? (
-                    <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
-                      <span style={{ fontSize: '0.72rem', color: C.dark }}>Hapus?</span>
-                      <button
-                        onClick={() => hapusPerubahanDisetujui(p)}
-                        disabled={deletingRiwayatId === p.id}
-                        style={{ background: 'none', border: 'none', color: C.red, fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', padding: '2px 6px' }}
-                      >
-                        {deletingRiwayatId === p.id ? 'Menghapus...' : 'Ya'}
-                      </button>
-                      <button
-                        onClick={() => setConfirmDeleteRiwayatId(null)}
-                        disabled={deletingRiwayatId === p.id}
-                        style={{ background: 'none', border: 'none', color: C.gray, fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', padding: '2px 6px' }}
-                      >
-                        Batal
-                      </button>
-                    </div>
-                  ) : (
+                {confirmDeleteRiwayatId === p.id ? (
+                  <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.72rem', color: C.dark }}>Hapus?</span>
                     <button
-                      onClick={() => setConfirmDeleteRiwayatId(p.id)}
-                      title={p.sudahLewat ? 'Tanggal berlakunya sudah lewat' : 'Hapus pengajuan Anda'}
-                      style={{ background: 'none', border: 'none', color: C.red, fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', padding: '2px 6px', whiteSpace: 'nowrap' }}
+                      onClick={() => hapusPerubahanDisetujui(p)}
+                      disabled={deletingRiwayatId === p.id}
+                      style={{ background: 'none', border: 'none', color: C.red, fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', padding: '2px 6px' }}
                     >
-                      {p.sudahLewat ? 'Hapus (sudah lewat)' : 'Hapus'}
+                      {deletingRiwayatId === p.id ? 'Menghapus...' : 'Ya'}
                     </button>
-                  )
+                    <button
+                      onClick={() => setConfirmDeleteRiwayatId(null)}
+                      disabled={deletingRiwayatId === p.id}
+                      style={{ background: 'none', border: 'none', color: C.gray, fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', padding: '2px 6px' }}
+                    >
+                      Batal
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setConfirmDeleteRiwayatId(p.id)}
+                    title="Hapus pengingat ini"
+                    style={{ background: 'none', border: 'none', color: C.red, fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', padding: '2px 6px', whiteSpace: 'nowrap' }}
+                  >
+                    Hapus
+                  </button>
                 )}
               </div>
             ))}

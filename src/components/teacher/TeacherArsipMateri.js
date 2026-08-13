@@ -65,6 +65,14 @@ const BENTUK_OPTIONS = [
   { value: 'Link', label: '🔗 Tautan (Link)' },
 ];
 
+// Pilihan mapel yang tersedia
+const MAPEL_OPTIONS = ['Matematika', 'Fisika', 'Kimia', 'Bahasa Inggris'];
+const KELAS_GROUPS = [
+  { label: 'SD', options: ['I', 'II', 'III', 'IV', 'V', 'VI'] },
+  { label: 'SMP', options: ['VII', 'VIII', 'IX'] },
+  { label: 'SMA', options: ['X', 'XI', 'XII'] },
+];
+
 const fileIcon = (tipe) => {
   const t = (tipe || '').toLowerCase();
   if (t === 'link') return { emoji: '🔗', label: 'LINK', color: C.blue };
@@ -336,7 +344,6 @@ const uploadFieldLabel = { fontSize: '0.8rem', color: C.gray, display: 'block', 
 const uploadFieldInput = { width: '100%', padding: '10px 11px', borderRadius: '9px', border: `1.5px solid ${C.border}`, boxSizing: 'border-box', fontFamily: 'inherit', fontSize: '16px' };
 
 const TeacherUploadMateriModal = ({ userId, onUploaded }) => {
-  const [kelasList, setKelasList] = useState([]);
   const [loadingOptions, setLoadingOptions] = useState(true);
 
   // Kategori sumber materi: Pribadi atau Sekolah yang diajar
@@ -351,12 +358,12 @@ const TeacherUploadMateriModal = ({ userId, onUploaded }) => {
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [folderErrorMsg, setFolderErrorMsg] = useState('');
 
-  // Mapel, Bab, Sub Bab sekarang input teks bebas (tidak lagi bergantung ke tabel bab_ajar)
+  // Mapel sekarang dropdown tetap (lihat MAPEL_OPTIONS); Bab & Sub Bab tetap
+  // input teks bebas (tidak bergantung ke tabel bab_ajar)
   const [mapel, setMapel] = useState('');
   const [bab, setBab] = useState('');
   const [subBab, setSubBab] = useState('');
-  // Riwayat mapel/bab yang pernah diketik guru ini, dipakai sebagai saran datalist saja
-  const [mapelHistory, setMapelHistory] = useState([]);
+  // Riwayat bab yang pernah diketik guru ini, dipakai sebagai saran datalist saja
   const [babHistory, setBabHistory] = useState([]);
 
   const [kelas, setKelas] = useState('');
@@ -384,27 +391,14 @@ const TeacherUploadMateriModal = ({ userId, onUploaded }) => {
       if (!userId) return;
       setLoadingOptions(true);
 
-      const [{ data: profile }, { data: guruRow }, { data: riwayatMateri }] = await Promise.all([
+      const [{ data: profile }, { data: riwayatMateri }] = await Promise.all([
         supabase.from('profiles').select('full_name').eq('id', userId).single(),
-        supabase.from('guru').select('id').eq('profile_id', userId).single(),
         supabase.from('materi_file').select('mapel, bab').eq('user_id', userId),
       ]);
 
       setNamaGuru(profile?.full_name || '');
       setPengajar(profile?.full_name || '');
-      setMapelHistory(Array.from(new Set((riwayatMateri || []).map(r => r.mapel).filter(Boolean))).sort());
       setBabHistory(Array.from(new Set((riwayatMateri || []).map(r => r.bab).filter(Boolean))).sort());
-
-      // Kelas diambil dari jadwal_les milik guru ini, bukan input bebas,
-      // supaya nilainya selalu konsisten dengan kelas yang benar-benar diajar.
-      if (guruRow?.id) {
-        const { data: jadwalData } = await supabase
-          .from('jadwal_les')
-          .select('kelas')
-          .eq('guru_id', guruRow.id);
-        const unique = Array.from(new Set((jadwalData || []).map(j => j.kelas).filter(Boolean))).sort();
-        setKelasList(unique);
-      }
       setLoadingOptions(false);
     };
     loadData();
@@ -527,7 +521,6 @@ const TeacherUploadMateriModal = ({ userId, onUploaded }) => {
       setFileInputKey(k => k + 1);
       setLink('');
       setSuccessMsg('Materi berhasil diunggah.');
-      setMapelHistory(prev => Array.from(new Set([...prev, mapel.trim()])).sort());
       setBabHistory(prev => Array.from(new Set([...prev, bab.trim()])).sort());
 
       onUploaded('Dipublish');
@@ -600,25 +593,22 @@ const TeacherUploadMateriModal = ({ userId, onUploaded }) => {
             <label style={uploadFieldLabel}>Kelas</label>
             <select style={uploadFieldInput} value={kelas} onChange={e => setKelas(e.target.value)}>
               <option value="">Pilih kelas...</option>
-              {kelasList.map(k => <option key={k} value={k}>{k}</option>)}
+              {KELAS_GROUPS.map(group => (
+                <optgroup key={group.label} label={group.label}>
+                  {group.options.map(k => <option key={k} value={k}>{k}</option>)}
+                </optgroup>
+              ))}
             </select>
-            {kelasList.length === 0 && (
-              <div style={{ fontSize: '0.75rem', color: C.gray, marginTop: '4px' }}>
-                Belum ada jadwal les untuk Anda, sehingga daftar kelas kosong.
-              </div>
-            )}
 
             <label style={uploadFieldLabel}>Mapel</label>
-            <input
+            <select
               style={uploadFieldInput}
               value={mapel}
               onChange={e => setMapel(e.target.value)}
-              placeholder="Misal: Matematika"
-              list="mapel-history-list"
-            />
-            <datalist id="mapel-history-list">
-              {mapelHistory.map(m => <option key={m} value={m} />)}
-            </datalist>
+            >
+              <option value="">Pilih mapel...</option>
+              {MAPEL_OPTIONS.map(m => <option key={m} value={m}>{m}</option>)}
+            </select>
 
             <label style={uploadFieldLabel}>Bab / Topik</label>
             <input
@@ -1164,18 +1154,28 @@ const TeacherArsipMateri = () => {
             />
 
             <label style={{ fontSize: '0.8rem', color: C.gray }}>Kelas</label>
-            <input
+            <select
               value={editItem.kelas || ''}
               onChange={e => setEditItem({ ...editItem, kelas: e.target.value })}
               style={{ width: '100%', padding: '9px 10px', borderRadius: '8px', border: `1.5px solid ${C.border}`, marginBottom: '10px', boxSizing: 'border-box', fontFamily: 'inherit', fontSize: '16px' }}
-            />
+            >
+              <option value="">Pilih kelas...</option>
+              {KELAS_GROUPS.map(group => (
+                <optgroup key={group.label} label={group.label}>
+                  {group.options.map(k => <option key={k} value={k}>{k}</option>)}
+                </optgroup>
+              ))}
+            </select>
 
             <label style={{ fontSize: '0.8rem', color: C.gray }}>Mapel</label>
-            <input
+            <select
               value={editItem.mapel || ''}
               onChange={e => setEditItem({ ...editItem, mapel: e.target.value })}
               style={{ width: '100%', padding: '9px 10px', borderRadius: '8px', border: `1.5px solid ${C.border}`, marginBottom: '10px', boxSizing: 'border-box', fontFamily: 'inherit', fontSize: '16px' }}
-            />
+            >
+              <option value="">Pilih mapel...</option>
+              {MAPEL_OPTIONS.map(m => <option key={m} value={m}>{m}</option>)}
+            </select>
 
             <label style={{ fontSize: '0.8rem', color: C.gray }}>Bab / Topik</label>
             <input

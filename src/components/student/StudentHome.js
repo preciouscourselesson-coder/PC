@@ -30,6 +30,18 @@ const MAPEL_TUGAS_LIST = [
 // Ukuran maksimal file gambar catatan (5MB)
 const MAX_CATATAN_GAMBAR_SIZE = 5 * 1024 * 1024;
 
+// Ukuran maksimal file lampiran permintaan materi (10MB)
+const MAX_MATERI_FILE_SIZE = 10 * 1024 * 1024;
+// Ekstensi file yang diizinkan untuk lampiran permintaan materi
+const MATERI_FILE_ACCEPT = '.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.jpg,.jpeg,.png,.webp';
+
+const formatFileSize = (bytes) => {
+  if (!bytes && bytes !== 0) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
 const formatJam = (t) => (t ? t.slice(0, 5) : '');
 
 // Konversi hasil Date.getDay() (0=Minggu..6=Sabtu) ke index HARI_LIST (0=Senin..6=Minggu)
@@ -119,6 +131,7 @@ const StudentHome = () => {
     judul: '',
     deskripsi: '',
   });
+  const [materiFile, setMateriFile] = useState(null);
   const [submittingMateri, setSubmittingMateri] = useState(false);
 
   const [showTugasForm, setShowTugasForm] = useState(false);
@@ -141,6 +154,8 @@ const StudentHome = () => {
   const [confirmTolakId, setConfirmTolakId] = useState(null);
   const [confirmDeletePengingatId, setConfirmDeletePengingatId] = useState(null);
   const [deletingPengingatId, setDeletingPengingatId] = useState(null);
+  const [confirmDeleteSayaId, setConfirmDeleteSayaId] = useState(null);
+  const [deletingSayaId, setDeletingSayaId] = useState(null);
   const [showAllPengingat, setShowAllPengingat] = useState(false);
   const [confirmDeleteTugasId, setConfirmDeleteTugasId] = useState(null);
   const [deletingTugasId, setDeletingTugasId] = useState(null);
@@ -195,12 +210,16 @@ const StudentHome = () => {
     setDeletingPengingatId(p.id);
     setErrorMsg('');
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('pengajuan_perubahan_jadwal')
         .delete()
         .eq('id', p.id)
-        .eq('siswa_id', profile.id);
+        .eq('siswa_id', profile.id)
+        .select('id');
       if (error) throw error;
+      if (!data || data.length === 0) {
+        throw new Error('Data tidak terhapus (kemungkinan diblokir aturan akses/RLS di database).');
+      }
       setPengajuanMasuk(list => list.filter(item => item.id !== p.id));
       setPengajuanSaya(list => list.filter(item => item.id !== p.id));
       setConfirmDeletePengingatId(null);
@@ -209,6 +228,31 @@ const StudentHome = () => {
       setErrorMsg(err.message || 'Gagal menghapus pengingat.');
     } finally {
       setDeletingPengingatId(null);
+    }
+  };
+
+  // Hapus pengajuan milik saya yang statusnya ditolak (oleh guru maupun admin)
+  // dari daftar "Pengajuan Saya". Mendukung pengajuan tunggal maupun batch.
+  const hapusPengajuanSaya = async (item) => {
+    setDeletingSayaId(item.id);
+    setErrorMsg('');
+    try {
+      let query = supabase.from('pengajuan_perubahan_jadwal').delete().eq('siswa_id', profile.id);
+      query = item.isBatch ? query.eq('batch_id', item.id) : query.eq('id', item.id);
+      const { data, error } = await query.select('id');
+      if (error) throw error;
+      if (!data || data.length === 0) {
+        throw new Error('Data tidak terhapus (kemungkinan diblokir aturan akses/RLS di database).');
+      }
+      const idsTerhapus = new Set(data.map(d => d.id));
+      setPengajuanSaya(list => list.filter(row => !idsTerhapus.has(row.id)));
+      setPengajuanMasuk(list => list.filter(row => !idsTerhapus.has(row.id)));
+      setConfirmDeleteSayaId(null);
+    } catch (err) {
+      console.error(err);
+      setErrorMsg(err.message || 'Gagal menghapus pengajuan.');
+    } finally {
+      setDeletingSayaId(null);
     }
   };
 
@@ -526,6 +570,22 @@ const StudentHome = () => {
   };
 
   // ========== MATERI REQUEST ==========
+  const handleMateriFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > MAX_MATERI_FILE_SIZE) {
+      setErrorMsg('Ukuran file maksimal 10MB.');
+      e.target.value = '';
+      return;
+    }
+    setErrorMsg('');
+    setMateriFile(file);
+  };
+
+  const removeMateriFile = () => {
+    setMateriFile(null);
+  };
+
   const submitMateriRequest = async () => {
     if (!materiForm.judul.trim()) {
       setErrorMsg('Judul materi tidak boleh kosong.');
@@ -538,6 +598,25 @@ const StudentHome = () => {
     setSubmittingMateri(true);
     setErrorMsg('');
     try {
+      let fileUrl = null;
+      let fileName = null;
+
+      // Upload file lampiran (jika ada) ke Supabase Storage
+      if (materiFile) {
+        const ext = materiFile.name.split('.').pop();
+        const filePath = `${profile.id}/${Date.now()}.${ext}`;
+        const { error: uploadError } = await supabase.storage
+          .from('materi-request-files')
+          .upload(filePath, materiFile);
+        if (uploadError) throw uploadError;
+
+        const { data: publicUrlData } = supabase.storage
+          .from('materi-request-files')
+          .getPublicUrl(filePath);
+        fileUrl = publicUrlData?.publicUrl || null;
+        fileName = materiFile.name;
+      }
+
       const payload = {
         guru_id: materiForm.guruId,
         siswa_id: profile.id,
@@ -545,6 +624,8 @@ const StudentHome = () => {
         kelas: profile.kelas || '-',
         judul_materi: materiForm.judul.trim(),
         deskripsi: materiForm.deskripsi.trim() || null,
+        file_url: fileUrl,
+        file_name: fileName,
         status: 'baru',
         created_at: new Date().toISOString(),
       };
@@ -570,6 +651,7 @@ const StudentHome = () => {
       }
 
       setMateriForm({ guruId: '', judul: '', deskripsi: '' });
+      setMateriFile(null);
       await loadAll();
     } catch (err) {
       console.error(err);
@@ -1102,6 +1184,7 @@ const StudentHome = () => {
                 pengajuanSayaGrouped.map(item => {
                   const first = item.rows[0];
                   const status = getAggregateStatus(item.rows);
+                  const bisaDihapus = status === 'ditolak' || status === 'ditolak_admin';
                   return (
                     <div key={item.id} style={{ padding: '0.5rem 0', borderBottom: `1px solid ${C.border}` }}>
                       {renderPerubahanInfo(first)}
@@ -1110,7 +1193,38 @@ const StudentHome = () => {
                           {item.rows.filter(r => STATUS_SISWA_SETUJU.includes(r.status)).length}/{item.rows.length} siswa setuju
                         </div>
                       )}
-                      <StatusPill status={status} />
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        <StatusPill status={status} />
+                        {bisaDihapus && (
+                          confirmDeleteSayaId === item.id ? (
+                            <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                              <span style={{ fontSize: '0.72rem', color: C.dark }}>Hapus?</span>
+                              <button
+                                onClick={() => hapusPengajuanSaya(item)}
+                                disabled={deletingSayaId === item.id}
+                                style={{ background: 'none', border: 'none', color: C.red, fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', padding: '2px 6px' }}
+                              >
+                                {deletingSayaId === item.id ? 'Menghapus...' : 'Ya'}
+                              </button>
+                              <button
+                                onClick={() => setConfirmDeleteSayaId(null)}
+                                disabled={deletingSayaId === item.id}
+                                style={{ background: 'none', border: 'none', color: C.gray, fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', padding: '2px 6px' }}
+                              >
+                                Batal
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => setConfirmDeleteSayaId(item.id)}
+                              title="Hapus pengajuan yang ditolak"
+                              style={{ background: 'none', border: 'none', color: C.red, fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', padding: '2px 6px' }}
+                            >
+                              Hapus
+                            </button>
+                          )
+                        )}
+                      </div>
                     </div>
                   );
                 })
@@ -1150,34 +1264,32 @@ const StudentHome = () => {
                   </div>
                   {renderPerubahanInfo(p)}
                 </div>
-                {(p.sudahLewat || p.diajukan_oleh !== 'guru') && (
-                  confirmDeletePengingatId === p.id ? (
-                    <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
-                      <span style={{ fontSize: '0.72rem', color: C.dark }}>Hapus?</span>
-                      <button
-                        onClick={() => hapusPerubahanDisetujui(p)}
-                        disabled={deletingPengingatId === p.id}
-                        style={{ background: 'none', border: 'none', color: C.red, fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', padding: '2px 6px' }}
-                      >
-                        {deletingPengingatId === p.id ? 'Menghapus...' : 'Ya'}
-                      </button>
-                      <button
-                        onClick={() => setConfirmDeletePengingatId(null)}
-                        disabled={deletingPengingatId === p.id}
-                        style={{ background: 'none', border: 'none', color: C.gray, fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', padding: '2px 6px' }}
-                      >
-                        Batal
-                      </button>
-                    </div>
-                  ) : (
+                {confirmDeletePengingatId === p.id ? (
+                  <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.72rem', color: C.dark }}>Hapus?</span>
                     <button
-                      onClick={() => setConfirmDeletePengingatId(p.id)}
-                      title={p.sudahLewat ? 'Tanggal berlakunya sudah lewat' : 'Hapus pengajuan Anda'}
-                      style={{ background: 'none', border: 'none', color: C.red, fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', padding: '2px 6px', whiteSpace: 'nowrap' }}
+                      onClick={() => hapusPerubahanDisetujui(p)}
+                      disabled={deletingPengingatId === p.id}
+                      style={{ background: 'none', border: 'none', color: C.red, fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', padding: '2px 6px' }}
                     >
-                      {p.sudahLewat ? 'Hapus (sudah lewat)' : 'Hapus'}
+                      {deletingPengingatId === p.id ? 'Menghapus...' : 'Ya'}
                     </button>
-                  )
+                    <button
+                      onClick={() => setConfirmDeletePengingatId(null)}
+                      disabled={deletingPengingatId === p.id}
+                      style={{ background: 'none', border: 'none', color: C.gray, fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', padding: '2px 6px' }}
+                    >
+                      Batal
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setConfirmDeletePengingatId(p.id)}
+                    title="Hapus pengingat ini"
+                    style={{ background: 'none', border: 'none', color: C.red, fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', padding: '2px 6px', whiteSpace: 'nowrap' }}
+                  >
+                    Hapus
+                  </button>
                 )}
               </div>
             ))}
@@ -1214,6 +1326,16 @@ const StudentHome = () => {
                       </div>
                       {item.deskripsi && (
                         <div style={{ fontSize: '0.78rem', color: C.gray, fontStyle: 'italic', wordBreak: 'break-word' }}>{item.deskripsi}</div>
+                      )}
+                      {item.file_url && (
+                        <a
+                          href={item.file_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ fontSize: '0.78rem', color: C.gold, fontWeight: 600, textDecoration: 'none', wordBreak: 'break-word', display: 'inline-block', marginTop: '2px' }}
+                        >
+                          📎 {item.file_name || 'Lihat File'}
+                        </a>
                       )}
                       <div style={{ fontSize: '0.75rem', color: C.gray }}>{waktuLalu(item.created_at)}</div>
                     </div>
@@ -1273,6 +1395,42 @@ const StudentHome = () => {
                 rows={2}
                 style={{ padding: '8px 10px', borderRadius: '8px', border: `1px solid ${C.border}`, background: C.white, resize: 'vertical', fontFamily: 'inherit', fontSize: isMobile ? '16px' : '0.85rem', width: '100%', boxSizing: 'border-box' }}
               />
+
+              <label style={{ fontSize: '0.8rem', fontWeight: 600, color: C.dark }}>Lampiran File (opsional)</label>
+              {!materiFile ? (
+                <label
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                    padding: '10px', borderRadius: '8px', border: `1.5px dashed ${C.border}`,
+                    background: C.white, fontSize: isMobile ? '0.85rem' : '0.8rem', color: C.gray,
+                    cursor: 'pointer', textAlign: 'center', width: '100%', boxSizing: 'border-box',
+                  }}
+                >
+                  📎 Pilih File (maks. 10MB)
+                  <input
+                    type="file"
+                    accept={MATERI_FILE_ACCEPT}
+                    onChange={handleMateriFileChange}
+                    style={{ display: 'none' }}
+                  />
+                </label>
+              ) : (
+                <div style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px',
+                  padding: '8px 10px', borderRadius: '8px', border: `1px solid ${C.border}`, background: C.white,
+                }}>
+                  <span style={{ fontSize: '0.78rem', color: C.dark, wordBreak: 'break-word' }}>
+                    📄 {materiFile.name} <span style={{ color: C.grayLight }}>({formatFileSize(materiFile.size)})</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={removeMateriFile}
+                    style={{ background: 'none', border: 'none', color: C.red, fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}
+                  >
+                    Hapus
+                  </button>
+                </div>
+              )}
 
               <button
                 onClick={submitMateriRequest}

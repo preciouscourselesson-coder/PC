@@ -65,7 +65,7 @@ const AdminHome = () => {
 
   // ---------- Pengajuan perubahan jadwal dari guru/siswa ----------
   const { respondingPengajuanId, handleRespondPengajuanAdmin } =
-    usePengajuanJadwal({ setPengajuanJadwal, setErrorMsg });
+    usePengajuanJadwal({ setPengajuanJadwal, setErrorMsg, setSchedules });
 
   return (
     <div style={{ maxWidth: '1200px', margin: '0 auto', fontFamily: 'inherit' }}>
