@@ -42,6 +42,19 @@ const TeacherArsipMateri = () => {
   const [filterKategori, setFilterKategori] = useState('Pribadi');
   // Folder yang sedang aktif dipilih pada grid folder: "all" | "none" | id folder_materi
   const [activeFolderId, setActiveFolderId] = useState('all');
+  // Di mobile, form unggah materi disembunyikan di balik tombol mengambang (+)
+  // dan dibuka sebagai bottom-sheet, supaya user tidak perlu scroll lewat
+  // seluruh daftar materi dulu untuk sampai ke form upload.
+  const [showUploadSheet, setShowUploadSheet] = useState(false);
+
+  // Kunci scroll body selagi bottom-sheet upload terbuka di mobile.
+  useEffect(() => {
+    if (isMobile && showUploadSheet) {
+      const prevOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => { document.body.style.overflow = prevOverflow; };
+    }
+  }, [isMobile, showUploadSheet]);
 
   const { materiList, setMateriList, loading, errorMsg, fetchMateri } = useMateriList({
     userId, activeTab, filterKategori, search,
@@ -111,7 +124,12 @@ const TeacherArsipMateri = () => {
       <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? '16px' : '24px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
 
       {/* Kolom kiri: tabs, filter, tabel/kartu */}
-      <div style={{ order: 1, flex: isMobile ? '1 1 100%' : '1 1 560px', minWidth: 0, width: isMobile ? '100%' : 'auto', boxSizing: 'border-box' }}>
+      <div style={{
+        order: 1, flex: isMobile ? '1 1 100%' : '1 1 560px', minWidth: 0,
+        width: isMobile ? '100%' : 'auto', boxSizing: 'border-box',
+        // Ruang ekstra di bawah supaya item terakhir daftar tidak ketutup FAB (+)
+        paddingBottom: isMobile ? '84px' : 0,
+      }}>
 
       {/* Kategori sumber materi — menentukan set folder mana yang ditampilkan di grid.
           Pakai KATEGORI_FILTER_OPTIONS (termasuk "Request") karena ini cuma untuk menyaring
@@ -132,8 +150,9 @@ const TeacherArsipMateri = () => {
           onChange={e => setSearch(e.target.value)}
           placeholder="Cari judul materi..."
           style={{
-            width: '100%', padding: '10px 12px 10px 34px', borderRadius: '10px',
-            border: `1.5px solid ${C.border}`, fontSize: '16px', fontFamily: 'inherit', boxSizing: 'border-box',
+            width: '100%', padding: isMobile ? '12px 12px 12px 36px' : '10px 12px 10px 34px',
+            borderRadius: '10px', border: `1.5px solid ${C.border}`, fontSize: '16px',
+            fontFamily: 'inherit', boxSizing: 'border-box',
           }}
         />
       </div>
@@ -167,18 +186,105 @@ const TeacherArsipMateri = () => {
 
       </div>
 
-      {/* Kolom kanan: form unggah materi */}
-      <div style={{ order: 2, width: isMobile ? '100%' : '360px', flexShrink: 0, position: isMobile ? 'static' : 'sticky', top: 0, boxSizing: 'border-box' }}>
-        <TeacherUploadMateriModal
-          userId={userId}
-          onUploaded={(uploadedStatus) => {
-            setActiveTab(uploadedStatus);
-            fetchMateri();
-          }}
-        />
-      </div>
+      {/* Kolom kanan: form unggah materi — hanya dirender di desktop.
+          Di mobile, form yang sama dipindah ke bottom-sheet lewat FAB (+)
+          di bawah supaya tidak menyita ruang & tidak menghalangi daftar. */}
+      {!isMobile && (
+        <div style={{ order: 2, width: '360px', flexShrink: 0, position: 'sticky', top: 0, boxSizing: 'border-box' }}>
+          <TeacherUploadMateriModal
+            userId={userId}
+            onUploaded={(uploadedStatus) => {
+              setActiveTab(uploadedStatus);
+              fetchMateri();
+            }}
+          />
+        </div>
+      )}
 
       </div>
+
+      {/* Tombol mengambang (+) khusus mobile untuk membuka form unggah materi */}
+      {isMobile && (
+        <button
+          type="button"
+          aria-label="Unggah materi baru"
+          onClick={() => setShowUploadSheet(true)}
+          style={{
+            position: 'fixed',
+            right: '16px',
+            bottom: 'calc(16px + env(safe-area-inset-bottom, 0px))',
+            width: '56px',
+            height: '56px',
+            borderRadius: '50%',
+            border: 'none',
+            background: C.primary || '#2563EB',
+            color: '#fff',
+            fontSize: '28px',
+            lineHeight: '56px',
+            textAlign: 'center',
+            boxShadow: '0 4px 14px rgba(0,0,0,0.28)',
+            cursor: 'pointer',
+            zIndex: 1000,
+          }}
+        >
+          +
+        </button>
+      )}
+
+      {/* Bottom-sheet mobile berisi form unggah materi */}
+      {isMobile && showUploadSheet && (
+        <div
+          onClick={() => setShowUploadSheet(false)}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)',
+            zIndex: 1100, display: 'flex', alignItems: 'flex-end',
+            animation: 'arsipMateriFadeIn 0.18s ease-out',
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: '100%', maxHeight: '88vh', overflowY: 'auto',
+              background: '#fff', borderRadius: '20px 20px 0 0',
+              padding: '10px 16px calc(20px + env(safe-area-inset-bottom, 0px))',
+              boxSizing: 'border-box', boxShadow: '0 -6px 24px rgba(0,0,0,0.2)',
+              animation: 'arsipMateriSlideUp 0.22s ease-out',
+            }}
+          >
+            {/* Drag handle (visual saja) */}
+            <div style={{ width: '40px', height: '4px', borderRadius: '2px', background: C.border, margin: '2px auto 12px' }} />
+
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+              <span style={{ fontSize: '16px', fontWeight: 600 }}>Unggah Materi Baru</span>
+              <button
+                type="button"
+                aria-label="Tutup"
+                onClick={() => setShowUploadSheet(false)}
+                style={{
+                  width: '32px', height: '32px', borderRadius: '50%', border: `1.5px solid ${C.border}`,
+                  background: '#fff', fontSize: '16px', lineHeight: '1', cursor: 'pointer', color: C.gray,
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <TeacherUploadMateriModal
+              userId={userId}
+              onUploaded={(uploadedStatus) => {
+                setActiveTab(uploadedStatus);
+                fetchMateri();
+                setShowUploadSheet(false);
+              }}
+            />
+          </div>
+
+          <style>{`
+            @keyframes arsipMateriFadeIn { from { opacity: 0; } to { opacity: 1; } }
+            @keyframes arsipMateriSlideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+          `}</style>
+        </div>
+      )}
 
       {/* Modal Folder Baru (dari grid folder) */}
       {showNewFolderModal && (
