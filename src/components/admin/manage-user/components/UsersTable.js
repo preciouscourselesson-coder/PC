@@ -3,7 +3,7 @@ import React from 'react';
 import { C } from '../constants';
 import UserRow from './UserRow';
 
-const COLUMNS = ['Nama', 'Email', 'Peran', 'Gender', 'Kelas', 'Mapel', 'Referral', 'Status', 'Terdaftar', 'Aksi'];
+const COLUMNS = ['Nama', 'Email', 'Peran', 'Gender', 'Kelas', 'Private/Group', 'Mapel', 'Referral', 'Status', 'Terdaftar', 'Aksi'];
 
 const UsersTable = ({
   loading,

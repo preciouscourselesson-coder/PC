@@ -82,6 +82,26 @@ const UserRow = ({
         )}
       </td>
       <td style={{ padding: '12px 16px' }}>
+        {u.role === 'student' ? (
+          <select
+            value={u.jenis_kelas || ''}
+            disabled={isBusy}
+            onChange={e => actions.handleJenisKelasChange(u.id, name, e.target.value)}
+            style={{
+              padding: '6px 10px', borderRadius: '8px', border: `1.5px solid ${C.border}`,
+              fontSize: '0.83rem', fontFamily: 'inherit', color: C.dark, background: C.white,
+              cursor: isBusy ? 'not-allowed' : 'pointer',
+            }}
+          >
+            <option value="">Belum diisi</option>
+            <option value="Private">Private</option>
+            <option value="Group">Group</option>
+          </select>
+        ) : (
+          <span style={{ color: C.gray, fontSize: '0.83rem' }}>-</span>
+        )}
+      </td>
+      <td style={{ padding: '12px 16px' }}>
         {u.role === 'teacher' ? (
           <MapelDropdown
             user={u}

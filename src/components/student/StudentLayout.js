@@ -19,9 +19,8 @@ const navItems = [
   { label: 'Home',         path: '/siswa',           icon: '🏠' },
   { label: 'Updates',      path: '/siswa/updates',   icon: '🔔' },
   { label: 'Absensi',      path: '/siswa/absensi',   icon: '📖' },
-  { label: 'Materi',       path: '/siswa/materi',    icon: '📚' },
   { label: 'Tugas',        path: '/siswa/tugas',     icon: '📝' },
-  { label: 'Arsip Soal',   path: '/siswa/arsip',     icon: '📂' },
+  { label: 'Folder Share', path: '/siswa/folder-share', icon: '📁' },
 ];
 
 // Tinggi bottom nav mobile (dipakai juga untuk padding-bottom konten agar tidak ketutupan)
@@ -29,13 +28,13 @@ const BOTTOM_NAV_HEIGHT = 60;
 // Ukuran minimum target sentuh yang nyaman di layar HP (rekomendasi Apple/Google: ~44-48px)
 const TOUCH_TARGET = 44;
 
-// Bottom nav: Home, Absensi, Tugas, Materi, dan Lainnya (☰)
+// Bottom nav: Home, Absensi, Tugas, Folder Share, dan Lainnya (☰)
 const bottomNavItems = [
-  { label: 'Home',    path: '/siswa',          icon: '🏠' },
-  { label: 'Absensi', path: '/siswa/absensi',  icon: '📖' },
-  { label: 'Tugas',   path: '/siswa/tugas',    icon: '📝' },
-  { label: 'Materi',  path: '/siswa/materi',   icon: '📚' },
-  { label: 'Lainnya', path: '#',               icon: '☰' },
+  { label: 'Home',        path: '/siswa',              icon: '🏠' },
+  { label: 'Absensi',     path: '/siswa/absensi',      icon: '📖' },
+  { label: 'Tugas',       path: '/siswa/tugas',        icon: '📝' },
+  { label: 'Folder Share',path: '/siswa/folder-share', icon: '📁' },
+  { label: 'Lainnya',     path: '#',                   icon: '☰' },
 ];
 
 // ─── Style global khusus kenyamanan mobile ───────────────────────────────────
@@ -286,9 +285,8 @@ const Topbar = ({ user, isMobile, onMenuClick }) => {
     '/siswa':            'Home',
     '/siswa/updates':    'Updates',
     '/siswa/absensi':    'Absensi',
-    '/siswa/materi':     'Materi',
     '/siswa/tugas':      'Tugas',
-    '/siswa/arsip':      'Arsip Soal',
+    '/siswa/folder-share': 'Folder Share',
     '/siswa/pesan':      'Pesan',
     '/siswa/bantuan':    'Bantuan',
   };

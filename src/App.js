@@ -18,12 +18,11 @@ import RegisterPage from './components/RegisterPage';
 import StudentLayout from './components/student/StudentLayout';
 import StudentHome from './components/student/StudentHome';
 import StudentProfile from './components/student/StudentProfile';
-import StudentMateri from './components/student/StudentMateri';
+import FolderShared from './components/student/FolderShared';
 import StudentHomework from './components/student/StudentHomework';
 import StudentAbsent from './components/student/StudentAbsent';
 import StudentUpdates from './components/student/StudentUpdates';
 import StudentMessages from './components/student/StudentMessages';
-import StudentArsip from './components/student/StudentArsip';
 
 import TeacherLayout from './components/teacher/TeacherLayout';
 import TeacherHome from './components/teacher/TeacherHome';
@@ -81,13 +80,12 @@ function App() {
         {/* Rute siswa: StudentLayout membungkus semua via <Outlet /> */}
         <Route path="/siswa" element={<StudentLayout />}>
           <Route index element={<StudentHome />} />
-          <Route path="materi" element={<StudentMateri />} />
+          <Route path="folder-share" element={<FolderShared />} />
           <Route path="tugas" element={<StudentHomework />} />
           <Route path="absensi" element={<StudentAbsent />} />        
           <Route path="profil" element={<StudentProfile />} />
           <Route path="updates" element={<StudentUpdates />} />
           <Route path="pesan" element={<StudentMessages />} />
-          <Route path="arsip" element={<StudentArsip />} />
         </Route>
 
         {/* Rute guru: TeacherLayout membungkus semua via <Outlet /> */}

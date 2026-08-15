@@ -14,6 +14,10 @@ export const C = {
   successBg: '#eefaf2',
   warn: '#b7791f',
   warnBg: '#fdf6ec',
+  // Dipakai khusus utk tombol filter "Semua Peran" / "Semua Status" (FiltersBar)
+  // supaya warnanya beda dari tombol filter spesifik lain (yang pakai gold).
+  allFilterBg: 'rgba(23,20,17,0.07)',
+  allFilterBorder: 'rgba(23,20,17,0.35)',
 };
 
 export const ROLE_LABEL = {

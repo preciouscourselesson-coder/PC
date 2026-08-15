@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../supabaseClient';
 import { checkedUpdate } from '../../utils/supabaseUpdateGuard';
+import { syncStudentFolders } from '../../utils/studentFolderSync';
 
 const C = {
   gold: '#b4964b',
@@ -246,6 +247,14 @@ const TeacherListStudent = () => {
 
     setStudents(mapped);
     setLoading(false);
+
+    // Sinkronkan folder otomatis per-siswa: folder milik siswa yang sudah
+    // tidak ada lagi di daftar ini (mis. baru saja dihapus dari jadwal)
+    // langsung dihapus di sini juga, tidak perlu menunggu guru membuka
+    // halaman Arsip Materi dulu. Siswa baru yang namanya bentrok dengan
+    // folder lain sengaja dilewati dulu (onDuplicateConfirm tidak diisi) --
+    // itu akan ditanyakan ke guru saat membuka halaman Arsip Materi.
+    syncStudentFolders(user.id).catch((err) => console.error('Gagal sinkronisasi folder siswa:', err));
   }, []);
 
   useEffect(() => {

@@ -13,7 +13,7 @@ export default function useUsers() {
 
     const { data, error: fetchError } = await supabase
       .from('profiles')
-      .select('id, email, full_name, role, status, gender, kelas, created_at, mapel, referral_code')
+      .select('id, email, full_name, role, status, gender, kelas, jenis_kelas, created_at, mapel, referral_code')
       .order('created_at', { ascending: false });
 
     setLoading(false);

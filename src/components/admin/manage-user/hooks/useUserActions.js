@@ -56,6 +56,21 @@ export default function useUserActions({ setUsers, setToast, fetchUsers, setImpo
     setToast({ type: 'success', message: `Kelas ${name} diubah menjadi ${newKelas || 'Belum diisi'}.` });
   };
 
+  const handleJenisKelasChange = async (id, name, newJenisKelas) => {
+    setBusyId(id);
+    const { error: updateError } = await checkedUpdate(
+      supabase.from('profiles').update({ jenis_kelas: newJenisKelas || null }).eq('id', id)
+    );
+    setBusyId(null);
+
+    if (updateError) {
+      setToast({ type: 'error', message: `Gagal mengubah tipe kelas (Private/Group) ${name}.` });
+      return;
+    }
+    setUsers(prev => prev.map(u => u.id === id ? { ...u, jenis_kelas: newJenisKelas || null } : u));
+    setToast({ type: 'success', message: `Tipe kelas ${name} diubah menjadi ${newJenisKelas || 'Belum diisi'}.` });
+  };
+
   const handleMapelChange = async (id, name, newMapel) => {
     const mapelArray = Array.isArray(newMapel) ? newMapel : [];
     setBusyId(id);
@@ -189,6 +204,7 @@ export default function useUserActions({ setUsers, setToast, fetchUsers, setImpo
     handleRoleChange,
     handleGenderChange,
     handleKelasChange,
+    handleJenisKelasChange,
     handleMapelChange,
     handleStatusChange,
     handleDeleteProfile,

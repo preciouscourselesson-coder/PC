@@ -6,7 +6,8 @@ import { extractBlanks } from "../utils/questionText";
 /**
  * Mengelola seluruh state & handler untuk satu kartu soal di QuestionEditor:
  * ubah teks/poin/tipe, opsi pilihan ganda, catatan speaking, upload gambar
- * & audio ke Supabase Storage, dan pembuatan blank [kata] dari teks terpilih.
+ * & audio ke Supabase Storage, pembuatan blank [kata] dari teks terpilih,
+ * dan pengaturan panjang tampilan tiap blank (khusus tipe Isian).
  */
 export function useQuestionEditor(question, onChange) {
   const textareaRef = useRef(null);
@@ -21,7 +22,10 @@ export function useQuestionEditor(question, onChange) {
     onChange(question.id, {
       ...question,
       questionText: value,
-      blanks: extractBlanks(value),
+      // existingBlanks dioper supaya panjang (length) yang sudah dipilih
+      // guru untuk blank di posisi yang sama tidak reset tiap kali teks
+      // soal direvisi.
+      blanks: extractBlanks(value, question.blanks),
     });
   };
 
@@ -62,7 +66,9 @@ export function useQuestionEditor(question, onChange) {
       onChange(question.id, {
         ...question,
         type,
-        blanks: extractBlanks(question.questionText),
+        // existingBlanks dioper juga di sini supaya length tidak reset
+        // saat guru berpindah tipe lalu kembali ke "Isian".
+        blanks: extractBlanks(question.questionText, question.blanks),
       });
     }
   };
@@ -100,6 +106,20 @@ export function useQuestionEditor(question, onChange) {
 
   const handleReferenceAnswerChange = (value) => {
     onChange(question.id, { ...question, referenceAnswer: value });
+  };
+
+  /**
+   * Mengubah panjang tampilan (lebar input) blank ke-`index` pada soal
+   * Isian: "short" | "medium" | "long". Hanya mengubah field `length` pada
+   * blank terkait, tidak menyentuh `answer`-nya.
+   */
+  const handleBlankLengthChange = (index, length) => {
+    onChange(question.id, {
+      ...question,
+      blanks: question.blanks.map((b, i) =>
+        i === index ? { ...b, length } : b
+      ),
+    });
   };
 
   /**
@@ -247,6 +267,7 @@ export function useQuestionEditor(question, onChange) {
     handleRemoveOption,
     handleSetCorrectOption,
     handleReferenceAnswerChange,
+    handleBlankLengthChange,
     handleImageChange,
     handleRemoveImage,
     handleAudioChange,
