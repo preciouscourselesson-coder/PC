@@ -1,11 +1,11 @@
 import React from 'react';
 import { C } from '../../../shared/Theme';
-import { KATEGORI_STYLE, KATEGORI_LABEL, JENIS_STYLE } from '../constants';
+import { KATEGORI_STYLE, KATEGORI_LABEL, JENIS_STYLE, JENIS_LABEL } from '../constants';
 import { fileIcon, formatTanggal } from '../utils';
 import { Badge } from './Badge';
 import { IconBtn } from './IconBtn';
 
-export const MateriTable = ({ items, statusStyle, onView, onEdit, onArchive, onDelete }) => (
+export const MateriTable = ({ items, statusStyle, onView, onEdit, onDelete }) => (
   <div style={{ background: C.white, borderRadius: '14px', border: `1.5px solid ${C.border}`, overflow: 'hidden' }}>
     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.88rem' }}>
       <thead>
@@ -43,7 +43,7 @@ export const MateriTable = ({ items, statusStyle, onView, onEdit, onArchive, onD
               <td style={{ padding: '12px 16px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
                   <Badge label={KATEGORI_LABEL[item.kategori] || 'Pribadi'} style={KATEGORI_STYLE[item.kategori] || KATEGORI_STYLE.Pribadi} />
-                  {item.jenis && <Badge label={item.jenis} style={JENIS_STYLE[item.jenis] || JENIS_STYLE.Materi} />}
+                  {item.jenis && <Badge label={JENIS_LABEL[item.jenis] || item.jenis} style={JENIS_STYLE[item.jenis] || JENIS_STYLE.Materi} />}
                   {item.folder_materi?.nama && (
                     <span style={{ fontSize: '0.72rem', color: C.gray }}>📂 {item.folder_materi.nama}</span>
                   )}
@@ -66,15 +66,6 @@ export const MateriTable = ({ items, statusStyle, onView, onEdit, onArchive, onD
                 <div style={{ display: 'flex', gap: '6px' }}>
                   <IconBtn title="Lihat file" color={C.blue} bg={C.blueBg} onClick={() => onView(item)}>👁️</IconBtn>
                   <IconBtn title="Edit" color={C.gold} bg={C.goldBg} onClick={() => onEdit(item)}>✏️</IconBtn>
-                  {item.kategori !== 'Pribadi' && (
-                    <IconBtn
-                      title={item.status === 'Diarsipkan' ? 'Pulihkan' : 'Arsipkan'}
-                      color="#b45309" bg="rgba(180,83,9,0.10)"
-                      onClick={() => onArchive(item)}
-                    >
-                      {item.status === 'Diarsipkan' ? '📤' : '📦'}
-                    </IconBtn>
-                  )}
                   <IconBtn title="Hapus" color={C.red} bg={C.redBg} onClick={() => onDelete(item)}>🗑️</IconBtn>
                 </div>
               </td>

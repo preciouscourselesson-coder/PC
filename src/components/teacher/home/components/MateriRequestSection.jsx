@@ -50,8 +50,45 @@ export const MateriRequestSection = ({ isMobile, materiRequestList, loading, mat
                   {item.siswa_nama || 'Siswa'}
                   {item.kelas ? ` - ${item.kelas}` : ''}
                 </div>
-                {item.deskripsi && <div style={{ fontSize: '0.78rem', color: C.gray, fontStyle: 'italic' }}>{item.deskripsi}</div>}
-                <div style={{ fontSize: '0.75rem', color: C.gray }}>{waktuLalu(item.created_at)}</div>
+                {item.deskripsi && (
+                  <div
+                    style={{
+                      marginTop: '0.4rem',
+                      fontSize: '0.83rem',
+                      color: C.dark,
+                      background: C.cream,
+                      borderLeft: `3px solid ${C.gold}`,
+                      borderRadius: '6px',
+                      padding: '0.5rem 0.7rem',
+                      lineHeight: 1.45,
+                      maxWidth: isMobile ? '100%' : '420px',
+                    }}
+                  >
+                    <strong style={{ color: C.gray, fontWeight: 600 }}>Deskripsi siswa: </strong>
+                    {item.deskripsi}
+                  </div>
+                )}
+                {item.file_url && (
+                  <a
+                    href={item.file_url}
+                    download={item.file_name || true}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      marginTop: '0.4rem',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      color: C.gold,
+                      textDecoration: 'none',
+                    }}
+                  >
+                    📎 {item.file_name || 'Unduh lampiran'}
+                  </a>
+                )}
+                <div style={{ fontSize: '0.75rem', color: C.gray, marginTop: '0.3rem' }}>{waktuLalu(item.created_at)}</div>
               </div>
               <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
                 {item.status === 'selesai' ? (
@@ -64,9 +101,6 @@ export const MateriRequestSection = ({ isMobile, materiRequestList, loading, mat
                   </span>
                 ) : (
                   <>
-                    <button style={{ ...buttonSecondary, background: C.gold, color: C.white, border: 'none' }} onClick={() => materiRequestHook.openKirimMateri(item.id)}>
-                      Kirim Materi
-                    </button>
                     <button style={{ ...buttonSecondary, color: C.green }} onClick={() => materiRequestHook.openMateriRespond(item.id, 'selesai')}>
                       Tandai Selesai
                     </button>

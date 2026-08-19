@@ -1,6 +1,6 @@
 import React from 'react';
 import { C } from '../../../shared/Theme';
-import { TABS, JENIS_OPTIONS, KELAS_GROUPS, MAPEL_OPTIONS, KATEGORI_STYLE, KATEGORI_LABEL } from '../constants';
+import { TABS, JENIS_OPTIONS, JENIS_LABEL, KELAS_GROUPS, MAPEL_OPTIONS, KATEGORI_STYLE, KATEGORI_LABEL } from '../constants';
 import { Badge } from './Badge';
 
 export const EditMateriModal = ({ editItem, setEditItem, folderOptions, isMobile, savingEdit, onSave, onClose }) => (
@@ -48,7 +48,7 @@ export const EditMateriModal = ({ editItem, setEditItem, folderOptions, isMobile
             onChange={e => setEditItem({ ...editItem, jenis: e.target.value })}
             style={{ width: '100%', padding: '9px 10px', borderRadius: '8px', border: `1.5px solid ${C.border}`, marginBottom: '10px', boxSizing: 'border-box', fontFamily: 'inherit', fontSize: '16px' }}
           >
-            {JENIS_OPTIONS.map(j => <option key={j} value={j}>{j}</option>)}
+            {JENIS_OPTIONS.map(j => <option key={j} value={j}>{JENIS_LABEL[j] || j}</option>)}
           </select>
         </>
       )}

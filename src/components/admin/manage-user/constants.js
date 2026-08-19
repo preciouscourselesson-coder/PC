@@ -27,6 +27,15 @@ export const ROLE_LABEL = {
   admin:   'Admin',
 };
 
+// Warna teks (bukan badge/kotak) supaya peran tetap cepat dipindai di tabel
+// tanpa menambah elemen visual baru — dipakai oleh EditableSelect.
+export const ROLE_COLOR = {
+  student: '#3b6ea5',
+  teacher: '#2e9e5b',
+  parent:  '#8956a6',
+  admin:   '#b4964b',
+};
+
 export const STATUS_LABEL = {
   approved: 'Disetujui',
   pending:  'Menunggu',
@@ -46,3 +55,13 @@ export const GENDER_LABEL = {
 
 export const KELAS_OPTIONS = ['VII', 'VIII', 'IX', 'X', 'XI', 'XII'];
 export const MAPEL_OPTIONS = ['Matematika', 'Fisika', 'Kimia', 'Bahasa Inggris'];
+
+export const JENIS_KELAS_LABEL = {
+  Private: 'Private',
+  Group:   'Group',
+};
+
+export const JENIS_KELAS_COLOR = {
+  Private: '#b4964b',
+  Group:   '#2e7d6b',
+};

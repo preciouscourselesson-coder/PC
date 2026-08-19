@@ -2,24 +2,12 @@ import { useState } from 'react';
 import { supabase } from '../../../../supabaseClient';
 import { checkedUpdate } from '../../../../utils/supabaseUpdateGuard';
 
-// Mengelola aksi terhadap satu item materi (arsipkan/pulihkan, hapus, edit),
-// termasuk state modal edit & konfirmasi hapus yang menyertainya.
+// Mengelola aksi terhadap satu item materi (hapus, edit), termasuk state
+// modal edit & konfirmasi hapus yang menyertainya.
 export const useMateriItemActions = ({ showToast, fetchMateri }) => {
   const [editItem, setEditItem] = useState(null);
   const [deleteItem, setDeleteItem] = useState(null);
   const [savingEdit, setSavingEdit] = useState(false);
-
-  const handleArchiveToggle = async (item) => {
-    const nextStatus = item.status === 'Diarsipkan' ? 'Dipublish' : 'Diarsipkan';
-    const { error } = await checkedUpdate(
-      supabase
-        .from('materi_file')
-        .update({ status: nextStatus })
-        .eq('id', item.id)
-    );
-    if (error) { showToast('error', 'Gagal mengubah status: ' + error.message); return; }
-    fetchMateri();
-  };
 
   const handleDelete = async () => {
     if (!deleteItem) return;
@@ -61,7 +49,6 @@ export const useMateriItemActions = ({ showToast, fetchMateri }) => {
     deleteItem,
     setDeleteItem,
     savingEdit,
-    handleArchiveToggle,
     handleDelete,
     handleSaveEdit,
   };

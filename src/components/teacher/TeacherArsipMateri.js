@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import Toast, { useToast } from '../shared/Toast';
 import { C } from '../shared/Theme';
 
@@ -35,11 +36,16 @@ const TeacherArsipMateri = () => {
   const isMobile = useIsMobile();
   const userId = useCurrentUserId();
   const { toast, showToast } = useToast();
+  const location = useLocation();
+  // Dikirim dari MateriRequestSection/KirimMateriModal (TeacherHome.js) saat
+  // guru klik "Upload dulu di Arsip Materi ->" untuk menjawab request siswa.
+  const navStatePrefill = location.state?.prefill || null;
+  const appliedNavStateRef = useRef(false);
 
   const [activeTab, setActiveTab] = useState('Dipublish');
   const [search, setSearch] = useState('');
   // Kategori sumber materi yang sedang ditampilkan (folder tersimpan terpisah per kategori)
-  const [filterKategori, setFilterKategori] = useState('Pribadi');
+  const [filterKategori, setFilterKategori] = useState(location.state?.filterKategori || 'Pribadi');
   // Folder yang sedang aktif dipilih pada grid folder: "all" | "none" | id folder_materi
   const [activeFolderId, setActiveFolderId] = useState('all');
   // Di mobile, form unggah materi disembunyikan di balik tombol mengambang (+)
@@ -55,6 +61,18 @@ const TeacherArsipMateri = () => {
       return () => { document.body.style.overflow = prevOverflow; };
     }
   }, [isMobile, showUploadSheet]);
+
+  // Datang dari "Kirim Materi" (Materi Request) lewat navigate(..., { state }):
+  // filterKategori sudah di-set di useState di atas, di sini tinggal buka
+  // bottom-sheet upload kalau di mobile (desktop form-nya sudah selalu
+  // terlihat di kolom kanan). Hanya dijalankan sekali per kunjungan halaman
+  // supaya tidak memaksa sheet terbuka lagi kalau user sudah menutupnya
+  // manual lalu berganti kategori/folder.
+  useEffect(() => {
+    if (appliedNavStateRef.current || !location.state) return;
+    if (location.state.openUpload && isMobile) setShowUploadSheet(true);
+    appliedNavStateRef.current = true;
+  }, [location.state, isMobile]);
 
   const { materiList, setMateriList, loading, errorMsg, fetchMateri } = useMateriList({
     userId, activeTab, filterKategori, search,
@@ -93,7 +111,6 @@ const TeacherArsipMateri = () => {
     editItem, setEditItem,
     deleteItem, setDeleteItem,
     savingEdit,
-    handleArchiveToggle,
     handleDelete,
     handleSaveEdit,
   } = useMateriItemActions({ showToast, fetchMateri });
@@ -180,7 +197,6 @@ const TeacherArsipMateri = () => {
         activeTab={activeTab}
         onView={(item) => window.open(item.url, '_blank')}
         onEdit={(item) => setEditItem({ ...item })}
-        onArchive={handleArchiveToggle}
         onDelete={setDeleteItem}
       />
 
@@ -193,6 +209,7 @@ const TeacherArsipMateri = () => {
         <div style={{ order: 2, width: '360px', flexShrink: 0, position: 'sticky', top: 0, boxSizing: 'border-box' }}>
           <TeacherUploadMateriModal
             userId={userId}
+            prefill={navStatePrefill}
             onUploaded={(uploadedStatus) => {
               setActiveTab(uploadedStatus);
               fetchMateri();
@@ -271,6 +288,7 @@ const TeacherArsipMateri = () => {
 
             <TeacherUploadMateriModal
               userId={userId}
+              prefill={navStatePrefill}
               onUploaded={(uploadedStatus) => {
                 setActiveTab(uploadedStatus);
                 fetchMateri();

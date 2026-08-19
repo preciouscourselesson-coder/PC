@@ -32,7 +32,7 @@ const useIsMobile = () => {
 const navItems = [
   { label: 'Home',            path: '/guru',                icon: '🏠' },
   { label: 'Updates',         path: '/guru/updates',        icon: '🔔' },
-  { label: 'Absensi & Materi',path: '/guru/absensi-materi', icon: '📖' },
+  { label: 'Absensi',         path: '/guru/absensi',         icon: '📖' },
   { label: 'Arsip Materi',    path: '/guru/arsip-materi',   icon: '🗄️' },
   { label: 'Tugas',           path: '/guru/tugas',          icon: '📝' },
   { label: 'Daftar Siswa',    path: '/guru/daftar-siswa',   icon: '👨‍🎓' },
@@ -41,7 +41,7 @@ const navItems = [
 // Bottom nav: Home, Absensi, Tugas, Arsip, dan Lainnya (☰)
 const bottomNavItems = [
   { label: 'Home',   path: '/guru',                icon: '🏠' },
-  { label: 'Absensi',path: '/guru/absensi-materi', icon: '📖' },
+  { label: 'Absensi',path: '/guru/absensi',         icon: '📖' },
   { label: 'Tugas',  path: '/guru/tugas',          icon: '📝' },
   { label: 'Arsip',  path: '/guru/arsip-materi',   icon: '🗄️' },
   { label: 'Lainnya',path: '#',                    icon: '☰' },

@@ -26,7 +26,7 @@ import StudentMessages from './components/student/StudentMessages';
 
 import TeacherLayout from './components/teacher/TeacherLayout';
 import TeacherHome from './components/teacher/TeacherHome';
-import TeacherAbsensiMateri from './components/teacher/TeacherAbsensiMateri';
+import TeacherAbsensi from './components/teacher/TeacherAbsensi';
 import TeacherHomework from './components/teacher/TeacherHomework';
 import TeacherListStudent from './components/teacher/TeacherListStudent';
 import TeacherUpdates from './components/teacher/TeacherUpdates';
@@ -91,7 +91,7 @@ function App() {
         {/* Rute guru: TeacherLayout membungkus semua via <Outlet /> */}
         <Route path="/guru" element={<TeacherLayout />}>
           <Route index element={<TeacherHome />} />
-          <Route path="absensi-materi" element={<TeacherAbsensiMateri />} />
+          <Route path="absensi" element={<TeacherAbsensi />} />
           <Route path="tugas" element={<TeacherHomework />} />
           <Route path="daftar-siswa" element={<TeacherListStudent />} />
           <Route path="updates" element={<TeacherUpdates />} />

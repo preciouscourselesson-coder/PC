@@ -5,6 +5,10 @@ import UserRow from './UserRow';
 
 const COLUMNS = ['Nama', 'Email', 'Peran', 'Gender', 'Kelas', 'Private/Group', 'Mapel', 'Referral', 'Status', 'Terdaftar', 'Aksi'];
 
+// Nama class dipakai lewat <style> di bawah supaya baris punya efek hover &
+// garis-garis zebra tipis tanpa menambah border/kotak baru di setiap sel.
+const ROW_CLASS = 'amu-row';
+
 const UsersTable = ({
   loading,
   error,
@@ -51,15 +55,20 @@ const UsersTable = ({
       background: C.white, border: `1.5px solid ${C.border}`, borderRadius: '16px',
       overflow: 'hidden',
     }}>
-      <div style={{ overflowX: 'auto' }}>
+      <style>{`
+        .${ROW_CLASS}:nth-child(even) { background: rgba(23,20,17,0.014); }
+        .${ROW_CLASS}:hover { background: ${C.cream} !important; }
+      `}</style>
+      <div style={{ overflow: 'auto', maxHeight: '72vh' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '960px' }}>
           <thead>
             <tr style={{ background: C.cream }}>
               {COLUMNS.map(h => (
                 <th key={h} style={{
-                  textAlign: 'left', padding: '12px 16px', fontSize: '0.78rem',
+                  position: 'sticky', top: 0, zIndex: 1, background: C.cream,
+                  textAlign: 'left', padding: '11px 14px', fontSize: '0.73rem',
                   color: C.gray, fontWeight: 'bold', textTransform: 'uppercase',
-                  letterSpacing: '0.03em', borderBottom: `1.5px solid ${C.border}`,
+                  letterSpacing: '0.04em', borderBottom: `1.5px solid ${C.border}`,
                 }}>
                   {h}
                 </th>
@@ -70,6 +79,7 @@ const UsersTable = ({
             {filtered.map(u => (
               <UserRow
                 key={u.id}
+                className={ROW_CLASS}
                 user={u}
                 isBusy={busyId === u.id}
                 isLoginAsBusy={loginAsId === u.id}

@@ -1,12 +1,12 @@
 // src/components/student/StudentHome.js
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { C } from './home/constants';
 import { getGreeting, getTodayLongDate } from './home/utils/format';
 
 import { useIsMobile } from './home/hooks/useIsMobile';
 import { useStudentHomeData } from './home/hooks/useStudentHomeData';
 import { usePengajuanJadwal } from './home/hooks/usePengajuanJadwal';
-import { useMateriRequest } from './home/hooks/useMateriRequest';
 import { useTugasPenilaian } from './home/hooks/useTugasPenilaian';
 
 import { JadwalMingguCard } from './home/components/JadwalMingguCard';
@@ -19,6 +19,11 @@ import { PengajuanJadwalFormModal } from './home/components/PengajuanJadwalFormM
 
 const StudentHome = () => {
   const isMobile = useIsMobile();
+  const navigate = useNavigate();
+
+  const goToFolderShareRequest = () => {
+    navigate('/siswa/folder-share', { state: { tab: 'request' } });
+  };
 
   const {
     loading,
@@ -48,8 +53,6 @@ const StudentHome = () => {
     setErrorMsg,
     loadAll,
   });
-
-  const materiRequest = useMateriRequest({ profile, setErrorMsg, loadAll });
 
   const tugasPenilaian = useTugasPenilaian({ profile, setErrorMsg, loadAll });
 
@@ -135,7 +138,7 @@ const StudentHome = () => {
         materiRequestList={materiRequestList}
         loading={loading}
         guruOptions={guruOptions}
-        materiRequestHook={materiRequest}
+        onNavigateToFolderShared={goToFolderShareRequest}
       />
 
       <TugasFormModal

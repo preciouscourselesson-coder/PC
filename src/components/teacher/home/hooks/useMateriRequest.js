@@ -2,26 +2,14 @@ import { useState } from 'react';
 import { supabase } from '../../../../supabaseClient';
 import { checkedUpdate } from '../../../../utils/supabaseUpdateGuard';
 
-const KIRIM_BARU_KOSONG = { judul: '', mapel: '', bab: '', bentuk: 'File', file: null, link: '' };
-
-const uploadMateriFile = async (file, authUid) => {
-  const fileExt = file.name.split('.').pop();
-  const fileName = `${Date.now()}.${fileExt}`;
-  const filePath = `${authUid}/${fileName}`;
-  const { error } = await supabase.storage.from('materi').upload(filePath, file, { cacheControl: '3600', upsert: false });
-  if (error) throw error;
-  const { data: urlData } = supabase.storage.from('materi').getPublicUrl(filePath);
-  return urlData.publicUrl;
-};
-
 /**
- * Mengelola respon guru atas permintaan materi dari siswa: tandai
- * selesai/tolak langsung, atau kirim materi (pilih dari arsip yang sudah ada,
- * atau upload file/link baru yang otomatis tersimpan ke arsip dengan
- * kategori 'Request').
+ * Mengelola respon guru atas permintaan materi dari siswa: tolak dengan
+ * catatan, atau selesaikan dengan mengirim materi yang dipilih dari Arsip
+ * Materi (upload materi baru dilakukan di halaman Arsip Materi, bukan di
+ * sini -- lihat TeacherArsipMateri.js).
  */
-export function useMateriRequest({ guru, profileId, materiRequestList, setMateriRequestList, materiArsip, setMateriArsip, setErrorMsg, showToast }) {
-  // ========== RESPON LANGSUNG (Selesai / Tolak) ==========
+export function useMateriRequest({ materiRequestList, setMateriRequestList, materiArsip, setErrorMsg, showToast }) {
+  // ========== TOLAK (dengan catatan) ==========
   const [materiRespondId, setMateriRespondId] = useState(null);
   const [materiRespondAksi, setMateriRespondAksi] = useState(null);
   const [materiCatatan, setMateriCatatan] = useState('');
@@ -80,22 +68,17 @@ export function useMateriRequest({ guru, profileId, materiRequestList, setMateri
     }
   };
 
-  // ========== KIRIM MATERI (dari arsip, atau upload baru yang otomatis masuk arsip) ==========
+  // ========== KIRIM MATERI (pilih dari Arsip Materi yang sudah ada) ==========
   const [showKirimMateri, setShowKirimMateri] = useState(false);
   const [selectedRequestId, setSelectedRequestId] = useState(null);
-  const [kirimMateriMode, setKirimMateriMode] = useState('arsip'); // 'arsip' | 'baru'
   const [selectedMateriId, setSelectedMateriId] = useState('');
   const [kirimMateriNote, setKirimMateriNote] = useState('');
-  const [kirimBaruForm, setKirimBaruForm] = useState(KIRIM_BARU_KOSONG);
   const [kirimMateriSubmitting, setKirimMateriSubmitting] = useState(false);
 
   const openKirimMateri = (requestId) => {
-    const request = materiRequestList.find((m) => m.id === requestId);
     setSelectedRequestId(requestId);
-    setKirimMateriMode('arsip');
     setSelectedMateriId('');
     setKirimMateriNote('');
-    setKirimBaruForm({ ...KIRIM_BARU_KOSONG, judul: request?.judul_materi || '' });
     setShowKirimMateri(true);
   };
 
@@ -104,11 +87,10 @@ export function useMateriRequest({ guru, profileId, materiRequestList, setMateri
     setSelectedRequestId(null);
     setSelectedMateriId('');
     setKirimMateriNote('');
-    setKirimBaruForm(KIRIM_BARU_KOSONG);
   };
 
   // Menyelesaikan request materi + mengaitkan file materi (materi_file_id) yang menjawabnya,
-  // lalu memberi notifikasi ke siswa. Dipakai oleh kedua mode (pilih arsip / upload baru).
+  // lalu memberi notifikasi ke siswa.
   const selesaikanRequestDenganMateri = async (request, materiFileId, materiNama) => {
     const catatan = `Materi "${materiNama}" telah dikirimkan.${kirimMateriNote ? ` Catatan: ${kirimMateriNote}` : ''}`;
     const { error } = await checkedUpdate(
@@ -141,76 +123,20 @@ export function useMateriRequest({ guru, profileId, materiRequestList, setMateri
       showToast('warning', 'Data permintaan tidak ditemukan.');
       return;
     }
+    if (!selectedMateriId) {
+      showToast('warning', 'Pilih materi yang akan dikirim.');
+      return;
+    }
 
     setKirimMateriSubmitting(true);
     try {
-      if (kirimMateriMode === 'arsip') {
-        if (!selectedMateriId) {
-          showToast('warning', 'Pilih materi yang akan dikirim.');
-          return;
-        }
-        // Dibandingkan sebagai string karena <select> selalu mengembalikan
-        // e.target.value berupa string, sedangkan m.id dari database bisa
-        // berupa number (bigint/serial) -- tanpa ini find() selalu gagal
-        // walau item-nya kelihatan sudah terpilih di dropdown.
-        const materi = materiArsip.find((m) => String(m.id) === String(selectedMateriId));
-        if (!materi) throw new Error('Materi tidak ditemukan di arsip.');
-        await selesaikanRequestDenganMateri(request, materi.id, materi.nama);
-      } else {
-        // Mode upload baru: guru mengunggah file/link baru khusus untuk request ini.
-        // File ini otomatis tersimpan ke materi_file dengan kategori 'Request', sehingga
-        // langsung muncul juga di halaman Arsip Materi (TeacherArsipMateri.js).
-        if (!kirimBaruForm.judul.trim()) {
-          showToast('warning', 'Isi judul materi.');
-          return;
-        }
-        if (kirimBaruForm.bentuk === 'File' && !kirimBaruForm.file) {
-          showToast('warning', 'Pilih file untuk diunggah.');
-          return;
-        }
-        if (kirimBaruForm.bentuk === 'Link' && !kirimBaruForm.link.trim()) {
-          showToast('warning', 'Isi tautan (link) materi.');
-          return;
-        }
-
-        let finalUrl = '';
-        let tipe = 'link';
-        if (kirimBaruForm.bentuk === 'File') {
-          finalUrl = await uploadMateriFile(kirimBaruForm.file, profileId);
-          tipe = kirimBaruForm.file.type || kirimBaruForm.file.name.split('.').pop();
-        } else {
-          finalUrl = kirimBaruForm.link.trim();
-          tipe = 'link';
-        }
-
-        const { data: inserted, error: insertError } = await supabase
-          .from('materi_file')
-          .insert({
-            mapel: kirimBaruForm.mapel.trim() || null,
-            bab: kirimBaruForm.bab.trim() || null,
-            sub_bab: null,
-            user_id: profileId,
-            nama: kirimBaruForm.judul.trim(),
-            tipe,
-            diupload_oleh: guru?.nama || '',
-            tanggal: new Date().toISOString(),
-            url: finalUrl,
-            kelas: request.kelas || null,
-            deskripsi: request.deskripsi || null,
-            status: 'Dipublish',
-            kategori: 'Request',
-            folder_id: null,
-            bentuk: kirimBaruForm.bentuk,
-            pengajar: null,
-            jenis: null,
-          })
-          .select('id, nama, mapel, bab, sub_bab, kategori, kelas, tipe, url, status')
-          .single();
-        if (insertError) throw insertError;
-
-        setMateriArsip((prev) => [inserted, ...prev]);
-        await selesaikanRequestDenganMateri(request, inserted.id, inserted.nama);
-      }
+      // Dibandingkan sebagai string karena <select> selalu mengembalikan
+      // e.target.value berupa string, sedangkan m.id dari database bisa
+      // berupa number (bigint/serial) -- tanpa ini find() selalu gagal
+      // walau item-nya kelihatan sudah terpilih di dropdown.
+      const materi = materiArsip.find((m) => String(m.id) === String(selectedMateriId));
+      if (!materi) throw new Error('Materi tidak ditemukan di arsip.');
+      await selesaikanRequestDenganMateri(request, materi.id, materi.nama);
       closeKirimMateri();
     } catch (err) {
       console.error(err);
@@ -232,14 +158,10 @@ export function useMateriRequest({ guru, profileId, materiRequestList, setMateri
 
     showKirimMateri,
     selectedRequestId,
-    kirimMateriMode,
-    setKirimMateriMode,
     selectedMateriId,
     setSelectedMateriId,
     kirimMateriNote,
     setKirimMateriNote,
-    kirimBaruForm,
-    setKirimBaruForm,
     kirimMateriSubmitting,
     openKirimMateri,
     closeKirimMateri,

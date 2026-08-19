@@ -30,7 +30,6 @@ const TeacherHome = () => {
   const {
     loading,
     guru,
-    profileId,
     jadwalList,
     studentNameMap,
     pengajuanMasuk,
@@ -43,8 +42,6 @@ const TeacherHome = () => {
     setMateriRequestList,
     ujianTerdekatList,
     mapelOptions,
-    materiArsip,
-    setMateriArsip,
     errorMsg,
     setErrorMsg,
     loadAll,
@@ -66,12 +63,8 @@ const TeacherHome = () => {
   });
 
   const materiRequest = useMateriRequest({
-    guru,
-    profileId,
     materiRequestList,
     setMateriRequestList,
-    materiArsip,
-    setMateriArsip,
     setErrorMsg,
     showToast,
   });
@@ -164,15 +157,14 @@ const TeacherHome = () => {
       {/* Materi Request */}
       <MateriRequestSection isMobile={isMobile} materiRequestList={materiRequestList} loading={loading} materiRequestHook={materiRequest} />
 
-      {/* Modal Kirim Materi: pilih dari arsip yang sudah ada, atau upload baru
-          (yang otomatis tersimpan ke arsip dengan kategori 'Request'). */}
+      {/* Modal Kirim Materi: pilih dari materi yang sudah ada di Arsip Materi.
+          Upload materi baru dilakukan di halaman Arsip Materi, bukan di sini. */}
       <KirimMateriModal
         show={materiRequest.showKirimMateri}
         isMobile={isMobile}
-        materiArsip={materiArsip}
+        materiRequestList={materiRequestList}
         materiRequestHook={materiRequest}
         onClose={materiRequest.closeKirimMateri}
-        onSubmit={materiRequest.submitKirimMateri}
       />
 
       {/* Modal Form Penilaian/Tugas */}

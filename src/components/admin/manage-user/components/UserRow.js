@@ -1,11 +1,24 @@
 // Satu baris tabel user: nama, email, role, gender, kelas, mapel, referral, status, tanggal, aksi.
+//
+// Kolom role/gender/kelas/private-per-siswa dipakai lewat EditableSelect --
+// tampil polos seperti teks (tanpa kotak/border) selama tidak disentuh, baru
+// terlihat sebagai dropdown saat di-hover/klik. Tujuannya supaya baris tabel
+// tidak terasa "penuh kotak form" saat sekadar dibaca sekilas.
 import React from 'react';
-import { C, STATUS_LABEL, STATUS_COLOR, KELAS_OPTIONS } from '../constants';
+import { C, ROLE_LABEL, ROLE_COLOR, STATUS_LABEL, STATUS_COLOR, KELAS_OPTIONS, JENIS_KELAS_COLOR } from '../constants';
 import { formatDate } from '../utils/formatDate';
+import EditableSelect from './EditableSelect';
 import IconBtn from './IconBtn';
 import MapelDropdown from './MapelDropdown';
 import ReferralCell from './ReferralCell';
 import { IconCheck, IconX, IconTrash, IconLogIn, IconRefresh } from './icons';
+
+const ROLE_OPTIONS = Object.entries(ROLE_LABEL).map(([value, label]) => ({ value, label }));
+const GENDER_OPTIONS = [{ value: 'L', label: 'Laki-laki' }, { value: 'P', label: 'Perempuan' }];
+const KELAS_SELECT_OPTIONS = KELAS_OPTIONS.map(k => ({ value: k, label: k }));
+const JENIS_KELAS_OPTIONS = [{ value: 'Private', label: 'Private' }, { value: 'Group', label: 'Group' }];
+
+const cellPad = { padding: '10px 14px' };
 
 const UserRow = ({
   user: u,
@@ -15,93 +28,66 @@ const UserRow = ({
   mapelDropdownRef,
   onToggleMapelDropdown,
   actions,
+  className = '',
 }) => {
   const sc = STATUS_COLOR[u.status] || { color: C.gray, bg: C.cream };
   const name = u.full_name || u.email;
 
   return (
-    <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-      <td style={{ padding: '12px 16px', fontSize: '0.88rem', color: C.dark, fontWeight: 'bold' }}>
+    <tr className={className} style={{ borderBottom: `1px solid ${C.border}`, transition: 'background 0.12s ease' }}>
+      <td style={{ ...cellPad, fontSize: '0.87rem', color: C.dark, fontWeight: 'bold' }}>
         {u.full_name || '(Tanpa nama)'}
       </td>
-      <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: C.gray }}>
+      <td style={{ ...cellPad, fontSize: '0.84rem', color: C.gray }}>
         {u.email}
       </td>
-      <td style={{ padding: '12px 16px' }}>
-        <select
+      <td style={cellPad}>
+        <EditableSelect
           value={u.role}
           disabled={isBusy}
           onChange={e => actions.handleRoleChange(u.id, name, e.target.value)}
-          style={{
-            padding: '6px 10px', borderRadius: '8px', border: `1.5px solid ${C.border}`,
-            fontSize: '0.83rem', fontFamily: 'inherit', color: C.dark, background: C.white,
-            cursor: isBusy ? 'not-allowed' : 'pointer',
-          }}
-        >
-          <option value="student">Siswa</option>
-          <option value="teacher">Guru</option>
-          <option value="parent">Wali Siswa</option>
-          <option value="admin">Admin</option>
-        </select>
+          options={ROLE_OPTIONS}
+          allowEmpty={false}
+          valueColor={ROLE_COLOR[u.role]}
+        />
       </td>
-      <td style={{ padding: '12px 16px' }}>
-        <select
-          value={u.gender || ''}
+      <td style={cellPad}>
+        <EditableSelect
+          value={u.gender}
           disabled={isBusy}
           onChange={e => actions.handleGenderChange(u.id, name, e.target.value)}
-          style={{
-            padding: '6px 10px', borderRadius: '8px', border: `1.5px solid ${C.border}`,
-            fontSize: '0.83rem', fontFamily: 'inherit', color: C.dark, background: C.white,
-            cursor: isBusy ? 'not-allowed' : 'pointer',
-          }}
-        >
-          <option value="">Belum diisi</option>
-          <option value="L">Laki-laki</option>
-          <option value="P">Perempuan</option>
-        </select>
+          options={GENDER_OPTIONS}
+          placeholder="Belum diisi"
+        />
       </td>
-      <td style={{ padding: '12px 16px' }}>
+      <td style={cellPad}>
         {u.role === 'student' ? (
-          <select
-            value={u.kelas || ''}
+          <EditableSelect
+            value={u.kelas}
             disabled={isBusy}
             onChange={e => actions.handleKelasChange(u.id, name, e.target.value)}
-            style={{
-              padding: '6px 10px', borderRadius: '8px', border: `1.5px solid ${C.border}`,
-              fontSize: '0.83rem', fontFamily: 'inherit', color: C.dark, background: C.white,
-              cursor: isBusy ? 'not-allowed' : 'pointer',
-            }}
-          >
-            <option value="">Belum diisi</option>
-            {KELAS_OPTIONS.map(k => (
-              <option key={k} value={k}>{k}</option>
-            ))}
-          </select>
+            options={KELAS_SELECT_OPTIONS}
+            placeholder="Belum diisi"
+          />
         ) : (
           <span style={{ color: C.gray, fontSize: '0.83rem' }}>-</span>
         )}
       </td>
-      <td style={{ padding: '12px 16px' }}>
+      <td style={cellPad}>
         {u.role === 'student' ? (
-          <select
-            value={u.jenis_kelas || ''}
+          <EditableSelect
+            value={u.jenis_kelas}
             disabled={isBusy}
             onChange={e => actions.handleJenisKelasChange(u.id, name, e.target.value)}
-            style={{
-              padding: '6px 10px', borderRadius: '8px', border: `1.5px solid ${C.border}`,
-              fontSize: '0.83rem', fontFamily: 'inherit', color: C.dark, background: C.white,
-              cursor: isBusy ? 'not-allowed' : 'pointer',
-            }}
-          >
-            <option value="">Belum diisi</option>
-            <option value="Private">Private</option>
-            <option value="Group">Group</option>
-          </select>
+            options={JENIS_KELAS_OPTIONS}
+            placeholder="Belum diisi"
+            valueColor={JENIS_KELAS_COLOR[u.jenis_kelas]}
+          />
         ) : (
           <span style={{ color: C.gray, fontSize: '0.83rem' }}>-</span>
         )}
       </td>
-      <td style={{ padding: '12px 16px' }}>
+      <td style={cellPad}>
         {u.role === 'teacher' ? (
           <MapelDropdown
             user={u}
@@ -115,7 +101,7 @@ const UserRow = ({
           <span style={{ color: C.gray, fontSize: '0.83rem' }}>-</span>
         )}
       </td>
-      <td style={{ padding: '12px 16px' }}>
+      <td style={cellPad}>
         <ReferralCell
           user={u}
           isBusy={isBusy}
@@ -123,7 +109,7 @@ const UserRow = ({
           onGenerate={() => actions.handleGenerateReferral(u.id, name)}
         />
       </td>
-      <td style={{ padding: '12px 16px' }}>
+      <td style={cellPad}>
         <span style={{
           background: sc.bg, color: sc.color, fontSize: '0.76rem', fontWeight: 'bold',
           padding: '4px 11px', borderRadius: '20px', whiteSpace: 'nowrap',
@@ -131,10 +117,10 @@ const UserRow = ({
           {STATUS_LABEL[u.status] || u.status}
         </span>
       </td>
-      <td style={{ padding: '12px 16px', fontSize: '0.83rem', color: C.gray, whiteSpace: 'nowrap' }}>
+      <td style={{ ...cellPad, fontSize: '0.82rem', color: C.gray, whiteSpace: 'nowrap' }}>
         {formatDate(u.created_at)}
       </td>
-      <td style={{ padding: '12px 16px' }}>
+      <td style={cellPad}>
         <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
           {u.status !== 'approved' && (
             <IconBtn

@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { supabase } from '../../supabaseClient';
 import Toast, { useToast } from '../shared/Toast';
 import { C, D } from '../shared/Theme';
+import { syncStudentFolders } from '../../utils/studentFolderSync';
 
 const MOBILE_BREAKPOINT = 768;
 
@@ -66,19 +67,41 @@ const statusStyle = (status) => {
 const BUCKET = 'materi';
 const TABLE = 'sesi_pembelajaran';
 
-const TeacherAbsensiMateri = () => {
+const JENJANG_OPTIONS = ['SD', 'SMP', 'SMA'];
+const KELAS_OPTIONS_BY_JENJANG = {
+  SD: ['I', 'II', 'III', 'IV', 'V', 'VI'],
+  SMP: ['VII', 'VIII', 'IX'],
+  SMA: ['X', 'XI', 'XII'],
+};
+const MAPEL_OPTIONS = ['Matematika', 'Fisika', 'Kimia', 'Bahasa Inggris'];
+
+/* ============================================================
+   TeacherAbsensi (sebelumnya TeacherAbsensiMateri)
+
+   Komponen ini murni untuk laporan kehadiran/sesi pembelajaran:
+   siswa, tanggal, judul materi yang dibahas (teks singkat), catatan,
+   dan bukti foto/PDF per pertemuan (tabel sesi_pembelajaran).
+
+   Manajemen file materi yang sesungguhnya (upload, folder, kategori)
+   TIDAK ditangani di sini — itu semua ada di TeacherArsipMateri.js.
+   Field "Judul Materi Ajar" di form ini hanya catatan judul, bukan
+   referensi ke file materi.
+
+   Rencana ke depan: materi yang dipublish lewat TeacherArsipMateri
+   akan disinkronkan ke tab "Materi Dipelajari" pada FolderShared.js
+   (folder di sisi siswa), sehingga siswa melihat materi per folder
+   yang sama seperti yang dikelola gurunya di TeacherArsipMateri.
+   ============================================================ */
+const TeacherAbsensi = () => {
   const isMobile = useIsMobile();
   const [guruId, setGuruId] = useState(null);
-  const [guruTableId, setGuruTableId] = useState(null);
+  const [guruMapel, setGuruMapel] = useState('');
+  const [guruNama, setGuruNama] = useState('');
 
   const [students, setStudents] = useState([]);
   const [loadingStudents, setLoadingStudents] = useState(true);
   const [studentsError, setStudentsError] = useState('');
   const { toast, showToast } = useToast();
-
-  const [jadwalLes, setJadwalLes] = useState([]);
-  const [loadingJadwal, setLoadingJadwal] = useState(true);
-  const [kelasTampil, setKelasTampil] = useState('');
 
   const [entries, setEntries] = useState([]);
   const [loadingEntries, setLoadingEntries] = useState(true);
@@ -86,7 +109,11 @@ const TeacherAbsensiMateri = () => {
 
   const [siswa, setSiswa] = useState('');
   const [tanggal, setTanggal] = useState('');
-  const [materi, setMateri] = useState('');
+  const [jenjang, setJenjang] = useState('');
+  const [kelasManual, setKelasManual] = useState('');
+  const [mapel, setMapel] = useState('');
+  const [bab, setBab] = useState('');
+  const [subBab, setSubBab] = useState('');
   const [catatan, setCatatan] = useState('');
   const [buktiFiles, setBuktiFiles] = useState([]);
   const [errors, setErrors] = useState({});
@@ -109,54 +136,42 @@ const TeacherAbsensiMateri = () => {
 
   useEffect(() => {
     if (!guruId) return;
-    const loadGuruTableId = async () => {
+    const loadGuruMapel = async () => {
       const { data, error } = await supabase
         .from('guru')
-        .select('id')
+        .select('mapel')
         .eq('profile_id', guruId)
         .maybeSingle();
-      if (!error) setGuruTableId(data?.id || null);
+      if (!error) {
+        setGuruMapel(data?.mapel || '');
+      }
     };
-    loadGuruTableId();
+    loadGuruMapel();
+
+    const loadGuruNama = async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', guruId)
+        .maybeSingle();
+      if (!error) setGuruNama(data?.full_name || '');
+    };
+    loadGuruNama();
   }, [guruId]);
 
+  // Set default mapel dari mapel guru (kalau cocok dengan salah satu opsi)
   useEffect(() => {
-    if (!guruTableId) return;
-    const loadJadwal = async () => {
-      setLoadingJadwal(true);
-      const { data, error } = await supabase
-        .from('jadwal_les')
-        .select('kelas, siswa_id, siswa_ids')
-        .eq('guru_id', guruTableId);
-      if (!error) setJadwalLes(data || []);
-      setLoadingJadwal(false);
-    };
-    loadJadwal();
-  }, [guruTableId]);
-
-  const getKelasOptionsForSiswa = useCallback(
-    (siswaId) => {
-      if (!siswaId) return [];
-      const set = new Set();
-      jadwalLes.forEach((j) => {
-        const cocok = j.siswa_id === siswaId || (Array.isArray(j.siswa_ids) && j.siswa_ids.includes(siswaId));
-        if (cocok && j.kelas) set.add(j.kelas);
-      });
-      return Array.from(set);
-    },
-    [jadwalLes]
-  );
-
-  const kelasOptionsForSiswa = getKelasOptionsForSiswa(siswa);
-
-  // Perbaikan: tambahkan dependency kelasOptionsForSiswa
-  useEffect(() => {
-    if (kelasOptionsForSiswa.length > 0) {
-      setKelasTampil((prev) => (kelasOptionsForSiswa.includes(prev) ? prev : kelasOptionsForSiswa[0]));
-    } else {
-      setKelasTampil('');
+    if (guruMapel && MAPEL_OPTIONS.includes(guruMapel)) {
+      setMapel((prev) => prev || guruMapel);
     }
-  }, [kelasOptionsForSiswa]);
+  }, [guruMapel]);
+
+  // Opsi kelas manual (Bab/Sub-Bab) mengikuti jenjang yang dipilih guru
+  const kelasManualOptions = jenjang ? KELAS_OPTIONS_BY_JENJANG[jenjang] || [] : [];
+
+  useEffect(() => {
+    setKelasManual((prev) => (kelasManualOptions.includes(prev) ? prev : ''));
+  }, [jenjang]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const loadStudents = async () => {
@@ -237,7 +252,11 @@ const TeacherAbsensiMateri = () => {
   const resetForm = () => {
     setSiswa('');
     setTanggal('');
-    setMateri('');
+    setJenjang('');
+    setKelasManual('');
+    setMapel('');
+    setBab('');
+    setSubBab('');
     setCatatan('');
     setBuktiFiles([]);
     setErrors({});
@@ -260,11 +279,87 @@ const TeacherAbsensiMateri = () => {
     return urls;
   };
 
+  // Pastikan siswa ini punya folder Shared (kategori 'Sekolah') di Arsip
+  // Materi, lalu kembalikan id folder-nya. Dipanggil sebelum menyalin bukti
+  // supaya bukti tidak pernah nyangkut tanpa folder (materi Shared tanpa
+  // folder tidak akan pernah muncul di FolderShared siswa -- lihat filter
+  // di FolderShared.js).
+  const ensureStudentFolderId = async (siswaId) => {
+    // syncStudentFolders aman dipanggil berkali-kali (idempotent) -- akan
+    // membuatkan folder utk siswa yang belum punya, tanpa menyentuh yang
+    // sudah ada. Tidak diberi onDuplicateConfirm: kalau kebetulan ada
+    // konflik nama folder, siswa itu dilewati dulu (folder_id akan null,
+    // guru bisa selesaikan konfliknya lewat halaman Arsip Materi nanti).
+    await syncStudentFolders(guruId);
+    const { data } = await supabase
+      .from('folder_materi')
+      .select('id')
+      .eq('user_id', guruId)
+      .eq('siswa_id', siswaId)
+      .maybeSingle();
+    return data?.id || null;
+  };
+
+  // Salin bukti (foto/PDF) yang baru diupload ke Arsip Materi (materi_file)
+  // sebagai materi kategori 'Sekolah' (Shared), supaya siswa ybs bisa
+  // melihatnya juga lewat FolderShared, dan guru bisa memantaunya dari
+  // TeacherArsipMateri. Kalau ini gagal, laporan absensi TETAP tersimpan --
+  // hanya penyalinannya yang gagal, jadi guru diberi tahu lewat toast tapi
+  // tidak kehilangan data absensinya.
+  const copyBuktiToArsipMateri = async (buktiUrls) => {
+    if (!buktiUrls.length) return;
+    try {
+      const folderId = await ensureStudentFolderId(siswa);
+      // ⚠️ FIX: sebelumnya pakai `new Date(`${tanggal}T00:00:00`).toISOString()`
+      // -- string tanpa akhiran 'Z' di-parse sebagai jam LOKAL, lalu digeser ke
+      // UTC saat toISOString(). Untuk timezone WIB (UTC+7), tengah malam
+      // tanggal 19 jadi jam 17:00 tanggal 18 UTC -- 10 karakter pertama ISO-nya
+      // (dipakai FolderShared.js sebagai kunci penjodohan dengan
+      // sesi_pembelajaran.tanggal) jadi MUNDUR SATU HARI dari tanggal yang
+      // benar-benar dipilih guru. Akibatnya file ini tidak pernah "nyantol"
+      // ke pertemuan manapun di tab "Materi Dipelajari" siswa, walau baris
+      // materi_file-nya sendiri sudah benar (makanya tetap muncul normal di
+      // TeacherArsipMateri yang filternya per-folder, bukan per-tanggal).
+      //
+      // Susun ISO string manual sebagai UTC eksplisit -- tidak lewat parsing
+      // Date() sama sekali -- supaya 10 karakter pertama SELALU identik
+      // dengan `tanggal` yang diketik guru & yang disimpan di
+      // sesi_pembelajaran.tanggal, di timezone manapun server/browser berjalan.
+      const tanggalIso = `${tanggal}T00:00:00.000Z`;
+      const rows = buktiUrls.map((url, idx) => ({
+        user_id: guruId,
+        nama: bab.trim(),
+        tipe: buktiFiles[idx]?.type === 'pdf' ? 'application/pdf' : 'image',
+        tanggal: tanggalIso,
+        url,
+        kelas: `${jenjang} ${kelasManual}`,
+        status: 'Dipublish',
+        deskripsi: catatan.trim() || null,
+        mapel: mapel || null,
+        bab: bab.trim(),
+        sub_bab: subBab.trim() || null,
+        diupload_oleh: guruNama,
+        kategori: 'Sekolah',
+        folder_id: folderId,
+        bentuk: 'File',
+        pengajar: guruNama,
+        jenis: 'Materi',
+      }));
+      const { error } = await supabase.from('materi_file').insert(rows);
+      if (error) throw error;
+    } catch (err) {
+      showToast('error', 'Absensi tersimpan, tapi gagal menyalin bukti ke Arsip Materi: ' + err.message);
+    }
+  };
+
   const handleSubmit = async () => {
     const newErrors = {};
     if (!siswa) newErrors.siswa = 'Pilih siswa terlebih dahulu';
     if (!tanggal) newErrors.tanggal = 'Isi tanggal pertemuan';
-    if (!materi.trim()) newErrors.materi = 'Isi judul materi ajar';
+    if (!jenjang) newErrors.jenjang = 'Pilih jenjang';
+    if (!kelasManual) newErrors.kelasManual = 'Pilih kelas';
+    if (!mapel) newErrors.mapel = 'Pilih mapel';
+    if (!bab.trim()) newErrors.bab = 'Isi bab';
     setErrors(newErrors);
     if (Object.keys(newErrors).length > 0) return;
 
@@ -272,17 +367,27 @@ const TeacherAbsensiMateri = () => {
     setSaveError('');
     try {
       const buktiUrls = await uploadBuktiFiles();
+      const judulMateri = subBab.trim() ? `${bab.trim()} - ${subBab.trim()}` : bab.trim();
 
+      // CATATAN: kolom jenjang, kelas, mapel, bab, sub_bab harus sudah ada
+      // di tabel sesi_pembelajaran (Supabase) agar insert ini berhasil.
       const { error: insertError } = await supabase.from(TABLE).insert({
         siswa_id: siswa,
         guru_id: guruId,
         tanggal,
-        judul_materi: materi.trim(),
+        judul_materi: judulMateri,
+        jenjang,
+        kelas: kelasManual,
+        mapel,
+        bab: bab.trim(),
+        sub_bab: subBab.trim() || null,
         catatan: catatan.trim() || null,
         bukti_urls: buktiUrls,
         status: 'Menunggu',
       });
       if (insertError) throw insertError;
+
+      await copyBuktiToArsipMateri(buktiUrls);
 
       resetForm();
       setJustAdded(true);
@@ -413,34 +518,52 @@ const TeacherAbsensiMateri = () => {
               {errors.siswa && <div style={{ color: D.danger, fontSize: '0.75rem', marginTop: '4px' }}>{errors.siswa}</div>}
               {studentsError && <div style={{ color: D.danger, fontSize: '0.75rem', marginTop: '4px' }}>{studentsError}</div>}
 
-              <div style={{ marginTop: '1.1rem' }}>
-                <label style={darkLabelStyle}>Kelas</label>
-                {!siswa ? (
-                  <div style={{ ...darkInputStyle(false), color: D.textFaint, cursor: 'not-allowed' }}>
-                    Pilih siswa terlebih dahulu
-                  </div>
-                ) : loadingJadwal ? (
-                  <div style={{ ...darkInputStyle(false), color: D.textFaint }}>Memuat kelas...</div>
-                ) : kelasOptionsForSiswa.length === 0 ? (
-                  <div style={{ ...darkInputStyle(false), color: D.textFaint }}>
-                    Kelas tidak ditemukan di jadwal
-                  </div>
-                ) : kelasOptionsForSiswa.length === 1 ? (
-                  <div style={darkInputStyle(false)}>{kelasOptionsForSiswa[0]}</div>
-                ) : (
+              <div style={{ marginTop: '1.1rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.85rem' }}>
+                <div>
+                  <label style={darkLabelStyle}>Jenjang</label>
                   <select
-                    value={kelasTampil}
-                    onChange={(e) => setKelasTampil(e.target.value)}
-                    style={{ ...darkInputStyle(false), cursor: 'pointer' }}
+                    value={jenjang}
+                    onChange={(e) => setJenjang(e.target.value)}
+                    style={{ ...darkInputStyle(errors.jenjang), cursor: 'pointer' }}
                   >
-                    {kelasOptionsForSiswa.map((k) => (
+                    <option value="">— Pilih —</option>
+                    {JENJANG_OPTIONS.map((j) => (
+                      <option key={j} value={j}>{j}</option>
+                    ))}
+                  </select>
+                  {errors.jenjang && <div style={{ color: D.danger, fontSize: '0.75rem', marginTop: '4px' }}>{errors.jenjang}</div>}
+                </div>
+
+                <div>
+                  <label style={darkLabelStyle}>Kelas</label>
+                  <select
+                    value={kelasManual}
+                    onChange={(e) => setKelasManual(e.target.value)}
+                    disabled={!jenjang}
+                    style={{ ...darkInputStyle(errors.kelasManual), cursor: jenjang ? 'pointer' : 'not-allowed' }}
+                  >
+                    <option value="">{jenjang ? '— Pilih —' : 'Pilih jenjang dulu'}</option>
+                    {kelasManualOptions.map((k) => (
                       <option key={k} value={k}>{k}</option>
                     ))}
                   </select>
-                )}
-                <div style={{ fontSize: '0.7rem', color: D.textFaint, marginTop: '4px' }}>
-                  Otomatis dari jadwal les siswa ini — info saja, tidak disimpan.
+                  {errors.kelasManual && <div style={{ color: D.danger, fontSize: '0.75rem', marginTop: '4px' }}>{errors.kelasManual}</div>}
                 </div>
+              </div>
+
+              <div style={{ marginTop: '1.1rem' }}>
+                <label style={darkLabelStyle}>Mapel</label>
+                <select
+                  value={mapel}
+                  onChange={(e) => setMapel(e.target.value)}
+                  style={{ ...darkInputStyle(errors.mapel), cursor: 'pointer' }}
+                >
+                  <option value="">— Pilih mapel —</option>
+                  {MAPEL_OPTIONS.map((m) => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+                {errors.mapel && <div style={{ color: D.danger, fontSize: '0.75rem', marginTop: '4px' }}>{errors.mapel}</div>}
               </div>
 
               <div style={{ marginTop: '1.1rem' }}>
@@ -460,15 +583,26 @@ const TeacherAbsensiMateri = () => {
               </div>
 
               <div style={{ marginTop: '1.1rem' }}>
-                <label style={darkLabelStyle}>Judul Materi Ajar</label>
+                <label style={darkLabelStyle}>Bab</label>
                 <input
                   type="text"
                   placeholder="cth. Fungsi Kuadrat"
-                  value={materi}
-                  onChange={(e) => setMateri(e.target.value)}
-                  style={darkInputStyle(errors.materi)}
+                  value={bab}
+                  onChange={(e) => setBab(e.target.value)}
+                  style={darkInputStyle(errors.bab)}
                 />
-                {errors.materi && <div style={{ color: D.danger, fontSize: '0.75rem', marginTop: '4px' }}>{errors.materi}</div>}
+                {errors.bab && <div style={{ color: D.danger, fontSize: '0.75rem', marginTop: '4px' }}>{errors.bab}</div>}
+              </div>
+
+              <div style={{ marginTop: '1.1rem' }}>
+                <label style={darkLabelStyle}>Sub-Bab</label>
+                <input
+                  type="text"
+                  placeholder="cth. Menentukan Titik Puncak (opsional)"
+                  value={subBab}
+                  onChange={(e) => setSubBab(e.target.value)}
+                  style={darkInputStyle(false)}
+                />
               </div>
 
               <div style={{ marginTop: '1.1rem' }}>
@@ -944,4 +1078,4 @@ const TeacherAbsensiMateri = () => {
   );
 };
 
-export default TeacherAbsensiMateri;
+export default TeacherAbsensi;

@@ -13,7 +13,6 @@ export const MateriListSection = ({
   activeTab,
   onView,
   onEdit,
-  onArchive,
   onDelete,
 }) => {
   if (loading) {
@@ -54,7 +53,6 @@ export const MateriListSection = ({
               badge={badge}
               onView={() => onView(item)}
               onEdit={() => onEdit(item)}
-              onArchive={() => onArchive(item)}
               onDelete={() => onDelete(item)}
             />
           );
@@ -69,7 +67,6 @@ export const MateriListSection = ({
       statusStyle={STATUS_STYLE}
       onView={onView}
       onEdit={onEdit}
-      onArchive={onArchive}
       onDelete={onDelete}
     />
   );

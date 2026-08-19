@@ -1,5 +1,6 @@
 // StudentAbsent.js (dengan header dihapus)
 import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../supabaseClient';
 import { checkedUpdate } from '../../utils/supabaseUpdateGuard';
 
@@ -51,9 +52,6 @@ const bulanFromIso = (isoDate) => {
   return `${bulanNama[parseInt(m, 10) - 1]} ${y}`;
 };
 
-const fileTypeFromUrl = (url = '') => (url.toLowerCase().endsWith('.pdf') ? 'pdf' : 'img');
-const fileNameFromUrl = (url = '') => decodeURIComponent(url.split('/').pop() || 'file');
-
 const statusStyle = (status) => {
   if (status === 'Disetujui') return { bg: C.greenBg, fg: C.green };
   if (status === 'Ditolak') return { bg: C.redBg, fg: C.red };
@@ -78,7 +76,7 @@ const useIsMobile = (bp = 768) => {
 // Tabel dengan 8 kolom sangat tidak nyaman di HP (harus scroll horizontal &
 // teks kepotong). Untuk layar sempit, satu baris data ditampilkan sebagai
 // kartu vertikal yang lebih mudah dibaca dan disentuh.
-const EntryCardMobile = ({ item, namaGuru, onKonfirmasi, confirming, actionMessage }) => {
+const EntryCardMobile = ({ item, namaGuru, onKonfirmasi, confirming, actionMessage, onOpenBukti }) => {
   const st = statusStyle(item.status);
   const isMenunggu = item.status === 'Menunggu';
   const isConfirmed = item.status === 'Disetujui';
@@ -128,26 +126,19 @@ const EntryCardMobile = ({ item, namaGuru, onKonfirmasi, confirming, actionMessa
         </div>
       )}
 
-      {/* Bukti file (foto/PDF) — chip diperbesar supaya mudah disentuh */}
+      {/* Bukti kehadiran — arahkan ke Folder Share bagian Materi Dipelajari */}
       {item.bukti_urls && item.bukti_urls.length > 0 && (
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-          {item.bukti_urls.map((url, i) => (
-            <a
-              key={i}
-              href={url}
-              target="_blank"
-              rel="noreferrer"
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: '6px',
-                minHeight: `${TOUCH_TARGET}px`, padding: '0 12px', borderRadius: '10px',
-                background: fileTypeFromUrl(url) === 'pdf' ? '#e0574f' : '#3f7ea6',
-                color: '#fff', fontSize: '0.75rem', fontWeight: 700, textDecoration: 'none'
-              }}
-            >
-              {fileTypeFromUrl(url) === 'pdf' ? '📄 PDF' : '🖼️ Foto'} {i + 1}
-            </a>
-          ))}
-        </div>
+        <button
+          onClick={onOpenBukti}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: '6px', alignSelf: 'flex-start',
+            minHeight: `${TOUCH_TARGET}px`, padding: '0 14px', borderRadius: '10px',
+            background: '#3f7ea6', border: 'none',
+            color: '#fff', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit'
+          }}
+        >
+          📁 Lihat Bukti di Folder Share
+        </button>
       )}
 
       {/* Tindak lanjut: tombol lebar penuh biar nyaman ditekan jari */}
@@ -186,6 +177,10 @@ const EntryCardMobile = ({ item, namaGuru, onKonfirmasi, confirming, actionMessa
 
 const StudentAbsent = () => {
   const isMobile = useIsMobile();
+  const navigate = useNavigate();
+  const goToFolderShareMateri = () => {
+    navigate('/siswa/folder-share', { state: { tab: 'materi' } });
+  };
   const [studentProfile, setStudentProfile] = useState(null);
   const [loadingProfile, setLoadingProfile] = useState(true);
 
@@ -414,6 +409,7 @@ const StudentAbsent = () => {
                 onKonfirmasi={handleKonfirmasi}
                 confirming={confirming}
                 actionMessage={actionMessage}
+                onOpenBukti={goToFolderShareMateri}
               />
             ))}
             {!loadingEntries && filteredEntries.length === 0 && (
@@ -483,32 +479,19 @@ const StudentAbsent = () => {
                       {(!item.bukti_urls || item.bukti_urls.length === 0) ? (
                         <span style={{ color: C.grayLight }}>-</span>
                       ) : (
-                        <div style={{ display: 'flex', gap: '4px' }}>
-                          {item.bukti_urls.map((url, i) => (
-                            <a
-                              key={i}
-                              href={url}
-                              target="_blank"
-                              rel="noreferrer"
-                              title={fileNameFromUrl(url)}
-                              style={{
-                                width: '22px',
-                                height: '22px',
-                                borderRadius: '6px',
-                                background: fileTypeFromUrl(url) === 'pdf' ? '#e0574f' : '#3f7ea6',
-                                color: '#fff',
-                                fontSize: '0.55rem',
-                                fontWeight: 700,
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                textDecoration: 'none',
-                              }}
-                            >
-                              {fileTypeFromUrl(url) === 'pdf' ? 'PDF' : 'IMG'}
-                            </a>
-                          ))}
-                        </div>
+                        <button
+                          onClick={goToFolderShareMateri}
+                          title="Lihat bukti di Folder Share"
+                          style={{
+                            display: 'inline-flex', alignItems: 'center', gap: '5px',
+                            padding: '5px 10px', borderRadius: '8px',
+                            background: '#3f7ea6', border: 'none',
+                            color: '#fff', fontSize: '0.72rem', fontWeight: 700,
+                            cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap'
+                          }}
+                        >
+                          📁 Lihat
+                        </button>
                       )}
                     </td>
                     <td style={{ padding: '10px' }}>

@@ -47,6 +47,15 @@ const GlobalMobileStyles = () => (
     button { touch-action: manipulation; }
     html, body { overscroll-behavior-y: contain; }
     body.no-scroll { overflow: hidden; position: fixed; width: 100%; }
+
+    /* 100vh di browser mobile dihitung dari tinggi viewport maksimum (saat
+       address bar tersembunyi), bukan tinggi yang benar-benar terlihat.
+       Akibatnya konten bisa kepotong / muncul celah putih saat address bar
+       muncul-hilang ketika di-scroll. 100dvh mengikuti tinggi viewport yang
+       benar-benar terlihat saat itu juga; vh di atas dipertahankan sebagai
+       fallback untuk browser lama yang belum mendukung dvh. */
+    .sl-viewport-min-h { min-height: 100vh; min-height: 100dvh; }
+    .sl-viewport-h { height: 100vh; height: 100dvh; }
   `}</style>
 );
 
@@ -82,11 +91,11 @@ const DesktopSidebar = () => {
 
   return (
     <div style={{
-      width: '200px', minHeight: '100vh', flexShrink: 0,
+      width: '200px', flexShrink: 0,
       background: C.white, borderRight: `1.5px solid ${C.border}`,
       display: 'flex', flexDirection: 'column',
-      position: 'sticky', top: 0, height: '100vh',
-      boxSizing: 'border-box', padding: '1.5rem 0'
+      boxSizing: 'border-box', padding: '1.5rem 0',
+      overflowY: 'auto'
     }}>
       <div style={{ padding: '0 1.2rem', marginBottom: '2rem' }}>
         <img src={logo} alt="Precious Course" style={{ height: '48px' }} />
@@ -144,12 +153,11 @@ const MobileSidebar = ({ user, open, onClose }) => {
           }}
         />
       )}
-      <div style={{
+      <div className="sl-viewport-h" style={{
         position: 'fixed',
         top: 0,
         left: 0,
         width: '220px',
-        height: '100vh',
         background: C.white,
         borderRight: `1.5px solid ${C.border}`,
         zIndex: 200,
@@ -502,23 +510,25 @@ const StudentLayout = () => {
 
   if (checkingAccess) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: C.cream, color: C.gray, fontFamily: 'inherit' }}>
+      <div className="sl-viewport-min-h" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: C.cream, color: C.gray, fontFamily: 'inherit' }}>
         Memeriksa akses...
       </div>
     );
   }
 
   return (
-    <div style={{
-      display: 'flex', minHeight: '100vh', background: C.cream, fontFamily: 'inherit',
+    <div className={isMobile ? 'sl-viewport-min-h' : 'sl-viewport-h'} style={{
+      display: 'flex', background: C.cream, fontFamily: 'inherit',
       flexDirection: isMobile ? 'column' : 'row',
-      overflowX: 'hidden', width: '100%'
+      overflowX: 'hidden',
+      overflowY: isMobile ? 'visible' : 'hidden',
+      width: '100%'
     }}>
       <GlobalMobileStyles />
       {!isMobile && <DesktopSidebar />}
       {isMobile && <MobileSidebar user={user} open={sidebarOpen} onClose={() => setSidebarOpen(false)} />}
 
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}>
         <Topbar user={user} isMobile={isMobile} onMenuClick={() => setSidebarOpen(true)} />
         <main style={{
           flex: 1,

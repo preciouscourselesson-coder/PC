@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../supabaseClient';
 import { checkedUpdate } from '../../utils/supabaseUpdateGuard';
 import { syncStudentFolders } from '../../utils/studentFolderSync';
@@ -50,7 +51,7 @@ const StatusBadge = ({ aktif }) => (
 );
 
 // Kartu siswa untuk tampilan mobile (menggantikan baris tabel)
-const StudentCard = ({ s, onDelete }) => (
+const StudentCard = ({ s, onDelete, onOpenFolder }) => (
   <div
     style={{
       background: C.white,
@@ -80,6 +81,22 @@ const StudentCard = ({ s, onDelete }) => (
 
     <div style={{ display: 'flex', gap: '0.5rem', marginTop: '4px' }}>
       <button
+        onClick={() => onOpenFolder(s)}
+        style={{
+          background: C.goldBg,
+          border: 'none',
+          color: C.gold,
+          padding: '8px 14px',
+          borderRadius: '40px',
+          fontWeight: 'bold',
+          cursor: 'pointer',
+          fontSize: '0.8rem',
+          fontFamily: 'inherit',
+        }}
+      >
+        📂 Arsip Siswa
+      </button>
+      <button
         onClick={() => onDelete(s)}
         style={{
           background: 'rgba(179,66,63,0.08)',
@@ -105,6 +122,9 @@ const TeacherListStudent = () => {
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
   const isMobile = useIsMobile();
+  const navigate = useNavigate();
+
+  const openFolder = (s) => navigate(`/guru/siswa/${s.siswaId}/folder`);
 
   // Ambil semua siswa yang diajar oleh guru yang sedang login,
   // digabung dari jadwal_les (privat: siswa_id, group: siswa_ids[]).
@@ -366,6 +386,7 @@ const TeacherListStudent = () => {
                 key={`${s.siswaId}-${s.no}`}
                 s={s}
                 onDelete={setDeleteTarget}
+                onOpenFolder={openFolder}
               />
             ))}
           </div>
@@ -396,15 +417,26 @@ const TeacherListStudent = () => {
                       <StatusBadge aktif={s.aktif} />
                     </td>
                     <td style={{ padding: '8px 10px', textAlign: 'center' }}>
-                      <button
-                        onClick={() => setDeleteTarget(s)}
-                        style={{
-                          background: 'rgba(179,66,63,0.08)', border: 'none', color: '#b3423f', padding: '6px 14px',
-                          borderRadius: '40px', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.8rem', fontFamily: 'inherit',
-                        }}
-                      >
-                        🗑️ Hapus
-                      </button>
+                      <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
+                        <button
+                          onClick={() => openFolder(s)}
+                          style={{
+                            background: C.goldBg, border: 'none', color: C.gold, padding: '6px 14px',
+                            borderRadius: '40px', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.8rem', fontFamily: 'inherit',
+                          }}
+                        >
+                          📂 Arsip Siswa
+                        </button>
+                        <button
+                          onClick={() => setDeleteTarget(s)}
+                          style={{
+                            background: 'rgba(179,66,63,0.08)', border: 'none', color: '#b3423f', padding: '6px 14px',
+                            borderRadius: '40px', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.8rem', fontFamily: 'inherit',
+                          }}
+                        >
+                          🗑️ Hapus
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

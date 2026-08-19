@@ -18,8 +18,11 @@
 import { supabase } from '../supabaseClient';
 
 // Kategori folder_materi yang dipakai untuk folder otomatis per-siswa.
-// Dipilih 'Sekolah' karena folder ini soal materi yang dibagikan/terkait
-// siswa yang diajar, jadi ikut tampil di tab "Bersama" pada TeacherArsipMateri.
+// Dipilih 'Sekolah' (ditampilkan sbg "Shared" di UI) karena folder ini
+// PERSIS merepresentasikan apa yang dilihat siswa ybs di FolderShared --
+// guru bisa memantau materi per-siswa dari sisi TeacherArsipMateri dengan
+// struktur folder yang sama. Kategori 'Pribadi' sengaja tidak dipakai di
+// sini karena Pribadi harus murni milik guru & tidak pernah terlihat siswa.
 const FOLDER_KATEGORI_UNTUK_SISWA = 'Sekolah';
 
 /**

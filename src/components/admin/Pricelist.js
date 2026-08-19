@@ -6,6 +6,7 @@ import { useAdmin } from './Pricelist/hooks/useAdmin';
 import { usePricelistItems } from './Pricelist/hooks/usePricelistItems';
 import { useRiwayat } from './Pricelist/hooks/useRiwayat';
 import { useFilters } from './Pricelist/hooks/useFilters';
+import { usePriceChecker } from './Pricelist/hooks/usePriceChecker';
 import { usePricelistForm } from './Pricelist/hooks/usePricelistForm';
 import { useDeleteItem } from './Pricelist/hooks/useDeleteItem';
 import { useImportExport } from './Pricelist/hooks/useImportExport';
@@ -13,6 +14,7 @@ import { useImportExport } from './Pricelist/hooks/useImportExport';
 import Toolbar from './Pricelist/components/Toolbar';
 import ImportSummaryBanner from './Pricelist/components/ImportSummaryBanner';
 import FilterBar from './Pricelist/components/FilterBar';
+import PriceChecker from './Pricelist/components/PriceChecker';
 import PricelistTable from './Pricelist/components/PricelistTable';
 import Pagination from './Pricelist/components/Pagination';
 import PricelistForm from './Pricelist/components/PricelistForm';
@@ -34,6 +36,8 @@ const Pricelist = () => {
     setPage,
     filteredItems, totalPages, safePage, pageItems, rangeStart, rangeEnd,
   } = useFilters(items);
+
+  const priceChecker = usePriceChecker(items);
 
   const {
     form, setField, formRef,
@@ -61,6 +65,9 @@ const Pricelist = () => {
   return (
     <div style={{ maxWidth: '1280px', margin: '0 auto', fontFamily: 'inherit' }}>
       <Toast toast={toast} />
+
+      {/* Cek Harga -- jawab langsung "berapa harganya" tanpa cari manual di tabel */}
+      <PriceChecker {...priceChecker} />
 
       {/* Kartu Tabel */}
       <div style={{ background: C.white, borderRadius: '16px', border: `1.5px solid ${C.border}`, padding: '1.5rem', marginBottom: '1.5rem' }}>

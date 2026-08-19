@@ -4,14 +4,46 @@
 //   Tab 2 - Request Materi    : ajukan & lihat status request materi ke guru (dari StudentMateri)
 //   Tab 3 - Upload Arsip      : upload materi sekolah / hasil tugas / penilaian + riwayatnya (dari StudentArsip)
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import { supabase } from '../../supabaseClient';
 import { useIsMobile, TOUCH_TARGET } from '../shared/shared';
 
 // ─── Konfigurasi Arsip (tab Upload) ───────────────────────────────────────────
-const TABLE_ARSIP = 'bank_soal_siswa';
-const BUCKET_ARSIP = 'bank-soal';
+// ⚠️ PERUBAHAN ARSITEKTUR: Upload Arsip sekarang menulis LANGSUNG ke `materi_file`
+// (folder_id = folder 'Sekolah' milik siswa ini untuk guru yang dipilih), BUKAN lagi
+// ke tabel `bank_soal_siswa` yang terpisah. Alasan: `materi_file`/`folder_materi` adalah
+// tabel yang sama persis yang dibaca TeacherArsipMateri.js -- jadi begitu siswa upload,
+// otomatis muncul di folder atas nama siswa itu di sisi guru, tanpa proses "copy" apa pun.
+// Nama tabel/bucket lama ('bank_soal_siswa' / 'bank-soal') sudah tidak dipakai kode ini
+// sama sekali -- disebut di sini hanya sebagai catatan sejarah migrasi data, bukan
+// konstanta aktif (makanya tidak dideklarasikan sebagai variabel, supaya tidak
+// memicu warning `no-unused-vars`). Kalau suatu saat perlu migrasi data lama dari
+// `bank_soal_siswa`/bucket `bank-soal` ke `materi_file`/`materi-file`, tulis script
+// migrasi terpisah (bukan di file ini).
+
+const TABLE_MATERI = 'materi_file';
+const TABLE_FOLDER = 'folder_materi';
+// 🔧 KONFIRMASI DIPERLUKAN: samakan nama bucket ini dengan bucket yang dipakai
+// TeacherUploadMateriModal.jsx (folder TeacherArsipMateri/components/) supaya file
+// materi guru & materi upload siswa konsisten disimpan di storage yang sama.
+const BUCKET_MATERI = 'materi-file';
 const MAX_SIZE_MB = 10;
+// Bucket & batas ukuran untuk lampiran di tab "Request Materi" (bukan sama
+// dengan BUCKET_MATERI di atas -- itu untuk tab "Upload Arsip"/materi guru).
+// Nama bucket ini SENGAJA disamakan dengan yang sudah didokumentasikan untuk
+// fitur "Minta Materi" versi StudentHome.js (home/hooks/useMateriRequest.js)
+// supaya kedua alur "minta materi" (dari StudentHome maupun dari sini,
+// FolderShared tab Request) konsisten pakai bucket & kolom yang sama di
+// tabel `materi_request` -- lihat SQL terlampir untuk kolom yang dibutuhkan.
+const BUCKET_MATERI_REQUEST = 'materi-request-files';
+const MAX_SIZE_REQUEST_MB = 10;
+const REQUEST_FILE_ACCEPT = '.pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx,.ppt,.pptx';
 // Kategori upload: materi dari sekolah, hasil penugasan, atau penilaian.
+// 🔧 KONFIRMASI DIPERLUKAN: `materi_file` saat ini (dari query di FolderShared.js)
+// tidak punya kolom `jenis` -- field ini dulunya cuma ada di `bank_soal_siswa`.
+// Kode di bawah mengasumsikan kolom `jenis` (text, nullable) SUDAH/AKAN ditambahkan
+// ke `materi_file` lewat migrasi. Kalau belum, siapkan migration SQL-nya dulu:
+//   alter table materi_file add column jenis text;
 const jenisOptions = ['Materi Sekolah', 'Tugas', 'Penilaian'];
 
 // ─── Palet warna (dark theme, sama seperti StudentMateri) ────────────────────
@@ -198,6 +230,7 @@ const ArsipEntryCard = ({ item, onDelete, deleting }) => {
           </div>
           <div style={{ fontSize: '0.76rem', color: C.textFaint, marginTop: '2px' }}>
             {formatTanggalSingkat(item.created_at)}
+            {item.guruNamaFolder && <span> · folder guru: {item.guruNamaFolder}</span>}
           </div>
         </div>
         <Pill bg={js.bg} color={js.fg}>{item.jenis}</Pill>
@@ -274,6 +307,8 @@ const FolderShared = () => {
   // ── State: Request Materi ───────────────────────────────────────────────────
   const [materiRequestList, setMateriRequestList] = useState([]);
   const [requestForm, setRequestForm] = useState({ guruId: '', judul: '', deskripsi: '' });
+  const [requestFile, setRequestFile] = useState(null);
+  const [requestFileError, setRequestFileError] = useState('');
   const [submittingRequest, setSubmittingRequest] = useState(false);
   const [requestMsg, setRequestMsg] = useState(null);
 
@@ -299,7 +334,13 @@ const FolderShared = () => {
   const [deleting, setDeleting] = useState({});
 
   // ── Tab aktif ────────────────────────────────────────────────────────────────
-  const [activeTab, setActiveTab] = useState('materi'); // 'materi' | 'request' | 'upload'
+  // Kalau diarahkan dari halaman lain (mis. tombol "+ Minta Materi" di
+  // StudentHome) dengan navigate(..., { state: { tab: 'request' } }),
+  // langsung buka tab yang dituju alih-alih selalu mulai dari 'materi'.
+  const location = useLocation();
+  const VALID_TABS = ['materi', 'request', 'upload'];
+  const initialTab = VALID_TABS.includes(location.state?.tab) ? location.state.tab : 'materi';
+  const [activeTab, setActiveTab] = useState(initialTab); // 'materi' | 'request' | 'upload'
 
   // ─── Ambil profil siswa yang login ─────────────────────────────────────────
   useEffect(() => {
@@ -374,17 +415,56 @@ const FolderShared = () => {
       setSesiList(sesiData || []);
 
       if (profileIds.length > 0) {
-        let fileQuery = supabase
+        // ⚠️ FIX: filter `.eq('kelas', studentProfile.kelas)` yang sebelumnya
+        // dipasang di query SQL ini SELALU menerapkan ke SEMUA baris (baik
+        // kategori 'Sekolah' maupun 'Request') SEBELUM kita sempat tahu
+        // kategorinya apa. Masalahnya: format string `kelas` yang ditulis
+        // TeacherAbsensi.js (`${jenjang} ${kelasManual}`, misal "SMA X")
+        // hampir pasti TIDAK identik dengan format `profiles.kelas` milik
+        // siswa (mis. cuma "X", atau format lain dari form pendaftaran/admin).
+        // Begitu tidak match, filter ini menghasilkan 0 baris SAMA SEKALI --
+        // termasuk materi kategori 'Sekolah' yang sebenarnya SUDAH benar
+        // tertaut ke folder siswa ini lewat `folder_id`/`siswa_id` (link
+        // berbasis ID, seharusnya jadi satu-satunya sumber kebenaran untuk
+        // kategori 'Sekolah', bukan dobel-disaring lagi pakai string `kelas`
+        // yang rawan beda format). Makanya "Materi dari Guru" tampil 0 padahal
+        // guru sudah upload & foldernya sudah benar.
+        //
+        // Perbaikan: filter `kelas` TIDAK lagi dipasang di query SQL. Untuk
+        // kategori 'Sekolah', cukup andalkan `folder_materi.siswa_id === userId`
+        // (sudah pasti benar, berbasis ID). Untuk kategori 'Request' (yang
+        // memang masih broadcast per-kelas, belum folder-scoped -- lihat
+        // catatan di bawah), filter `kelas` tetap diterapkan tapi di sisi
+        // client saja, supaya satu baris 'Sekolah' yang formatnya beda tidak
+        // ikut ke-nolkan gara-gara baris 'Request' lain.
+        const { data: fileData, error: fileErr } = await supabase
           .from('materi_file')
-          .select('id, nama, tipe, tanggal, url, kelas, status, deskripsi, bab_id, user_id, diupload_oleh, mapel, bab, sub_bab')
+          .select('id, nama, tipe, tanggal, url, kelas, status, deskripsi, bab_id, user_id, diupload_oleh, mapel, bab, sub_bab, kategori, folder_id, folder_materi:folder_id ( siswa_id )')
           .in('user_id', profileIds)
           .eq('status', 'Dipublish')
+          .in('kategori', ['Sekolah', 'Request'])
           .order('tanggal', { ascending: false });
-        if (studentProfile?.kelas) fileQuery = fileQuery.eq('kelas', studentProfile.kelas);
-
-        const { data: fileData, error: fileErr } = await fileQuery;
         if (fileErr) throw fileErr;
-        setMateriFileAll(fileData || []);
+
+        // Materi 'Pribadi' guru sudah tersaring lewat filter kategori di atas
+        // (tidak pernah ikut ke-query). Untuk kategori 'Sekolah' (Shared),
+        // materi HARUS berada di folder milik siswa ini sendiri
+        // (folder_materi.siswa_id === userId) -- kalau folder_id kosong atau
+        // folder itu bukan folder siswa ini, materi tidak ditampilkan sama
+        // sekali (disepakati: tanpa folder = tidak tampil ke siapapun). Ini
+        // link berbasis ID, jadi TIDAK perlu (dan tidak boleh) disaring lagi
+        // pakai string `kelas` yang formatnya bisa beda-beda antar file.
+        // Kategori 'Request' untuk sementara masih broadcast per-kelas seperti
+        // sebelumnya (alur "Kirim Materi" di TeacherHome.js belum dipastikan
+        // ikut mengisi folder_id ke folder siswa yang me-request -- perlu
+        // ditinjau ulang saat alur itu disentuh), makanya masih perlu
+        // dicocokkan ke `studentProfile.kelas` di sini.
+        const scopedFileData = (fileData || []).filter((f) => {
+          if (f.kategori === 'Sekolah') return f.folder_materi?.siswa_id === userId;
+          return !studentProfile?.kelas || f.kelas === studentProfile.kelas; // 'Request'
+        });
+
+        setMateriFileAll(scopedFileData);
       } else {
         setMateriFileAll([]);
       }
@@ -407,28 +487,59 @@ const FolderShared = () => {
   useEffect(() => { if (userId) loadMateri(); }, [userId, loadMateri]);
 
   // ─── Ambil riwayat upload arsip siswa ini ──────────────────────────────────
+  // Sekarang baca dari `materi_file` (diupload_oleh = siswa ini), lintas semua
+  // guru/folder -- bukan lagi dari `bank_soal_siswa`. Field di-mapping ke bentuk
+  // lama (judul/file_url/created_at) supaya ArsipEntryCard tidak perlu diubah.
   const loadEntries = useCallback(async () => {
     if (!studentProfile) return;
     setLoadingEntries(true);
     setEntriesError('');
     try {
       const { data, error } = await supabase
-        .from(TABLE_ARSIP)
-        .select('id, jenis, bab, sub_bab, judul, deskripsi, file_name, file_url, created_at')
-        .eq('siswa_id', studentProfile.id)
-        .order('created_at', { ascending: false });
+        .from(TABLE_MATERI)
+        .select('id, jenis, bab, sub_bab, nama, deskripsi, url, tanggal, folder_id, folder_materi:folder_id ( siswa_id, nama, user_id )')
+        .eq('diupload_oleh', studentProfile.id)
+        .order('tanggal', { ascending: false });
       if (error) throw error;
-      setEntries(data || []);
+
+      const mapped = (data || []).map((m) => ({
+        id: m.id,
+        jenis: m.jenis,
+        bab: m.bab,
+        sub_bab: m.sub_bab,
+        judul: m.nama,
+        deskripsi: m.deskripsi,
+        file_url: m.url,
+        created_at: m.tanggal,
+        folder_id: m.folder_id,
+        // Nama guru pemilik folder ditampilkan di kartu supaya siswa tahu
+        // arsip ini "nempel" di folder guru yang mana (siswa bisa punya >1 guru).
+        guruNamaFolder: guruByProfileId[m.folder_materi?.user_id]?.nama || null,
+      }));
+      setEntries(mapped);
     } catch (err) {
       setEntriesError('Gagal memuat riwayat: ' + err.message);
     } finally {
       setLoadingEntries(false);
     }
-  }, [studentProfile]);
+  }, [studentProfile, guruByProfileId]);
 
   useEffect(() => { if (studentProfile) loadEntries(); }, [studentProfile, loadEntries]);
 
   // ─── Turunan: daftar Pertemuan (gabungan sesi_pembelajaran + materi_file) ──
+  // ⚠️ FIX: sebelumnya pertemuanList HANYA dibangun dari `sesiList`
+  // (baris `sesi_pembelajaran`, yaitu laporan absensi dari TeacherAbsensi.js)
+  // -- file materi_file yang cocok (guru+tanggal sama) ditempel ke situ, tapi
+  // grup guru+tanggal yang TIDAK punya baris sesi_pembelajaran sama sekali
+  // dibuang begitu saja. Akibatnya materi Shared yang diupload guru langsung
+  // dari TeacherArsipMateri (kategori 'Sekolah', folder milik siswa ini) --
+  // tanpa disertai laporan absensi di tanggal yang sama -- tidak pernah
+  // muncul sebagai kartu di tab "Materi Dipelajari", walau file-nya sudah
+  // benar tersimpan & ikut kehitung di badge total (lihat `materiFileAll.length`
+  // di bagian statistik atas). Sekarang setiap grup guru+tanggal yang belum
+  // "diklaim" oleh sesi manapun dibuatkan kartu pertemuan tersendiri (tanpa
+  // status absensi, karena memang bukan hasil laporan absensi), supaya SEMUA
+  // materi Shared yang ditujukan ke folder siswa ini pasti tampil di sini.
   const pertemuanList = useMemo(() => {
     const fileMap = {};
     materiFileAll.forEach(f => {
@@ -437,16 +548,18 @@ const FolderShared = () => {
       fileMap[key].push(f);
     });
 
-    const ascending = [...sesiList].sort((a, b) => new Date(a.tanggal) - new Date(b.tanggal));
+    const usedKeys = new Set();
 
-    const built = ascending.map((sesi, idx) => {
+    const ascendingSesi = [...sesiList].sort((a, b) => new Date(a.tanggal) - new Date(b.tanggal));
+
+    const sesiEntries = ascendingSesi.map((sesi) => {
       const key = `${sesi.guru_id}|${dateKey(sesi.tanggal)}`;
+      usedKeys.add(key);
       const files = fileMap[key] || [];
       const mapelDariFile = files.find(f => f.mapel)?.mapel;
       const guruInfo = guruByProfileId[sesi.guru_id];
       return {
         id: sesi.id,
-        pertemuanKe: idx + 1,
         tanggal: sesi.tanggal,
         judulMateri: sesi.judul_materi,
         catatan: sesi.catatan,
@@ -457,6 +570,35 @@ const FolderShared = () => {
         files,
       };
     });
+
+    // Grup guru+tanggal dari materi_file yang tidak punya sesi_pembelajaran
+    // pasangannya -- ini yang tadinya hilang. Dibuatkan entri "pertemuan"
+    // sintetis (id diprefix `materi-` supaya tidak pernah bentrok dengan id
+    // sesi_pembelajaran yang asli).
+    const materiOnlyEntries = Object.keys(fileMap)
+      .filter((key) => !usedKeys.has(key))
+      .map((key) => {
+        const files = [...fileMap[key]].sort((a, b) => new Date(b.tanggal) - new Date(a.tanggal));
+        const guruId = key.split('|')[0];
+        const guruInfo = guruByProfileId[guruId];
+        const mapelDariFile = files.find(f => f.mapel)?.mapel;
+        const judulDariFile = files.find(f => f.bab)?.bab;
+        return {
+          id: `materi-${key}`,
+          tanggal: files[0]?.tanggal,
+          judulMateri: judulDariFile || null,
+          catatan: null,
+          status: null,
+          guruId,
+          guruNama: guruInfo?.nama || 'Guru',
+          mapel: mapelDariFile || 'Materi',
+          files,
+        };
+      });
+
+    const built = [...sesiEntries, ...materiOnlyEntries]
+      .sort((a, b) => new Date(a.tanggal) - new Date(b.tanggal))
+      .map((p, idx) => ({ ...p, pertemuanKe: idx + 1 }));
 
     return built.reverse();
   }, [sesiList, materiFileAll, guruByProfileId]);
@@ -490,6 +632,16 @@ const FolderShared = () => {
   // ─── Kirim permintaan materi baru ──────────────────────────────────────────
   const goToRequestTab = () => { setActiveTab('request'); setRequestMsg(null); };
 
+  const handleRequestFileSelect = (f) => {
+    if (!f) return;
+    if (f.size > MAX_SIZE_REQUEST_MB * 1024 * 1024) {
+      setRequestFileError(`Ukuran file maksimal ${MAX_SIZE_REQUEST_MB}MB.`);
+      return;
+    }
+    setRequestFileError('');
+    setRequestFile(f);
+  };
+
   const submitMateriRequest = async () => {
     setRequestMsg(null);
     if (!requestForm.judul.trim()) {
@@ -500,6 +652,22 @@ const FolderShared = () => {
     }
     setSubmittingRequest(true);
     try {
+      // Lampiran opsional: upload dulu ke storage sebelum insert baris
+      // `materi_request`, supaya kalau upload gagal, kita tidak kepalang
+      // sudah bikin baris request tanpa file yang dijanjikan di form.
+      let fileUrl = null;
+      let fileName = null;
+      if (requestFile) {
+        const path = `${userId}/${Date.now()}_${sanitizeFileName(requestFile.name)}`;
+        const { error: uploadErr } = await supabase.storage
+          .from(BUCKET_MATERI_REQUEST)
+          .upload(path, requestFile, { cacheControl: '3600', upsert: false });
+        if (uploadErr) throw uploadErr;
+        const { data: publicUrlData } = supabase.storage.from(BUCKET_MATERI_REQUEST).getPublicUrl(path);
+        fileUrl = publicUrlData?.publicUrl || null;
+        fileName = requestFile.name;
+      }
+
       const payload = {
         guru_id: requestForm.guruId,
         siswa_id: userId,
@@ -507,6 +675,8 @@ const FolderShared = () => {
         kelas: studentProfile?.kelas || '-',
         judul_materi: requestForm.judul.trim(),
         deskripsi: requestForm.deskripsi.trim() || null,
+        file_url: fileUrl,
+        file_name: fileName,
         status: 'baru',
         created_at: new Date().toISOString(),
       };
@@ -527,6 +697,8 @@ const FolderShared = () => {
       }
 
       setRequestForm({ guruId: '', judul: '', deskripsi: '' });
+      setRequestFile(null);
+      setRequestFileError('');
       setRequestMsg({ type: 'success', text: 'Permintaan materi berhasil dikirim.' });
       await loadMateri();
     } catch (err) {
@@ -538,6 +710,8 @@ const FolderShared = () => {
   };
 
   // ─── Form helpers Upload Arsip ─────────────────────────────────────────────
+  const [uploadGuruId, setUploadGuruId] = useState('');
+
   const resetForm = () => {
     setJenis(jenisOptions[0]);
     setBab('');
@@ -546,6 +720,39 @@ const FolderShared = () => {
     setDeskripsi('');
     setFile(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  // Cari folder 'Sekolah' milik siswa ini untuk guru terpilih. Kalau belum ada
+  // (mis. guru belum pernah membuka TeacherArsipMateri sejak siswa ini masuk
+  // jadwalnya, sehingga syncStudentFolders belum sempat jalan), buat baris
+  // folder_materi baru di sini juga -- supaya siswa tidak terblokir menunggu
+  // guru buka halaman arsipnya dulu.
+  // 🔧 KONFIRMASI DIPERLUKAN: nama kolom folder_materi (terutama `user_id` sebagai
+  // pemilik/guru, dan `nama` sebagai judul folder) diasumsikan sama dengan yang
+  // dipakai syncStudentFolders() di utils/studentFolderSync.js. Sesuaikan kalau beda.
+  const ensureStudentFolder = async (guruProfileId) => {
+    const { data: existing, error: findErr } = await supabase
+      .from(TABLE_FOLDER)
+      .select('id')
+      .eq('siswa_id', studentProfile.id)
+      .eq('user_id', guruProfileId)
+      .eq('kategori', 'Sekolah')
+      .maybeSingle();
+    if (findErr) throw findErr;
+    if (existing) return existing.id;
+
+    const { data: created, error: createErr } = await supabase
+      .from(TABLE_FOLDER)
+      .insert({
+        user_id: guruProfileId,
+        siswa_id: studentProfile.id,
+        kategori: 'Sekolah',
+        nama: studentProfile.full_name || 'Siswa',
+      })
+      .select('id')
+      .single();
+    if (createErr) throw createErr;
+    return created.id;
   };
 
   const handleFileSelect = (f) => {
@@ -570,43 +777,78 @@ const FolderShared = () => {
     setFormError('');
     setFormSuccess('');
 
+    if (!uploadGuruId) return setFormError('Pilih guru tujuan terlebih dahulu.');
     if (!bab.trim()) return setFormError('Bab wajib diisi.');
     if (!judul.trim()) return setFormError('Judul wajib diisi.');
     if (!file) return setFormError('File wajib diupload.');
 
+    const guruInfo = guruByGuruId[uploadGuruId];
+    if (!guruInfo?.profile_id) return setFormError('Data guru tujuan tidak lengkap, coba muat ulang halaman.');
+
     setSubmitting(true);
     try {
-      const path = `${studentProfile.id}/${Date.now()}_${sanitizeFileName(file.name)}`;
+      // 1. Pastikan folder 'Sekolah' milik siswa ini untuk guru terpilih ada
+      //    (folder yang SAMA dengan yang dilihat guru di TeacherArsipMateri).
+      const folderId = await ensureStudentFolder(guruInfo.profile_id);
 
+      // 2. Upload file fisik ke storage.
+      const path = `${folderId}/${Date.now()}_${sanitizeFileName(file.name)}`;
       const { error: uploadError } = await supabase.storage
-        .from(BUCKET_ARSIP)
+        .from(BUCKET_MATERI)
         .upload(path, file, { cacheControl: '3600', upsert: false });
       if (uploadError) throw uploadError;
 
-      const { data: publicUrlData } = supabase.storage.from(BUCKET_ARSIP).getPublicUrl(path);
+      const { data: publicUrlData } = supabase.storage.from(BUCKET_MATERI).getPublicUrl(path);
       const fileUrl = publicUrlData?.publicUrl;
       if (!fileUrl) throw new Error('Gagal mendapatkan URL file setelah upload.');
 
+      // 3. Insert baris materi_file LANGSUNG ke folder guru tsb -- ini yang
+      //    membuat file otomatis "muncul" di sisi guru, tanpa proses copy.
+      //    status 'Dipublish' supaya langsung terlihat guru di tab default
+      //    TeacherArsipMateri (samakan dengan status yang dipakai guru sendiri
+      //    saat upload -- 🔧 konfirmasi ulang kalau ternyata perlu status
+      //    "menunggu review" dulu sebelum guru approve).
       const { data: inserted, error: insertError } = await supabase
-        .from(TABLE_ARSIP)
+        .from(TABLE_MATERI)
         .insert([
           {
-            siswa_id: studentProfile.id,
-            jenis,
+            nama: judul.trim(),
+            tipe: fileTypeFromUrl(file.name),
+            tanggal: new Date().toISOString(),
+            url: fileUrl,
+            kelas: studentProfile.kelas || null,
+            status: 'Dipublish',
+            deskripsi: deskripsi.trim() || null,
             bab: bab.trim(),
             sub_bab: subBab.trim() || null,
-            judul: judul.trim(),
-            deskripsi: deskripsi.trim() || null,
-            file_name: file.name,
-            file_url: fileUrl,
+            jenis,
+            kategori: 'Sekolah',
+            folder_id: folderId,
+            user_id: guruInfo.profile_id,
+            diupload_oleh: studentProfile.id,
           },
         ])
-        .select();
+        .select('id, jenis, bab, sub_bab, nama, deskripsi, url, tanggal, folder_id')
+        .single();
 
       if (insertError) throw insertError;
 
-      setEntries((prev) => [inserted[0], ...prev]);
-      setFormSuccess('Berhasil diupload.');
+      setEntries((prev) => [
+        {
+          id: inserted.id,
+          jenis: inserted.jenis,
+          bab: inserted.bab,
+          sub_bab: inserted.sub_bab,
+          judul: inserted.nama,
+          deskripsi: inserted.deskripsi,
+          file_url: inserted.url,
+          created_at: inserted.tanggal,
+          folder_id: inserted.folder_id,
+          guruNamaFolder: guruInfo.nama,
+        },
+        ...prev,
+      ]);
+      setFormSuccess(`Berhasil diupload ke folder Anda pada ${guruInfo.nama}.`);
       resetForm();
       setTimeout(() => setFormSuccess(''), 3000);
     } catch (err) {
@@ -622,21 +864,25 @@ const FolderShared = () => {
     setDeleting((prev) => ({ ...prev, [item.id]: true }));
     try {
       try {
-        const marker = `/${BUCKET_ARSIP}/`;
+        const marker = `/${BUCKET_MATERI}/`;
         const idx = item.file_url.indexOf(marker);
         if (idx !== -1) {
           const path = decodeURIComponent(item.file_url.slice(idx + marker.length));
-          await supabase.storage.from(BUCKET_ARSIP).remove([path]);
+          await supabase.storage.from(BUCKET_MATERI).remove([path]);
         }
       } catch (storageErr) {
         console.warn('Gagal hapus file di storage:', storageErr.message);
       }
 
+      // Guard `.eq('diupload_oleh', ...)` supaya siswa cuma bisa hapus arsip
+      // yang dia sendiri upload -- bukan materi yang diupload guru meski
+      // sama-sama ada di folder ini. RLS di sisi Supabase tetap WAJIB
+      // menegakkan aturan yang sama (jangan andalkan filter client-side saja).
       const { error } = await supabase
-        .from(TABLE_ARSIP)
+        .from(TABLE_MATERI)
         .delete()
         .eq('id', item.id)
-        .eq('siswa_id', studentProfile.id);
+        .eq('diupload_oleh', studentProfile.id);
 
       if (error) throw error;
 
@@ -973,6 +1219,17 @@ const FolderShared = () => {
                           {item.deskripsi && (
                             <div style={{ color: C.textFaint, fontSize: '0.76rem', fontStyle: 'italic', marginTop: '2px' }}>{item.deskripsi}</div>
                           )}
+                          {item.file_url && (
+                            <a
+                              href={item.file_url} download target="_blank" rel="noreferrer"
+                              style={{
+                                display: 'inline-flex', alignItems: 'center', gap: '4px', marginTop: '4px',
+                                color: C.gold, fontSize: '0.76rem', fontWeight: 600, textDecoration: 'none'
+                              }}
+                            >
+                              📎 {item.file_name || 'Lampiran'}
+                            </a>
+                          )}
                           <div style={{ color: C.textFaint, fontSize: '0.72rem', marginTop: '4px' }}>{formatWaktuUpload(item.created_at)}</div>
                         </div>
                         <Pill bg={badge.bg} color={badge.color}>{badge.emoji} {badge.label}</Pill>
@@ -1034,6 +1291,34 @@ const FolderShared = () => {
                 />
               </div>
 
+              <div>
+                <label style={fieldLabel}>Lampiran (opsional)</label>
+                <input
+                  type="file"
+                  accept={REQUEST_FILE_ACCEPT}
+                  onChange={e => handleRequestFileSelect(e.target.files?.[0])}
+                  style={{ ...fieldInput, padding: '8px', cursor: 'pointer' }}
+                />
+                <div style={{ color: C.textFaint, fontSize: '0.72rem', marginTop: '4px' }}>
+                  PDF, gambar, Word, Excel, atau PPT, maks {MAX_SIZE_REQUEST_MB}MB. Contoh: foto soal yang belum dipahami.
+                </div>
+                {requestFile && !requestFileError && (
+                  <div style={{ color: C.textDim, fontSize: '0.78rem', marginTop: '6px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    📎 {requestFile.name}
+                    <button
+                      type="button"
+                      onClick={() => { setRequestFile(null); setRequestFileError(''); }}
+                      style={{ background: 'none', border: 'none', color: C.red, cursor: 'pointer', fontSize: '0.78rem', padding: 0 }}
+                    >
+                      Hapus
+                    </button>
+                  </div>
+                )}
+                {requestFileError && (
+                  <div style={{ color: C.red, fontSize: '0.76rem', marginTop: '4px' }}>{requestFileError}</div>
+                )}
+              </div>
+
               {requestMsg && (
                 <div style={{
                   padding: '9px 12px', borderRadius: '10px', fontSize: '0.8rem', fontWeight: 600,
@@ -1072,6 +1357,19 @@ const FolderShared = () => {
                 display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
                 gap: '1rem', marginBottom: '1rem'
               }}>
+                <div>
+                  <label style={fieldLabel}>Guru Tujuan</label>
+                  <select value={uploadGuruId} onChange={(e) => setUploadGuruId(e.target.value)} style={{ ...fieldInput, cursor: 'pointer' }}>
+                    <option value="">-- Pilih Guru --</option>
+                    {guruOptions.map((g) => (
+                      <option key={g.id} value={g.id}>{g.nama}</option>
+                    ))}
+                  </select>
+                  <div style={{ fontSize: '0.72rem', color: C.textFaint, marginTop: '4px' }}>
+                    File akan tersimpan di folder Anda pada guru ini, dan otomatis terlihat oleh guru tersebut.
+                  </div>
+                </div>
+
                 <div>
                   <label style={fieldLabel}>Kategori</label>
                   <select value={jenis} onChange={(e) => setJenis(e.target.value)} style={{ ...fieldInput, cursor: 'pointer' }}>

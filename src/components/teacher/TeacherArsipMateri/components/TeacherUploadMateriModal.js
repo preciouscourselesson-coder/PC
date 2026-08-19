@@ -1,13 +1,13 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { C } from '../../../shared/Theme';
-import { KATEGORI_OPTIONS, BENTUK_OPTIONS, MAPEL_OPTIONS, KELAS_GROUPS, JENIS_OPTIONS } from '../constants';
+import { KATEGORI_OPTIONS, BENTUK_OPTIONS, MAPEL_OPTIONS, KELAS_GROUPS, JENIS_OPTIONS, JENIS_LABEL } from '../constants';
 import { useUploadMateriForm } from '../hooks/useUploadMateriForm';
 import { SegmentedControl } from './SegmentedControl';
 
 const uploadFieldLabel = { fontSize: '0.8rem', color: C.gray, display: 'block', marginBottom: '4px', marginTop: '10px' };
 const uploadFieldInput = { width: '100%', padding: '10px 11px', borderRadius: '9px', border: `1.5px solid ${C.border}`, boxSizing: 'border-box', fontFamily: 'inherit', fontSize: '16px' };
 
-export const TeacherUploadMateriModal = ({ userId, onUploaded }) => {
+export const TeacherUploadMateriModal = ({ userId, onUploaded, prefill }) => {
   const {
     loadingOptions,
     kategori, setKategori,
@@ -32,6 +32,22 @@ export const TeacherUploadMateriModal = ({ userId, onUploaded }) => {
     handleSubmit,
   } = useUploadMateriForm({ userId, onUploaded });
 
+  // Prefill datang dari MateriRequestSection/KirimMateriModal (TeacherHome.js)
+  // saat guru menjawab permintaan materi siswa lewat "Upload dulu di Arsip
+  // Materi ->". Hanya diterapkan sekali per mount (dan setelah loadingOptions
+  // selesai, supaya tidak tertimpa reset dari useUploadMateriForm).
+  const appliedPrefillRef = useRef(false);
+  const [cameFromRequest, setCameFromRequest] = useState(false);
+  useEffect(() => {
+    if (!prefill || appliedPrefillRef.current || loadingOptions) return;
+    setKategori('Sekolah'); // request materi selalu untuk siswa -> kategori Shared
+    if (prefill.judul) setJudul(prefill.judul);
+    if (prefill.kelas) setKelas(prefill.kelas);
+    if (prefill.deskripsi) setDeskripsi(prefill.deskripsi);
+    setCameFromRequest(true);
+    appliedPrefillRef.current = true;
+  }, [prefill, loadingOptions, setKategori, setJudul, setKelas, setDeskripsi]);
+
   return (
     <div style={{ background: C.white, borderRadius: '16px', border: `1.5px solid ${C.border}`, padding: '1.2rem', fontFamily: 'inherit' }}>
         <div style={{ fontWeight: 'bold', fontSize: '1.05rem', color: C.dark, marginBottom: '4px' }}>+ Unggah Materi</div>
@@ -41,6 +57,12 @@ export const TeacherUploadMateriModal = ({ userId, onUploaded }) => {
           <div style={{ padding: '24px 0', textAlign: 'center', color: C.gray }}>Memuat data...</div>
         ) : (
           <>
+            {cameFromRequest && (
+              <div style={{ background: C.goldBg, color: C.gold, borderRadius: '8px', padding: '8px 10px', fontSize: '0.78rem', marginTop: '10px', fontWeight: 600, lineHeight: 1.5 }}>
+                📥 Menjawab permintaan materi siswa — Judul &amp; Kelas sudah terisi. Lengkapi Mapel &amp; Bab sebelum unggah, lalu pilih folder siswa (🎓) yang sesuai.
+              </div>
+            )}
+
             <label style={uploadFieldLabel}>Kategori Materi</label>
             <SegmentedControl options={KATEGORI_OPTIONS} value={kategori} onChange={setKategori} />
 
@@ -137,7 +159,7 @@ export const TeacherUploadMateriModal = ({ userId, onUploaded }) => {
 
                 <label style={uploadFieldLabel}>Jenis</label>
                 <select style={uploadFieldInput} value={jenis} onChange={e => setJenis(e.target.value)}>
-                  {JENIS_OPTIONS.map(j => <option key={j} value={j}>{j}</option>)}
+                  {JENIS_OPTIONS.map(j => <option key={j} value={j}>{JENIS_LABEL[j] || j}</option>)}
                 </select>
               </>
             )}

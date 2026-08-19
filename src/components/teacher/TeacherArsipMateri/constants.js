@@ -16,7 +16,7 @@ export const STATUS_STYLE = {
 // saat guru menjawab request dengan mengunggah file baru, lalu langsung tersimpan di arsip ini).
 export const KATEGORI_OPTIONS = [
   { value: 'Pribadi', label: 'Pribadi' },
-  { value: 'Sekolah', label: 'Sekolah yang Diajar' },
+  { value: 'Sekolah', label: 'Bimbel yang Diajar' },
 ];
 
 // Dipakai khusus untuk tab filter di halaman arsip (baca-saja). "Sekolah yang
@@ -51,9 +51,9 @@ export const KATEGORI_STYLE = {
 };
 
 export const KATEGORI_LABEL = {
-  Pribadi: 'Pribadi',
-  Sekolah: 'Sekolah',
-  Request: 'Dari Request',
+  Pribadi: 'Materi Pembelajaran',
+  Sekolah: 'Bimbel',
+  Request: 'Request',
 };
 
 // Jenis materi khusus untuk kategori Sekolah
@@ -62,6 +62,14 @@ export const JENIS_STYLE = {
   Materi: { bg: C.blueBg, color: C.blue },
   Tugas: { bg: C.goldBg, color: C.gold },
   'Penilaian Harian': { bg: C.redBg, color: C.red },
+};
+// Label tampilan untuk tiap jenis materi Bimbel (nilai di DB tetap sama,
+// hanya cara menampilkannya ke guru yang disesuaikan: Materi Bimbel /
+// Penilaian / Penugasan).
+export const JENIS_LABEL = {
+  Materi: 'Materi Bimbel',
+  Tugas: 'Penugasan',
+  'Penilaian Harian': 'Penilaian',
 };
 
 // Bentuk unggahan: file yang diupload, atau tautan (link) eksternal
