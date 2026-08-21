@@ -45,6 +45,11 @@ const REQUEST_FILE_ACCEPT = '.pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx,.ppt,.pp
 // ke `materi_file` lewat migrasi. Kalau belum, siapkan migration SQL-nya dulu:
 //   alter table materi_file add column jenis text;
 const jenisOptions = ['Materi Sekolah', 'Tugas', 'Penilaian'];
+// Opsi mapel untuk form Upload Arsip siswa -- disamakan persis dengan
+// MAPEL_OPTIONS di TeacherAbsensi.js / TeacherArsipMateri/useUploadMateriForm.js
+// supaya nilai yang tersimpan konsisten dan bisa dicocokkan lintas alur upload
+// (guru maupun siswa) saat difilter di dropdown Mapel tab "Materi Dipelajari".
+const MAPEL_OPTIONS = ['Matematika', 'Fisika', 'Kimia', 'Bahasa Inggris'];
 
 // ─── Palet warna (dark theme, sama seperti StudentMateri) ────────────────────
 const C = {
@@ -301,12 +306,14 @@ const FolderShared = () => {
   const [loadingMateri, setLoadingMateri] = useState(true);
 
   const [mapelFilter, setMapelFilter] = useState('Semua Mapel');
+  const [guruFilter, setGuruFilter] = useState('Semua Guru');
+  const [bulanFilter, setBulanFilter] = useState('Semua Bulan');
   const [viewMode, setViewMode] = useState('list');
   const [expandedIds, setExpandedIds] = useState(new Set());
 
   // ── State: Request Materi ───────────────────────────────────────────────────
   const [materiRequestList, setMateriRequestList] = useState([]);
-  const [requestForm, setRequestForm] = useState({ guruId: '', judul: '', deskripsi: '' });
+  const [requestForm, setRequestForm] = useState({ guruId: '', mapel: '', judul: '', deskripsi: '' });
   const [requestFile, setRequestFile] = useState(null);
   const [requestFileError, setRequestFileError] = useState('');
   const [submittingRequest, setSubmittingRequest] = useState(false);
@@ -320,6 +327,7 @@ const FolderShared = () => {
   const [jenis, setJenis] = useState(jenisOptions[0]);
   const [bab, setBab] = useState('');
   const [subBab, setSubBab] = useState('');
+  const [mapel, setMapel] = useState('');
   const [judul, setJudul] = useState('');
   const [deskripsi, setDeskripsi] = useState('');
   const [file, setFile] = useState(null);
@@ -609,10 +617,37 @@ const FolderShared = () => {
     return ['Semua Mapel', ...Array.from(set).sort()];
   }, [materiFileAll]);
 
+  // Daftar guru yang muncul di riwayat pertemuan siswa ini (bukan dari
+  // materiFileAll supaya nama guru yang dipakai persis sama dengan yang
+  // ditampilkan di kartu pertemuan -- lihat p.guruNama di pertemuanList).
+  const guruOptionsList = useMemo(() => {
+    const set = new Set();
+    pertemuanList.forEach(p => { if (p.guruNama) set.add(p.guruNama); });
+    return ['Semua Guru', ...Array.from(set).sort()];
+  }, [pertemuanList]);
+
+  // Daftar bulan+tahun ("YYYY-MM") yang punya pertemuan, diurutkan dari yang
+  // paling baru. Label tampilan ("Agustus 2026") disusun terpisah di
+  // bulanFilterLabel supaya value select tetap "YYYY-MM" (gampang dibanding).
+  const bulanOptionsList = useMemo(() => {
+    const set = new Set();
+    pertemuanList.forEach(p => { if (p.tanggal) set.add(dateKey(p.tanggal).slice(0, 7)); });
+    return ['Semua Bulan', ...Array.from(set).sort().reverse()];
+  }, [pertemuanList]);
+
+  const bulanFilterLabel = (ym) => {
+    if (ym === 'Semua Bulan') return ym;
+    const [y, m] = ym.split('-');
+    return `${BULAN[parseInt(m, 10) - 1]} ${y}`;
+  };
+
   const filteredPertemuan = useMemo(() => {
-    if (mapelFilter === 'Semua Mapel') return pertemuanList;
-    return pertemuanList.filter(p => p.mapel === mapelFilter);
-  }, [pertemuanList, mapelFilter]);
+    return pertemuanList.filter(p => (
+      (mapelFilter === 'Semua Mapel' || p.mapel === mapelFilter) &&
+      (guruFilter === 'Semua Guru' || p.guruNama === guruFilter) &&
+      (bulanFilter === 'Semua Bulan' || dateKey(p.tanggal).slice(0, 7) === bulanFilter)
+    ));
+  }, [pertemuanList, mapelFilter, guruFilter, bulanFilter]);
 
   useEffect(() => {
     if (pertemuanList.length > 0 && expandedIds.size === 0) {
@@ -673,6 +708,7 @@ const FolderShared = () => {
         siswa_id: userId,
         siswa_nama: studentProfile?.full_name || '-',
         kelas: studentProfile?.kelas || '-',
+        mapel: requestForm.mapel || null,
         judul_materi: requestForm.judul.trim(),
         deskripsi: requestForm.deskripsi.trim() || null,
         file_url: fileUrl,
@@ -696,7 +732,7 @@ const FolderShared = () => {
         console.error('Gagal kirim notifikasi ke guru:', notifErr);
       }
 
-      setRequestForm({ guruId: '', judul: '', deskripsi: '' });
+      setRequestForm({ guruId: '', mapel: '', judul: '', deskripsi: '' });
       setRequestFile(null);
       setRequestFileError('');
       setRequestMsg({ type: 'success', text: 'Permintaan materi berhasil dikirim.' });
@@ -716,6 +752,7 @@ const FolderShared = () => {
     setJenis(jenisOptions[0]);
     setBab('');
     setSubBab('');
+    setMapel('');
     setJudul('');
     setDeskripsi('');
     setFile(null);
@@ -778,6 +815,7 @@ const FolderShared = () => {
     setFormSuccess('');
 
     if (!uploadGuruId) return setFormError('Pilih guru tujuan terlebih dahulu.');
+    if (!mapel) return setFormError('Mapel wajib dipilih.');
     if (!bab.trim()) return setFormError('Bab wajib diisi.');
     if (!judul.trim()) return setFormError('Judul wajib diisi.');
     if (!file) return setFormError('File wajib diupload.');
@@ -819,6 +857,7 @@ const FolderShared = () => {
             kelas: studentProfile.kelas || null,
             status: 'Dipublish',
             deskripsi: deskripsi.trim() || null,
+            mapel,
             bab: bab.trim(),
             sub_bab: subBab.trim() || null,
             jenis,
@@ -971,7 +1010,7 @@ const FolderShared = () => {
                     <div style={{ fontWeight: 700, fontSize: '1.02rem', color: C.text }}>Materi dari Guru</div>
                     <div style={{ color: C.textDim, fontSize: '0.8rem' }}>Seluruh materi yang telah Anda pelajari, per pertemuan.</div>
                   </div>
-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
                     <select
                       value={mapelFilter}
                       onChange={e => setMapelFilter(e.target.value)}
@@ -981,6 +1020,26 @@ const FolderShared = () => {
                       }}
                     >
                       {mapelOptionsList.map(m => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                    <select
+                      value={guruFilter}
+                      onChange={e => setGuruFilter(e.target.value)}
+                      style={{
+                        background: C.cardAlt, color: C.text, border: `1px solid ${C.border}`,
+                        borderRadius: '10px', padding: '8px 12px', fontSize: '0.82rem', fontFamily: 'inherit', outline: 'none'
+                      }}
+                    >
+                      {guruOptionsList.map(g => <option key={g} value={g}>{g}</option>)}
+                    </select>
+                    <select
+                      value={bulanFilter}
+                      onChange={e => setBulanFilter(e.target.value)}
+                      style={{
+                        background: C.cardAlt, color: C.text, border: `1px solid ${C.border}`,
+                        borderRadius: '10px', padding: '8px 12px', fontSize: '0.82rem', fontFamily: 'inherit', outline: 'none'
+                      }}
+                    >
+                      {bulanOptionsList.map(b => <option key={b} value={b}>{bulanFilterLabel(b)}</option>)}
                     </select>
                     <div style={{ display: 'flex', border: `1px solid ${C.border}`, borderRadius: '10px', overflow: 'hidden' }}>
                       {['list', 'grid'].map(v => (
@@ -1270,6 +1329,18 @@ const FolderShared = () => {
               </div>
 
               <div>
+                <label style={fieldLabel}>Mapel</label>
+                <select
+                  value={requestForm.mapel}
+                  onChange={e => setRequestForm({ ...requestForm, mapel: e.target.value })}
+                  style={{ ...fieldInput, cursor: 'pointer' }}
+                >
+                  <option value="">— Pilih mapel —</option>
+                  {MAPEL_OPTIONS.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </div>
+
+              <div>
                 <label style={fieldLabel}>Judul Materi</label>
                 <input
                   type="text"
@@ -1375,6 +1446,20 @@ const FolderShared = () => {
                   <select value={jenis} onChange={(e) => setJenis(e.target.value)} style={{ ...fieldInput, cursor: 'pointer' }}>
                     {jenisOptions.map((j) => (
                       <option key={j} value={j}>{j}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label style={fieldLabel}>Mapel</label>
+                  <select
+                    value={mapel}
+                    onChange={(e) => setMapel(e.target.value)}
+                    style={{ ...fieldInput, cursor: 'pointer' }}
+                  >
+                    <option value="">— Pilih mapel —</option>
+                    {MAPEL_OPTIONS.map((m) => (
+                      <option key={m} value={m}>{m}</option>
                     ))}
                   </select>
                 </div>

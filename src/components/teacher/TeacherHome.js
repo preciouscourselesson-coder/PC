@@ -19,7 +19,6 @@ import { PenilaianTerdekatCard } from './home/components/PenilaianTerdekatCard';
 import { PengajuanJadwalCard } from './home/components/PengajuanJadwalCard';
 import { PengingatPerubahanJadwal } from './home/components/PengingatPerubahanJadwal';
 import { MateriRequestSection } from './home/components/MateriRequestSection';
-import { KirimMateriModal } from './home/components/KirimMateriModal';
 import { UjianFormModal } from './home/components/UjianFormModal';
 import { PengajuanJadwalFormModal } from './home/components/PengajuanJadwalFormModal';
 
@@ -156,16 +155,6 @@ const TeacherHome = () => {
 
       {/* Materi Request */}
       <MateriRequestSection isMobile={isMobile} materiRequestList={materiRequestList} loading={loading} materiRequestHook={materiRequest} />
-
-      {/* Modal Kirim Materi: pilih dari materi yang sudah ada di Arsip Materi.
-          Upload materi baru dilakukan di halaman Arsip Materi, bukan di sini. */}
-      <KirimMateriModal
-        show={materiRequest.showKirimMateri}
-        isMobile={isMobile}
-        materiRequestList={materiRequestList}
-        materiRequestHook={materiRequest}
-        onClose={materiRequest.closeKirimMateri}
-      />
 
       {/* Modal Form Penilaian/Tugas */}
       <UjianFormModal

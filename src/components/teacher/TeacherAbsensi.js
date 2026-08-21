@@ -128,6 +128,12 @@ const TeacherAbsensi = () => {
   const [search, setSearch] = useState('');
   const [openMenuId, setOpenMenuId] = useState(null);
 
+  // Alat migrasi satu-kali: menyalin bukti file dari pertemuan LAMA (yang
+  // dibuat sebelum copyBuktiToArsipMateri ada) ke Arsip Materi per folder
+  // siswa. Lihat migrateOldFilesToArsip() di bawah.
+  const [migrating, setMigrating] = useState(false);
+  const [migrateResult, setMigrateResult] = useState(null);
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
       setGuruId(data?.user?.id || null);
@@ -408,6 +414,134 @@ const TeacherAbsensi = () => {
     if (error) {
       setEntries(prevEntries);
       showToast('error', 'Gagal menghapus: ' + error.message);
+    }
+  };
+
+  // ============================================================
+  // Migrasi satu-kali: pindahkan bukti file dari pertemuan LAMA ke Arsip
+  // Materi (materi_file), per folder siswa masing-masing.
+  //
+  // Sebelum copyBuktiToArsipMateri() ada, bukti yang diupload lewat form
+  // di atas hanya tersimpan di sesi_pembelajaran.bukti_urls -- tidak pernah
+  // disalin ke materi_file. Fungsi ini menyisir SEMUA pertemuan milik guru
+  // yang sedang login, lalu untuk tiap url bukti yang BELUM ada di
+  // materi_file, disalin dengan mapping field yang sama persis seperti
+  // copyBuktiToArsipMateri (kategori 'Sekolah', folder sesuai siswa).
+  //
+  // Aman dijalankan berkali-kali (idempotent): url yang sudah pernah
+  // disalin (baik oleh alat ini maupun oleh alur upload normal) dideteksi
+  // lewat pengecekan `materi_file.url` yang sudah ada, jadi tidak akan
+  // pernah dobel.
+  // ============================================================
+  const migrateOldFilesToArsip = async () => {
+    if (!guruId) return;
+    if (!window.confirm('Pindahkan semua file bukti dari pertemuan lama ke Arsip Materi (folder per siswa)? Proses ini aman dijalankan berkali-kali dan tidak akan menggandakan file yang sudah pernah dipindahkan.')) {
+      return;
+    }
+    setMigrating(true);
+    setMigrateResult(null);
+    try {
+      // 1. Ambil semua pertemuan milik guru ini yang punya bukti_urls.
+      const { data: sesiRows, error: sesiErr } = await supabase
+        .from(TABLE)
+        .select('id, siswa_id, tanggal, judul_materi, jenjang, kelas, mapel, bab, sub_bab, catatan, bukti_urls')
+        .eq('guru_id', guruId);
+      if (sesiErr) throw sesiErr;
+
+      const withBukti = (sesiRows || []).filter(
+        (r) => Array.isArray(r.bukti_urls) && r.bukti_urls.length > 0
+      );
+      if (withBukti.length === 0) {
+        setMigrateResult('Tidak ada file bukti pada riwayat pertemuan yang perlu dipindahkan.');
+        return;
+      }
+
+      // 2. Cek url mana saja yang SUDAH ada di materi_file supaya tidak
+      // disalin dobel (baik hasil migrasi sebelumnya maupun hasil alur
+      // upload normal / copyBuktiToArsipMateri untuk entri baru).
+      const allUrls = withBukti.flatMap((r) => r.bukti_urls);
+      const { data: existingRows, error: existErr } = await supabase
+        .from('materi_file')
+        .select('url')
+        .eq('user_id', guruId)
+        .in('url', allUrls);
+      if (existErr) throw existErr;
+      const existingUrls = new Set((existingRows || []).map((e) => e.url));
+
+      // 3. Cache folder_id per siswa (sekali sync per siswa saja).
+      const folderCache = new Map();
+      const getFolderId = async (siswaId) => {
+        if (folderCache.has(siswaId)) return folderCache.get(siswaId);
+        await syncStudentFolders(guruId);
+        const { data } = await supabase
+          .from('folder_materi')
+          .select('id')
+          .eq('user_id', guruId)
+          .eq('siswa_id', siswaId)
+          .maybeSingle();
+        const folderId = data?.id || null;
+        folderCache.set(siswaId, folderId);
+        return folderId;
+      };
+
+      // 4. Susun baris materi_file baru untuk url yang belum pernah disalin.
+      const rowsToInsert = [];
+      const siswaTanpaFolder = new Set();
+      for (const sesi of withBukti) {
+        const urlsBaru = sesi.bukti_urls.filter((u) => !existingUrls.has(u));
+        if (urlsBaru.length === 0) continue;
+
+        const folderId = await getFolderId(sesi.siswa_id);
+        if (!folderId) siswaTanpaFolder.add(sesi.siswa_id);
+
+        // Sama seperti copyBuktiToArsipMateri: susun ISO manual sebagai UTC
+        // eksplisit supaya 10 karakter pertama tetap identik dengan
+        // sesi_pembelajaran.tanggal, di timezone manapun.
+        const tanggalIso = `${sesi.tanggal}T00:00:00.000Z`;
+        const namaMateri = (sesi.bab || sesi.judul_materi || '').trim();
+
+        urlsBaru.forEach((url) => {
+          rowsToInsert.push({
+            user_id: guruId,
+            nama: namaMateri,
+            tipe: fileTypeFromUrl(url) === 'pdf' ? 'application/pdf' : 'image',
+            tanggal: tanggalIso,
+            url,
+            kelas: `${sesi.jenjang || ''} ${sesi.kelas || ''}`.trim(),
+            status: 'Dipublish',
+            deskripsi: (sesi.catatan || '').trim() || null,
+            mapel: sesi.mapel || null,
+            bab: (sesi.bab || '').trim(),
+            sub_bab: (sesi.sub_bab || '').trim() || null,
+            diupload_oleh: guruNama,
+            kategori: 'Sekolah',
+            folder_id: folderId,
+            bentuk: 'File',
+            pengajar: guruNama,
+            jenis: 'Materi',
+          });
+        });
+      }
+
+      if (rowsToInsert.length === 0) {
+        setMigrateResult('Semua file bukti sudah ada di Arsip Materi. Tidak ada yang dipindahkan.');
+        return;
+      }
+
+      const { error: insertErr } = await supabase.from('materi_file').insert(rowsToInsert);
+      if (insertErr) throw insertErr;
+
+      const ringkasan = siswaTanpaFolder.size > 0
+        ? `${rowsToInsert.length} file dipindahkan ke Arsip Materi. ${siswaTanpaFolder.size} siswa belum punya folder (file tersalin tanpa folder, bisa dirapikan lewat Arsip Materi).`
+        : `${rowsToInsert.length} file berhasil dipindahkan ke Arsip Materi, masing-masing ke folder siswanya.`;
+      setMigrateResult(ringkasan);
+      showToast('success', ringkasan);
+    } catch (err) {
+      const msg = 'Gagal memindahkan file lama: ' + err.message;
+      setMigrateResult(msg);
+      showToast('error', msg);
+    } finally {
+      setMigrating(false);
     }
   };
 
@@ -777,10 +911,36 @@ const TeacherAbsensi = () => {
       <div style={{ background: C.white, borderRadius: '16px', border: `1.5px solid ${C.border}`, padding: isMobile ? '1.1rem' : '1.75rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1.25rem' }}>
           <h2 style={{ fontSize: isMobile ? '1.1rem' : '1.15rem', fontWeight: '700', color: C.dark, margin: 0 }}>Riwayat Absensi &amp; Materi</h2>
-          <span style={{ fontSize: '0.8rem', color: C.gray }}>
-            {filteredEntries.length} dari {entries.length} pertemuan
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '0.8rem', color: C.gray }}>
+              {filteredEntries.length} dari {entries.length} pertemuan
+            </span>
+            {/* Alat migrasi satu-kali: salin bukti dari pertemuan lama ke Arsip
+                Materi (folder per siswa). Aman diklik berkali-kali. */}
+            <button
+              type="button"
+              onClick={migrateOldFilesToArsip}
+              disabled={migrating}
+              title="Pindahkan bukti file dari pertemuan lama ke Arsip Materi, sesuai folder siswa masing-masing"
+              style={{
+                background: 'none',
+                border: `1.5px solid ${C.border}`,
+                borderRadius: '8px',
+                padding: '6px 12px',
+                fontSize: '0.75rem',
+                fontWeight: 600,
+                color: C.gray,
+                cursor: migrating ? 'default' : 'pointer',
+                opacity: migrating ? 0.6 : 1,
+              }}
+            >
+              {migrating ? 'Memindahkan...' : 'Pindahkan File Lama ke Arsip'}
+            </button>
+          </div>
         </div>
+        {migrateResult && (
+          <div style={{ fontSize: '0.8rem', color: C.gray, marginBottom: '0.75rem' }}>{migrateResult}</div>
+        )}
 
         {/* Filters */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem', marginBottom: '1.25rem' }}>

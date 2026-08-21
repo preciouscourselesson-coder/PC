@@ -2,14 +2,20 @@ import { useState } from 'react';
 import { supabase } from '../../../../supabaseClient';
 import { checkedUpdate } from '../../../../utils/supabaseUpdateGuard';
 
+// Selalu urutkan pasangan id secara konsisten (string compare), supaya 1
+// pasangan pengguna cuma pernah punya 1 baris `conversations` -- didup­likasi
+// dari buildPair() di ChatMessages.js (tidak diekspor dari sana), HARUS
+// tetap identik supaya percakapan guru-siswa yang dibuat dari sini nyambung
+// dengan percakapan yang sama saat dibuka lewat halaman Pesan.
+const buildPair = (a, b) => (a < b ? [a, b] : [b, a]);
+
 /**
  * Mengelola respon guru atas permintaan materi dari siswa: tolak dengan
- * catatan, atau selesaikan dengan mengirim materi yang dipilih dari Arsip
- * Materi (upload materi baru dilakukan di halaman Arsip Materi, bukan di
- * sini -- lihat TeacherArsipMateri.js).
+ * catatan, atau tandai selesai (upload/kirim materinya sendiri dilakukan
+ * terpisah di halaman Arsip Materi -- lihat TeacherArsipMateri.js).
  */
-export function useMateriRequest({ materiRequestList, setMateriRequestList, materiArsip, setErrorMsg, showToast }) {
-  // ========== TOLAK (dengan catatan) ==========
+export function useMateriRequest({ materiRequestList, setMateriRequestList, setErrorMsg, showToast }) {
+  // ========== TOLAK / TANDAI SELESAI (dengan catatan) ==========
   const [materiRespondId, setMateriRespondId] = useState(null);
   const [materiRespondAksi, setMateriRespondAksi] = useState(null);
   const [materiCatatan, setMateriCatatan] = useState('');
@@ -25,6 +31,63 @@ export function useMateriRequest({ materiRequestList, setMateriRequestList, mate
     setMateriRespondId(null);
     setMateriRespondAksi(null);
     setMateriCatatan('');
+  };
+
+  // Kirim hasil respon (selesai/ditolak) sebagai PESAN CHAT dari guru ke
+  // siswa -- bukan lagi ke tabel `notifikasi`. Memakai tabel `conversations`
+  // + `messages` yang sama persis dengan ChatMessages.js, supaya pesan ini
+  // muncul di halaman Pesan siswa sebagai chat biasa dari gurunya (siswa
+  // bisa langsung membalas dari sana kalau perlu, tidak seperti notifikasi
+  // satu-arah sebelumnya).
+  const sendRespondAsChat = async (siswaId, pesan) => {
+    const { data: authData, error: authErr } = await supabase.auth.getUser();
+    if (authErr) throw authErr;
+    const guruId = authData?.user?.id;
+    if (!guruId) throw new Error('Sesi login guru tidak ditemukan.');
+
+    // 1. Cari percakapan guru-siswa yang sudah ada, atau buat baru kalau
+    //    belum pernah chat sama sekali (identik dengan startConversation()
+    //    di ChatMessages.js).
+    const [p1, p2] = buildPair(guruId, siswaId);
+    const { data: found, error: findErr } = await supabase
+      .from('conversations')
+      .select('*')
+      .eq('participant_one', p1)
+      .eq('participant_two', p2)
+      .maybeSingle();
+    if (findErr) throw findErr;
+
+    let convRow = found;
+    if (!convRow) {
+      const { data: created, error: createErr } = await supabase
+        .from('conversations')
+        .insert([{ participant_one: p1, participant_two: p2 }])
+        .select()
+        .single();
+      if (createErr) throw createErr;
+      convRow = created;
+    }
+
+    // 2. Insert pesan ke percakapan tsb, dikirim atas nama guru.
+    const { error: msgErr } = await supabase
+      .from('messages')
+      .insert([{
+        conversation_id: convRow.id,
+        sender_id: guruId,
+        content: pesan,
+        is_read: false,
+      }]);
+    if (msgErr) throw msgErr;
+
+    // 3. Perbarui ringkasan percakapan (last_message/last_message_at) supaya
+    //    langsung terlihat di daftar Percakapan siswa -- best-effort, tidak
+    //    membatalkan pengiriman kalau ini gagal (pesannya sendiri sudah
+    //    tersimpan di langkah 2).
+    const { error: updErr } = await supabase
+      .from('conversations')
+      .update({ last_message: pesan, last_message_at: new Date().toISOString() })
+      .eq('id', convRow.id);
+    if (updErr) console.error('Gagal memperbarui ringkasan percakapan:', updErr);
   };
 
   const submitMateriRespond = async () => {
@@ -47,102 +110,39 @@ export function useMateriRequest({ materiRequestList, setMateriRequestList, mate
       setMateriRequestList((list) =>
         list.map((m) => (m.id === materiRespondId ? { ...m, status: materiRespondAksi, catatan_guru: materiCatatan || null } : m))
       );
+
+      // Kirim hasil respon sebagai chat ke siswa (berlaku untuk 'selesai'
+      // MAUPUN 'ditolak' -- khusus penolakan ini penting supaya siswa tidak
+      // menunggu tanpa kepastian). Status materi_request sendiri sudah
+      // tersimpan di atas terlepas dari berhasil/tidaknya pengiriman chat
+      // ini -- tapi kalau gagal, guru diberi tahu lewat toast (bukan cuma
+      // silent console.error) supaya guru bisa menginformasikan siswa
+      // secara manual kalau perlu.
       if (item?.siswa_id) {
         try {
           const label = materiRespondAksi === 'selesai' ? 'diselesaikan' : 'ditolak';
-          await supabase.from('notifikasi').insert({
-            user_id: item.siswa_id,
-            pesan: `Permintaan materi "${item.judul_materi}" telah ${label} oleh guru.${materiCatatan ? ` Catatan: ${materiCatatan}` : ''}`,
-            link: null,
-          });
-        } catch (notifErr) {
-          console.error('Gagal mengirim notifikasi ke siswa:', notifErr);
+          const pesan = `Permintaan materi "${item.judul_materi}" telah ${label}.${materiCatatan ? ` Catatan: ${materiCatatan}` : ''}`;
+          await sendRespondAsChat(item.siswa_id, pesan);
+        } catch (chatErr) {
+          console.error('Gagal mengirim pesan chat ke siswa:', chatErr);
+          showToast('warning', `Status permintaan tersimpan, tapi pesan ke siswa gagal terkirim: ${chatErr.message}`);
         }
+      } else {
+        // materiRequestList tidak punya siswa_id pada item ini -- kemungkinan
+        // query di useTeacherHomeData.js belum menyertakan kolom siswa_id.
+        // Tanpa siswa_id, pesan TIDAK PERNAH bisa dikirim (baik untuk
+        // 'selesai' maupun 'ditolak'), walau status di materi_request sendiri
+        // sudah benar tersimpan.
+        console.warn('materi_request tidak punya siswa_id -- pesan chat ke siswa dilewati.');
+        showToast('warning', 'Status tersimpan, tapi siswa tidak bisa dikirimi pesan (data siswa_id tidak ditemukan pada permintaan ini).');
       }
+
       cancelMateriRespond();
     } catch (err) {
       console.error(err);
       setErrorMsg(err.message || 'Gagal memperbarui materi request.');
     } finally {
       setMateriResponding(false);
-    }
-  };
-
-  // ========== KIRIM MATERI (pilih dari Arsip Materi yang sudah ada) ==========
-  const [showKirimMateri, setShowKirimMateri] = useState(false);
-  const [selectedRequestId, setSelectedRequestId] = useState(null);
-  const [selectedMateriId, setSelectedMateriId] = useState('');
-  const [kirimMateriNote, setKirimMateriNote] = useState('');
-  const [kirimMateriSubmitting, setKirimMateriSubmitting] = useState(false);
-
-  const openKirimMateri = (requestId) => {
-    setSelectedRequestId(requestId);
-    setSelectedMateriId('');
-    setKirimMateriNote('');
-    setShowKirimMateri(true);
-  };
-
-  const closeKirimMateri = () => {
-    setShowKirimMateri(false);
-    setSelectedRequestId(null);
-    setSelectedMateriId('');
-    setKirimMateriNote('');
-  };
-
-  // Menyelesaikan request materi + mengaitkan file materi (materi_file_id) yang menjawabnya,
-  // lalu memberi notifikasi ke siswa.
-  const selesaikanRequestDenganMateri = async (request, materiFileId, materiNama) => {
-    const catatan = `Materi "${materiNama}" telah dikirimkan.${kirimMateriNote ? ` Catatan: ${kirimMateriNote}` : ''}`;
-    const { error } = await checkedUpdate(
-      supabase
-        .from('materi_request')
-        .update({
-          status: 'selesai',
-          catatan_guru: catatan,
-          responded_at: new Date().toISOString(),
-          materi_file_id: materiFileId,
-        })
-        .eq('id', request.id)
-    );
-    if (error) throw error;
-    if (request.siswa_id) {
-      await supabase.from('notifikasi').insert({
-        user_id: request.siswa_id,
-        pesan: `Guru telah mengirimkan materi "${materiNama}" untuk permintaan "${request.judul_materi}". Silakan cek materi di dashboard Anda.`,
-        link: null,
-      });
-    }
-    setMateriRequestList((list) =>
-      list.map((m) => (m.id === request.id ? { ...m, status: 'selesai', catatan_guru: catatan, materi_file_id: materiFileId } : m))
-    );
-  };
-
-  const submitKirimMateri = async () => {
-    const request = materiRequestList.find((m) => m.id === selectedRequestId);
-    if (!request) {
-      showToast('warning', 'Data permintaan tidak ditemukan.');
-      return;
-    }
-    if (!selectedMateriId) {
-      showToast('warning', 'Pilih materi yang akan dikirim.');
-      return;
-    }
-
-    setKirimMateriSubmitting(true);
-    try {
-      // Dibandingkan sebagai string karena <select> selalu mengembalikan
-      // e.target.value berupa string, sedangkan m.id dari database bisa
-      // berupa number (bigint/serial) -- tanpa ini find() selalu gagal
-      // walau item-nya kelihatan sudah terpilih di dropdown.
-      const materi = materiArsip.find((m) => String(m.id) === String(selectedMateriId));
-      if (!materi) throw new Error('Materi tidak ditemukan di arsip.');
-      await selesaikanRequestDenganMateri(request, materi.id, materi.nama);
-      closeKirimMateri();
-    } catch (err) {
-      console.error(err);
-      showToast('error', 'Gagal mengirim materi: ' + err.message);
-    } finally {
-      setKirimMateriSubmitting(false);
     }
   };
 
@@ -155,16 +155,5 @@ export function useMateriRequest({ materiRequestList, setMateriRequestList, mate
     openMateriRespond,
     cancelMateriRespond,
     submitMateriRespond,
-
-    showKirimMateri,
-    selectedRequestId,
-    selectedMateriId,
-    setSelectedMateriId,
-    kirimMateriNote,
-    setKirimMateriNote,
-    kirimMateriSubmitting,
-    openKirimMateri,
-    closeKirimMateri,
-    submitKirimMateri,
   };
 }
